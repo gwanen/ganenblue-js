@@ -369,13 +369,21 @@
 
         <!-- Logs -->
         <div class="panel">
-            Runs Completed: 0
-        </div>
+            <h3>Logs</h3>
+            <div id="log-container"></div>
 
-        <h3 style="margin-top: 20px;">Battle Times</h3>
-        <div id="battle-times-display"
-            style="max-height: 200px; overflow-y: auto; font-size: 0.9em; background-color: #16161e; padding: 10px; border-radius: 4px;">
-            <div style="color: #565f89;">No battles yet</div>
+            <h3 style="margin-top: 20px;">Stats</h3>
+            <div id="stats-display" style="margin-bottom: 15px;">
+                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">00:00:00</span>
+                </div>
+                <div>Runs Completed: 0</div>
+            </div>
+
+            <h3 style="margin-top: 20px;">Battle Times</h3>
+            <div id="battle-times-display"
+                style="max-height: 200px; overflow-y: auto; font-size: 0.9em; background-color: var(--bg-tertiary); padding: 10px; border-radius: 4px;">
+                <div style="color: var(--text-secondary);">No battles yet</div>
+            </div>
         </div>
     </div>
     </div>

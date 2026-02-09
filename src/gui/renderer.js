@@ -202,6 +202,7 @@ btnStart.addEventListener('click', async () => {
     }
 
     setRunningState(true);
+    startTimer(); // Start elapsed timer
     addLog({ level: 'info', message: 'Starting farming...', timestamp: new Date().toISOString() });
 
     const result = await window.electronAPI.startBot(settings);
@@ -209,6 +210,7 @@ btnStart.addEventListener('click', async () => {
     if (!result.success) {
         addLog({ level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
         setRunningState(false);
+        stopTimer(); // Stop timer if failed
     }
 });
 
@@ -217,6 +219,7 @@ btnStop.addEventListener('click', async () => {
     addLog({ level: 'info', message: 'Stopping bot...', timestamp: new Date().toISOString() });
     await window.electronAPI.stopBot();
     setRunningState(false);
+    stopTimer(); // Stop elapsed timer
 
     // Reset state
     // btnLaunch.disabled = false; // Keep browser button disabled as browser is open
@@ -228,6 +231,34 @@ btnStop.addEventListener('click', async () => {
 
     addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
 });
+
+// Timer functionality
+let timerInterval = null;
+let startTime = null;
+
+function startTimer() {
+    startTime = Date.now();
+    timerInterval = setInterval(updateTimer, 1000);
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+}
+
+function updateTimer() {
+    if (!startTime) return;
+
+    const elapsed = Date.now() - startTime;
+    const hours = Math.floor(elapsed / 3600000);
+    const minutes = Math.floor((elapsed % 3600000) / 60000);
+    const seconds = Math.floor((elapsed % 60000) / 1000);
+
+    const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    document.getElementById('elapsed-time').textContent = timeString;
+}
 
 // Reload App
 btnReload.addEventListener('click', async () => {
@@ -287,23 +318,24 @@ setInterval(async () => {
         const result = await window.electronAPI.getStatus();
         if (result.stats) {
             const botMode = selectBotMode.value;
-            let completedLabel = 'Runs';
-            let completed = 0;
-            let max = '∞';
+            const completed = result.stats.completedRuns || result.stats.completedQuests || 0;
+            const max = result.stats.maxRuns || '∞';
+            const completedLabel = result.stats.botMode === 'raid' ? 'Raids' : 'Quests';
 
-            if (botMode === 'quest') {
-                completedLabel = 'Quests';
-                completed = result.stats.questsCompleted || 0;
-                max = result.stats.maxQuests || '∞';
-            } else if (botMode === 'raid') {
-                completedLabel = 'Raids';
-                completed = result.stats.raidsCompleted || 0;
-                max = result.stats.maxRaids || '∞';
+            // Calculate average time display
+            let avgTimeDisplay = 'N/A';
+            if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
+                const avgMs = result.stats.averageBattleTime;
+                const totalSeconds = Math.floor(avgMs / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             }
 
             statsDisplay.innerHTML = `
-                ${completedLabel} Completed: ${completed} / ${max}<br>
-                Status: ${result.status}
+                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">${document.getElementById('elapsed-time')?.textContent || '00:00:00'}</span></div>
+                <div style="margin-bottom: 8px;"><strong>Avg Battle:</strong> ${avgTimeDisplay}</div>
+                <div>${completedLabel} Completed: ${completed} / ${max}</div>
             `;
 
             // Update battle times display
@@ -318,19 +350,18 @@ setInterval(async () => {
 
                 const avgTime = formatTime(result.stats.averageBattleTime);
 
-                let html = `<div style="margin-bottom: 10px; color: #9ece6a; font-weight: bold;">Average: ${avgTime}</div>`;
-                html += '<div style="border-top: 1px solid #2a2e3e; padding-top: 5px;">';
+                let html = `<div style="margin-bottom: 10px; color: var(--accent-green); font-weight: bold;">Average: ${avgTime}</div>`;
+                html += '<div style="border-top: 1px solid var(--border); padding-top: 5px;">';
 
                 result.stats.battleTimes.forEach((time, index) => {
                     const formattedTime = formatTime(time);
-                    html += `<div style="margin-bottom: 3px; color: #a9b1d6;">Battle ${index + 1}: ${formattedTime}</div>`;
+                    html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime}</div>`;
                 });
 
                 html += '</div>';
                 battleTimesContainer.innerHTML = html;
             } else {
-                battleTimesContainer.innerHTML = '<div style="color: #565f89;">No battles yet</div>';
+                battleTimesContainer.innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
             }
         }
-    }
-}, 1000);
+    }, 1000);
