@@ -51,15 +51,16 @@ class BrowserManager {
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--window-size=1920,1080',
+                '--window-size=500,900', // Narrow and compact for mobile layout
                 // Disable password and security popups
                 '--password-store=basic',
-                '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter',
+                '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
                 '--no-default-browser-check',
                 '--disable-infobars',
                 '--disable-notifications',
+                '--disable-save-password-bubble', // Disable password manager popup
             ],
-            defaultViewport: { width: 1920, height: 1080 },
+            defaultViewport: null, // Flexible viewport for natural scrolling
             ignoreDefaultArgs: ['--enable-automation'],
         };
 

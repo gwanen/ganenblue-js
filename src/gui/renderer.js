@@ -114,6 +114,52 @@ window.electronAPI.onPlaySound((soundType) => {
     }
 });
 
+// Save Credentials Button
+const btnSaveCredentials = document.getElementById('btn-save-credentials');
+const inputMobageEmail = document.getElementById('mobage-email');
+const inputMobagePassword = document.getElementById('mobage-password');
+
+btnSaveCredentials.addEventListener('click', async () => {
+    const email = inputMobageEmail.value.trim();
+    const password = inputMobagePassword.value.trim();
+
+    if (!email || !password) {
+        addLog({ level: 'warn', message: 'Please enter both email and password', timestamp: new Date().toISOString() });
+        return;
+    }
+
+    const result = await window.electronAPI.saveCredentials({ email, password });
+
+    if (result.success) {
+        addLog({ level: 'info', message: '✓ Credentials saved successfully!', timestamp: new Date().toISOString() });
+    } else {
+        addLog({ level: 'error', message: `Failed to save credentials: ${result.message}`, timestamp: new Date().toISOString() });
+    }
+});
+
+// Load credentials on startup
+(async () => {
+    try {
+        console.log('Loading credentials...');
+        const result = await window.electronAPI.loadCredentials();
+        console.log('Load result:', result);
+
+        if (result.success && result.credentials) {
+            // Only load email, keep password empty for security
+            inputMobageEmail.value = result.credentials.email || '';
+            console.log('Email loaded:', inputMobageEmail.value);
+            // Don't populate password - user must re-enter for privacy
+            addLog({ level: 'info', message: `✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
+        } else {
+            console.log('No credentials found or load failed');
+            addLog({ level: 'info', message: 'No saved credentials found', timestamp: new Date().toISOString() });
+        }
+    } catch (error) {
+        console.error('Error loading credentials:', error);
+        addLog({ level: 'error', message: `Failed to load credentials: ${error.message}`, timestamp: new Date().toISOString() });
+    }
+})();
+
 // 1. Launch Browser
 btnLaunch.addEventListener('click', async () => {
     btnLaunch.disabled = true;

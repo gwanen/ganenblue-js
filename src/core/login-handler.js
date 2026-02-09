@@ -68,10 +68,25 @@ class LoginHandler {
             });
 
             await sleep(1000);
+
+            // Click Mobage - this will open a new tab
             await this.page.click('#mobage-login');
             logger.info('✓ Selected Mobage login');
 
+            // Wait for new tab to open
             await sleep(3000);
+
+            // Check if a new page was opened
+            const browser = this.page.browser();
+            const pages = await browser.pages();
+
+            if (pages.length > 1) {
+                // Switch to the new tab (last page)
+                this.page = pages[pages.length - 1];
+                logger.info('✓ Switched to Mobage login tab');
+            } else {
+                logger.info('Login page opened in same tab');
+            }
         } catch (error) {
             throw new Error('Mobage login option not found');
         }
@@ -84,23 +99,32 @@ class LoginHandler {
         logger.info('Handling Mobage login page...');
 
         try {
+            // Wait longer for page navigation
+            logger.info('Waiting for Mobage login page to load...');
+            await sleep(5000);
+
             // Wait for email field to appear (indicates login page loaded)
             await this.page.waitForSelector('#subject-id', {
                 visible: true,
-                timeout: 20000
+                timeout: 30000
             });
 
             logger.info('Mobage login page loaded');
+            await sleep(1000);
 
-            // Fill email
+            // Fill email - click first to focus
+            await this.page.click('#subject-id');
+            await sleep(500);
             await this.page.type('#subject-id', credentials.email, { delay: 100 });
             logger.info('✓ Filled email');
-            await sleep(500);
+            await sleep(1000);
 
-            // Fill password
+            // Fill password - click first to focus
+            await this.page.click('#subject-password');
+            await sleep(500);
             await this.page.type('#subject-password', credentials.password, { delay: 100 });
             logger.info('✓ Filled password');
-            await sleep(1000);
+            await sleep(1500);
 
             // Click login button
             const loginButton = await this.page.$('#login');
@@ -110,7 +134,7 @@ class LoginHandler {
 
                 // Wait for login to process
                 logger.info('Waiting for login to process (may require reCAPTCHA)...');
-                await sleep(5000);
+                await sleep(10000); // Longer wait for reCAPTCHA
             } else {
                 throw new Error('Login button not found');
             }

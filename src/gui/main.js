@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import yaml from 'js-yaml';
 import BrowserManager from '../core/browser.js';
 import QuestBot from '../bot/quest-bot.js';
 import RaidBot from '../bot/raid-bot.js';
@@ -240,6 +242,51 @@ ipcMain.handle('bot:reset-stats', () => {
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
+});
+
+ipcMain.handle('credentials:save', async (event, credentials) => {
+    try {
+        const credPath = path.join(__dirname, '../../config/credentials.yaml');
+
+        const credData = {
+            mobage: {
+                email: credentials.email || '',
+                password: credentials.password || ''
+            }
+        };
+
+        writeFileSync(credPath, yaml.dump(credData), 'utf8');
+        logger.info('Credentials saved successfully');
+        return { success: true };
+    } catch (error) {
+        logger.error('Failed to save credentials:', error.message);
+        return { success: false, message: error.message };
+    }
+});
+
+ipcMain.handle('credentials:load', async () => {
+    try {
+        const credPath = path.join(__dirname, '../../config/credentials.yaml');
+        logger.info(`Looking for credentials at: ${credPath}`);
+        logger.info(`File exists: ${existsSync(credPath)}`);
+
+        if (!existsSync(credPath)) {
+            return { success: true, credentials: null };
+        }
+
+        const fileContents = readFileSync(credPath, 'utf8');
+        const data = yaml.load(fileContents);
+
+        logger.info(`Loaded credentials for: ${data?.mobage?.email || 'unknown'}`);
+
+        return {
+            success: true,
+            credentials: data && data.mobage ? data.mobage : null
+        };
+    } catch (error) {
+        logger.error('Failed to load credentials:', error.message);
+        return { success: false, message: error.message };
+    }
 });
 
 ipcMain.handle('app:restart', async () => {
