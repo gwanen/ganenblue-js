@@ -172,6 +172,12 @@ btnLaunch.addEventListener('click', async () => {
     if (result.success) {
         addLog({ level: 'info', message: 'Browser launched. Please login manually.', timestamp: new Date().toISOString() });
         btnStart.disabled = false;
+
+        // Hide credentials section after browser launches
+        const credSection = document.getElementById('credentials-section');
+        if (credSection) {
+            credSection.style.display = 'none';
+        }
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
         btnLaunch.disabled = false;
