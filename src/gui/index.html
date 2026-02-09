@@ -229,6 +229,24 @@
             color: var(--accent-red);
         }
 
+        .button-section {
+            margin-bottom: 20px;
+        }
+
+        .button-section h4 {
+            margin: 0 0 8px 0;
+            padding: 0;
+            border: none;
+        }
+
+        .button-section button {
+            margin-top: 0;
+        }
+
+        .button-section button+button {
+            margin-top: 8px;
+        }
+
         hr {
             border: none;
             border-top: 1px solid var(--border);
@@ -319,20 +337,34 @@
                 </div>
 
                 <button id="btn-save-credentials"
-                    style="background-color: #f39c12; color: black; width: 100%; margin-top: 5px;">
-                    💾 Save Credentials
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">
+                    Save Credentials
                 </button>
 
                 <hr style="margin: 20px 0; border-color: var(--border);">
             </div>
 
-            <button id="btn-launch" class="btn-launch">🚀 Launch Browser</button>
-            <button id="btn-start" class="btn-start" disabled>▶️ Start Farming</button>
-            <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop</button>
-            <button id="btn-reload" class="btn-stop"
-                style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); margin-top: 16px;">🔄 Reload
-                App</button>
-            <button id="btn-reset-stats" class="btn-launch" style="margin-top: 4px;">📊 Reset Stats</button>
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
+                </h4>
+                <button id="btn-launch" class="btn-launch">Launch Browser</button>
+            </div>
+
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
+                    Control</h4>
+                <button id="btn-start" class="btn-start" disabled>Start Farming</button>
+                <button id="btn-stop" class="btn-stop" disabled>Stop Bot</button>
+            </div>
+
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">
+                    Utilities</h4>
+                <button id="btn-reset-stats" class="btn-launch">Reset Stats</button>
+                <button id="btn-reload"
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">Reload
+                    App</button>
+            </div>
         </div>
 
         <!-- Logs -->
