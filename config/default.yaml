@@ -1,0 +1,30 @@
+bot:
+  battle_mode: full_auto  # full_auto | semi_auto
+  bot_mode: quest         # quest | raid | replicard
+  max_quests: 0           # 0 = unlimited
+  quest_url: ""
+
+browser:
+  headless: false
+  width: 1920
+  height: 1080
+  timeout: 30000
+
+stealth:
+  randomize_viewport: true
+  randomize_user_agent: true
+  block_resources: false  # Block images/css for speed
+  
+logging:
+  level: info  # debug | info | warn | error
+  file: logs/bot.log
+  console: true
+
+screenshots:
+  on_error: true
+  directory: screenshots/
+
+timeouts:
+  page_load: 30000
+  element_wait: 10000
+  battle_max: 600000  # 10 minutes

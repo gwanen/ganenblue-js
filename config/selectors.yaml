@@ -1,0 +1,30 @@
+# CSS Selectors for GBF
+# Update these if game UI changes
+
+quest:
+  summonScreen: '.prt-supporter-list'
+  summonSlot1: '.lis-supporter:nth-child(1) .btn-supporter-use'
+  summonSlot2: '.lis-supporter:nth-child(2) .btn-supporter-use'
+  summonSlot3: '.lis-supporter:nth-child(3) .btn-supporter-use'
+  startQuestButton: '.btn-usual-ok'
+
+battle:
+  battleScreen: '.prt-battle-window'
+  attackButton: '.btn-attack-start'
+  fullAutoButton: '.btn-auto'
+  autoButton: '.btn-auto'
+  resultScreen: '.prt-result'
+  okButton: '.pop-usual.pop-exp.pop-show .btn-usual-ok'
+  nextButton: '.btn-usual-next'
+  closeButton: '.btn-usual-close'
+
+raid:
+  raidList: '.prt-raid-list'
+  raidEntry: '.lis-raid'
+  joinButton: '.btn-raid-join'
+  backupRequestButton: '.btn-backup-request'
+
+replicard:
+  nodeMap: '.prt-replicard-map'
+  node: '.map-node'
+  startButton: '.btn-start'
