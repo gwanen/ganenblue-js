@@ -42,6 +42,12 @@ class BrowserManager {
         return this.page;
     }
 
+    async setViewport(width, height) {
+        if (this.page) {
+            await this.page.setViewport({ width, height });
+        }
+    }
+
     async applyStealth() {
         // Force webdriver to undefined (stealth plugin might set it to false)
         await this.page.evaluateOnNewDocument(() => {

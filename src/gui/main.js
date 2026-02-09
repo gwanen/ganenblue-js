@@ -146,6 +146,23 @@ ipcMain.handle('bot:get-status', () => {
     };
 });
 
+ipcMain.handle('bot:reset-stats', () => {
+    if (botInstance && botInstance.battleTimes) {
+        botInstance.battleTimes = [];
+        botInstance.questsCompleted = 0;
+        botInstance.raidsCompleted = 0;
+        logger.info('Stats reset from GUI');
+        return { success: true };
+    }
+    return { success: false, message: 'No bot instance running' };
+});
+
+ipcMain.handle('app:restart', async () => {
+    logger.info('Restarting application...');
+    app.relaunch();
+    app.exit(0);
+});
+
 // Setup log streaming to renderer
 // We need to extend our logger to send events to mainWindow
 import winston from 'winston';

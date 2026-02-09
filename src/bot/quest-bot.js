@@ -16,11 +16,17 @@ class QuestBot {
         this.questsCompleted = 0;
         this.isRunning = false;
         this.isPaused = false;
+        this.battleTimes = []; // Array to store battle durations
     }
 
     async start() {
         this.isRunning = true;
         this.questsCompleted = 0;
+        this.battleTimes = []; // Reset battle times on start
+
+        // Set viewport to optimal resolution for farming
+        await this.controller.page.setViewport({ width: 1000, height: 1799 });
+        logger.info('Set viewport to 1000x1799');
 
         logger.info('Quest Bot started');
         logger.info(`Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
@@ -97,6 +103,11 @@ class QuestBot {
 
         // Handle battle
         await this.battle.executeBattle(this.battleMode);
+
+        // Store battle time
+        if (this.battle.lastBattleDuration > 0) {
+            this.battleTimes.push(this.battle.lastBattleDuration);
+        }
 
         // User Optimization: Skip clicking OK button.
         // await this.battle.handleResult();
@@ -196,11 +207,17 @@ class QuestBot {
     }
 
     getStats() {
+        const avgTime = this.battleTimes.length > 0
+            ? this.battleTimes.reduce((a, b) => a + b, 0) / this.battleTimes.length
+            : 0;
+
         return {
             questsCompleted: this.questsCompleted,
             maxQuests: this.maxQuests,
             isRunning: this.isRunning,
-            isPaused: this.isPaused
+            isPaused: this.isPaused,
+            battleTimes: this.battleTimes,
+            averageBattleTime: avgTime
         };
     }
 }

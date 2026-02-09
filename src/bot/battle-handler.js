@@ -8,6 +8,15 @@ class BattleHandler {
         this.controller = new PageController(page);
         this.selectors = config.selectors.battle;
         this.stopped = false;
+        this.battleStartTime = null;
+        this.lastBattleDuration = 0;
+    }
+
+    formatTime(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
     stop() {
@@ -18,6 +27,8 @@ class BattleHandler {
      * Handle full battle flow
      */
     async executeBattle(mode = 'full_auto') {
+        // Start timing
+        this.battleStartTime = Date.now();
         logger.info(`Starting battle in ${mode} mode`);
 
         try {
@@ -45,6 +56,11 @@ class BattleHandler {
 
             // Wait for battle to complete
             await this.waitForBattleEnd(mode);
+
+            // Calculate battle duration
+            this.lastBattleDuration = Date.now() - this.battleStartTime;
+            const formattedTime = this.formatTime(this.lastBattleDuration);
+            logger.info(`Battle completed in ${formattedTime}`);
 
             return true;
         } catch (error) {
@@ -92,6 +108,16 @@ class BattleHandler {
             if (this.stopped) {
                 logger.info('Battle wait cancelled (bot stopped)');
                 return false;
+            }
+
+            // Check for rematch fail popup (battle already ended by other players)
+            // Both popup-1 and popup-2 can appear
+            const rematchFailPopup = await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 500);
+            if (rematchFailPopup) {
+                logger.info('Rematch fail detected - battle already completed by others. Refreshing page...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(2000);
+                return true;
             }
 
             const currentUrl = this.controller.page.url();

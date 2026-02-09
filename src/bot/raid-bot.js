@@ -16,11 +16,17 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.isRunning = false;
         this.isPaused = false;
+        this.battleTimes = []; // Array to store battle durations
     }
 
     async start() {
         this.isRunning = true;
         this.raidsCompleted = 0;
+        this.battleTimes = []; // Reset battle times on start
+
+        // Set viewport to optimal resolution for farming
+        await this.controller.page.setViewport({ width: 1000, height: 1799 });
+        logger.info('Set viewport to 1000x1799');
 
         logger.info('Raid Bot started');
         logger.info(`Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
@@ -77,6 +83,11 @@ class RaidBot {
 
         // Handle battle
         await this.battle.executeBattle(this.battleMode);
+
+        // Store battle time
+        if (this.battle.lastBattleDuration > 0) {
+            this.battleTimes.push(this.battle.lastBattleDuration);
+        }
 
         logger.info('Raid completed successfully');
     }
@@ -260,11 +271,17 @@ class RaidBot {
     }
 
     getStats() {
+        const avgTime = this.battleTimes.length > 0
+            ? this.battleTimes.reduce((a, b) => a + b, 0) / this.battleTimes.length
+            : 0;
+
         return {
             raidsCompleted: this.raidsCompleted,
             maxRaids: this.maxRaids,
             isRunning: this.isRunning,
-            isPaused: this.isPaused
+            isPaused: this.isPaused,
+            battleTimes: this.battleTimes,
+            averageBattleTime: avgTime
         };
     }
 }

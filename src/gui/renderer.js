@@ -1,6 +1,8 @@
 const btnLaunch = document.getElementById('btn-launch');
 const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
+const btnReload = document.getElementById('btn-reload');
+const btnResetStats = document.getElementById('btn-reset-stats');
 const statusBadge = document.getElementById('status-badge');
 const logContainer = document.getElementById('log-container');
 const selectBotMode = document.getElementById('bot-mode');
@@ -85,6 +87,22 @@ btnStop.addEventListener('click', async () => {
     addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
 });
 
+// Reload App
+btnReload.addEventListener('click', async () => {
+    addLog({ level: 'info', message: 'Restarting application...', timestamp: new Date().toISOString() });
+    await window.electronAPI.restartApp();
+});
+
+// Reset Stats
+btnResetStats.addEventListener('click', async () => {
+    const result = await window.electronAPI.resetStats();
+    if (result.success) {
+        addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
+        document.getElementById('battle-times-display').innerHTML = '<div style="color: #565f89;">No battles yet</div>';
+        statsDisplay.innerHTML = 'Runs Completed: 0';
+    }
+});
+
 // Log Updates
 window.electronAPI.onLogUpdate((log) => {
     addLog(log);
@@ -145,6 +163,32 @@ setInterval(async () => {
                 ${completedLabel} Completed: ${completed} / ${max}<br>
                 Status: ${result.status}
             `;
+
+            // Update battle times display
+            const battleTimesContainer = document.getElementById('battle-times-display');
+            if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
+                const formatTime = (ms) => {
+                    const totalSeconds = Math.floor(ms / 1000);
+                    const minutes = Math.floor(totalSeconds / 60);
+                    const seconds = totalSeconds % 60;
+                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                };
+
+                const avgTime = formatTime(result.stats.averageBattleTime);
+
+                let html = `<div style="margin-bottom: 10px; color: #9ece6a; font-weight: bold;">Average: ${avgTime}</div>`;
+                html += '<div style="border-top: 1px solid #2a2e3e; padding-top: 5px;">';
+
+                result.stats.battleTimes.forEach((time, index) => {
+                    const formattedTime = formatTime(time);
+                    html += `<div style="margin-bottom: 3px; color: #a9b1d6;">Battle ${index + 1}: ${formattedTime}</div>`;
+                });
+
+                html += '</div>';
+                battleTimesContainer.innerHTML = html;
+            } else {
+                battleTimesContainer.innerHTML = '<div style="color: #565f89;">No battles yet</div>';
+            }
         }
     }
 }, 1000);
