@@ -111,9 +111,21 @@ class BattleHandler {
                 // 1. Check for Animation Start (Immediate Refresh)
                 const attackOff = await this.controller.elementExists('.btn-attack-start.display-off', 200);
                 if (attackOff) {
+                    // Check stop before refresh
+                    if (this.stopped) {
+                        logger.info('Battle wait cancelled (bot stopped before refresh)');
+                        return false;
+                    }
+
                     logger.info('Attack animation started (display-off). Refreshing to skip...');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(3000); // Wait for reload (Reduced slightly)
+                    await sleep(1500); // Reduced from 3000ms for snappier response
+
+                    // Check stop after reload delay
+                    if (this.stopped) {
+                        logger.info('Battle wait cancelled (bot stopped after refresh)');
+                        return false;
+                    }
 
                     // Optimization: Check URL first to decide what to wait for
                     const postRefreshUrl = this.controller.page.url();
@@ -134,6 +146,12 @@ class BattleHandler {
 
                             // If we are here, it means FA/Attack button was found (Battle Continues)
                             logger.info('Battle continues (FA/Attack button found after refresh). Re-engaging...');
+
+                            // Check stop before re-engagement
+                            if (this.stopped) {
+                                logger.info('Battle wait cancelled (bot stopped before re-engagement)');
+                                return false;
+                            }
 
                             // Re-engage Auto/Attack if needed after refresh
                             if (mode === 'full_auto') {
@@ -160,9 +178,21 @@ class BattleHandler {
                     logger.debug(`Battle UI (Attack/Cancel) missing count: ${missingUiCount}/5`);
 
                     if (missingUiCount >= 5) { // ~10 seconds
+                        // Check stop before refresh
+                        if (this.stopped) {
+                            logger.info('Battle wait cancelled (bot stopped before stuck state refresh)');
+                            return false;
+                        }
+
                         logger.info('Battle UI missing (Attack and Cancel not visible). Auto-refreshing page...');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(4000); // Wait for reload
+                        await sleep(2000); // Reduced from 4000ms for snappier response
+
+                        // Check stop after reload delay
+                        if (this.stopped) {
+                            logger.info('Battle wait cancelled (bot stopped after stuck state refresh)');
+                            return false;
+                        }
 
                         missingUiCount = 0;
                         // After refresh, the loop continues and naturally checks state again

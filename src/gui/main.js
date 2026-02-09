@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import BrowserManager from '../core/browser.js';
 import QuestBot from '../bot/quest-bot.js';
+import RaidBot from '../bot/raid-bot.js';
 import config from '../utils/config.js';
 import logger from '../utils/logger.js';
 
@@ -85,19 +86,33 @@ ipcMain.handle('bot:start', async (event, settings) => {
     }
 
     try {
-        logger.info('Starting automation...');
+        logger.info(`Starting automation in ${settings.botMode} mode...`);
 
-        // Update config with GUI settings
-        if (settings.questUrl) config.set('bot.quest_url', settings.questUrl);
-        if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
-        if (settings.maxQuests) config.set('bot.max_quests', parseInt(settings.maxQuests));
+        const botMode = settings.botMode || 'quest';
 
-        // Initialize Bot with EXISTING page
-        botInstance = new QuestBot(browserManager.page, {
-            questUrl: config.get('bot.quest_url'),
-            maxQuests: config.get('bot.max_quests'),
-            battleMode: config.get('bot.battle_mode')
-        });
+        if (botMode === 'quest') {
+            // Quest Mode
+            if (settings.questUrl) config.set('bot.quest_url', settings.questUrl);
+            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
+            if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns));
+
+            botInstance = new QuestBot(browserManager.page, {
+                questUrl: config.get('bot.quest_url'),
+                maxQuests: config.get('bot.max_quests'),
+                battleMode: config.get('bot.battle_mode')
+            });
+        } else if (botMode === 'raid') {
+            // Raid Mode
+            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
+            if (settings.maxRuns) config.set('bot.max_raids', parseInt(settings.maxRuns));
+
+            botInstance = new RaidBot(browserManager.page, {
+                maxRaids: config.get('bot.max_raids'),
+                battleMode: config.get('bot.battle_mode')
+            });
+        } else {
+            return { success: false, message: `Unknown bot mode: ${botMode}` };
+        }
 
         // Start bot loop (non-blocking)
         botInstance.start().catch(err => {

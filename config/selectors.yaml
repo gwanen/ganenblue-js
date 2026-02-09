@@ -19,10 +19,12 @@ battle:
   closeButton: '.btn-usual-close'
 
 raid:
+  raidBackupUrl: 'https://game.granbluefantasy.jp/#quest/assist'
   raidList: '.prt-raid-list'
-  raidEntry: '.lis-raid'
+  raidEntry: '.btn-multi-raid.lis-raid.search'
   joinButton: '.btn-raid-join'
   backupRequestButton: '.btn-backup-request'
+  errorPopup: '.prt-popup-footer .btn-usual-ok'
 
 replicard:
   nodeMap: '.prt-replicard-map'

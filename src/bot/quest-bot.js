@@ -71,6 +71,13 @@ class QuestBot {
 
         if (isBattle) {
             logger.info('Detected battle state after navigation. Resuming...');
+
+            // Check if bot was stopped before starting battle
+            if (!this.isRunning) {
+                logger.info('Bot stopped before battle execution');
+                return;
+            }
+
             await this.battle.executeBattle(this.battleMode);
 
             // User Optimization: Skip clicking OK button. Just return to loop (which navigates to Quest URL)
@@ -81,6 +88,12 @@ class QuestBot {
 
         // Select summon
         await this.selectSummon();
+
+        // Check if bot was stopped before starting battle
+        if (!this.isRunning) {
+            logger.info('Bot stopped before battle execution');
+            return;
+        }
 
         // Handle battle
         await this.battle.executeBattle(this.battleMode);
@@ -109,7 +122,7 @@ class QuestBot {
         if (await this.controller.elementExists('.btn-usual-ok')) {
             logger.info('Found confirmation popup, clicking OK...');
             await this.controller.clickSafe('.btn-usual-ok');
-            await sleep(3000); // Wait for potential navigation
+            await sleep(1500); // Reduced from 3000ms for snappier response
 
             // Check if we moved to battle
             const currentUrl = this.controller.page.url();

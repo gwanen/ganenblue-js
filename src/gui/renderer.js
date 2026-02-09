@@ -3,10 +3,25 @@ const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
 const statusBadge = document.getElementById('status-badge');
 const logContainer = document.getElementById('log-container');
+const selectBotMode = document.getElementById('bot-mode');
 const inputQuestUrl = document.getElementById('quest-url');
-const inputMaxQuests = document.getElementById('max-quests');
+const questUrlGroup = document.getElementById('quest-url-group');
+const inputMaxRuns = document.getElementById('max-runs');
+const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
 const statsDisplay = document.getElementById('stats-display');
+
+// Bot Mode Change Handler
+selectBotMode.addEventListener('change', () => {
+    const mode = selectBotMode.value;
+    if (mode === 'quest') {
+        questUrlGroup.style.display = 'flex';
+        maxRunsLabel.textContent = 'Max Quests';
+    } else if (mode === 'raid') {
+        questUrlGroup.style.display = 'none';
+        maxRunsLabel.textContent = 'Max Raids';
+    }
+});
 
 // 1. Launch Browser
 btnLaunch.addEventListener('click', async () => {
@@ -28,13 +43,16 @@ btnLaunch.addEventListener('click', async () => {
 
 // 2. Start Bot
 btnStart.addEventListener('click', async () => {
+    const botMode = selectBotMode.value;
     const settings = {
+        botMode: botMode,
         questUrl: inputQuestUrl.value,
-        maxQuests: inputMaxQuests.value,
+        maxRuns: inputMaxRuns.value,
         battleMode: selectBattleMode.value
     };
 
-    if (!settings.questUrl) {
+    // Validate quest mode requires URL
+    if (botMode === 'quest' && !settings.questUrl) {
         addLog({ level: 'warn', message: 'Please enter a Quest URL', timestamp: new Date().toISOString() });
         return;
     }
@@ -97,8 +115,9 @@ function setRunningState(isRunning) {
     statusBadge.textContent = isRunning ? 'Running' : 'Stopped';
 
     // Disable inputs while running
+    selectBotMode.disabled = isRunning;
     inputQuestUrl.disabled = isRunning;
-    inputMaxQuests.disabled = isRunning;
+    inputMaxRuns.disabled = isRunning;
     selectBattleMode.disabled = isRunning;
 }
 
@@ -107,8 +126,23 @@ setInterval(async () => {
     if (statusBadge.textContent === 'Running') {
         const result = await window.electronAPI.getStatus();
         if (result.stats) {
+            const botMode = selectBotMode.value;
+            let completedLabel = 'Runs';
+            let completed = 0;
+            let max = '∞';
+
+            if (botMode === 'quest') {
+                completedLabel = 'Quests';
+                completed = result.stats.questsCompleted || 0;
+                max = result.stats.maxQuests || '∞';
+            } else if (botMode === 'raid') {
+                completedLabel = 'Raids';
+                completed = result.stats.raidsCompleted || 0;
+                max = result.stats.maxRaids || '∞';
+            }
+
             statsDisplay.innerHTML = `
-                Quests Completed: ${result.stats.questsCompleted} / ${result.stats.maxQuests || '∞'}<br>
+                ${completedLabel} Completed: ${completed} / ${max}<br>
                 Status: ${result.status}
             `;
         }

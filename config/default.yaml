@@ -2,6 +2,7 @@ bot:
   battle_mode: full_auto  # full_auto | semi_auto
   bot_mode: quest         # quest | raid | replicard
   max_quests: 0           # 0 = unlimited
+  max_raids: 0            # 0 = unlimited (for raid mode)
   quest_url: ""
 
 browser:
