@@ -1,7 +1,14 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import LoginHandler from './login-handler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Apply stealth plugin
 puppeteer.use(StealthPlugin());
@@ -104,6 +111,50 @@ class BrowserManager {
                 }
             }
         });
+    }
+
+    /**
+     * Navigate to GBF and perform auto-login
+     */
+    async navigateAndLogin(url) {
+        if (!this.page) {
+            throw new Error('Browser not launched. Call launch() first.');
+        }
+
+        await this.page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
+        });
+
+        // Load credentials and perform auto-login
+        try {
+            const credentials = this.loadCredentials();
+            if (credentials && credentials.mobage) {
+                const loginHandler = new LoginHandler(this.page);
+                await loginHandler.performLogin(credentials.mobage);
+            }
+        } catch (error) {
+            console.warn('Auto-login skipped:', error.message);
+        }
+    }
+
+    /**
+     * Load credentials from config file
+     */
+    loadCredentials() {
+        const credPath = path.join(__dirname, '../../config/credentials.yaml');
+
+        if (!existsSync(credPath)) {
+            return null;
+        }
+
+        try {
+            const fileContents = readFileSync(credPath, 'utf8');
+            return yaml.load(fileContents);
+        } catch (error) {
+            console.error('Failed to load credentials:', error.message);
+            return null;
+        }
     }
 
     async close() {

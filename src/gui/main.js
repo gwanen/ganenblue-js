@@ -130,8 +130,8 @@ ipcMain.handle('browser:launch', async (event, browserType = 'chromium') => {
         browserManager = new BrowserManager(browserConfig);
         const page = await browserManager.launch();
 
-        // Go to GBF handling page
-        await page.goto('http://game.granbluefantasy.jp/', { waitUntil: 'domcontentloaded' });
+        // Navigate to GBF and perform auto-login
+        await browserManager.navigateAndLogin('http://game.granbluefantasy.jp/');
 
         return { success: true };
     } catch (error) {

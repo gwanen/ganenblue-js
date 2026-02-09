@@ -38,3 +38,6 @@ Thumbs.db
 stealth_test_result.png
 coverage/
 .snapshots/
+
+# Credentials (contains sensitive login info)
+config/credentials.yaml
