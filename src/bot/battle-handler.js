@@ -120,6 +120,15 @@ class BattleHandler {
                 return true;
             }
 
+            // Check for character death (cheer button appears when character dies in raid)
+            const cheerButton = await this.controller.elementExists('.btn-cheer', 500);
+            if (cheerButton) {
+                logger.info('Character died in raid. Moving to next raid...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(2000);
+                return true;
+            }
+
             const currentUrl = this.controller.page.url();
 
             // 1. Definite End: Result URL
