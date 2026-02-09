@@ -7,6 +7,37 @@ class PageController {
     }
 
     /**
+     * Check if error is network-related
+     */
+    isNetworkError(error) {
+        const message = error.message || '';
+        return message.includes('Navigation timeout') ||
+            message.includes('net::ERR') ||
+            message.includes('Protocol error') ||
+            message.includes('Session closed') ||
+            message.includes('Target closed');
+    }
+
+    /**
+     * Retry function with exponential backoff
+     */
+    async retryOnNetworkError(fn, maxRetries = 3, operation = 'operation') {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                return await fn();
+            } catch (error) {
+                if (this.isNetworkError(error) && i < maxRetries - 1) {
+                    const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
+                    logger.warn(`Network error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    await sleep(waitTime);
+                    continue;
+                }
+                throw error;
+            }
+        }
+    }
+
+    /**
      * Wait for element with retry logic
      */
     async waitForElement(selector, timeout = 30000) {
@@ -84,25 +115,17 @@ class PageController {
     }
 
     /**
-     * Navigate with retry
+     * Navigate with retry logic
      */
     async goto(url, options = {}) {
-        const maxRetries = options.maxRetries || 3;
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                await this.page.goto(url, {
-                    waitUntil: 'networkidle2',
-                    timeout: 30000
-                });
-                logger.info(`Navigated to: ${url}`);
-                return true;
-            } catch (error) {
-                logger.warn(`Navigation attempt ${attempt}/${maxRetries} failed`);
-                if (attempt === maxRetries) throw error;
-                await sleep(2000);
-            }
-        }
+        return this.retryOnNetworkError(async () => {
+            logger.info(`Navigated to: ${url}`);
+            return await this.page.goto(url, {
+                waitUntil: 'domcontentloaded',
+                timeout: 60000, // 60s timeout
+                ...options
+            });
+        }, 3, 'navigation');
     }
 
     /**

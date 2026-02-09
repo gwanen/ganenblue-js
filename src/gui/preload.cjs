@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restartApp: () => ipcRenderer.invoke('app:restart'),
     onLogUpdate: (callback) => ipcRenderer.on('log:update', (_event, value) => callback(value)),
     onStatusUpdate: (callback) => ipcRenderer.on('bot:status', (_event, value) => callback(value)),
+    onPlaySound: (callback) => ipcRenderer.on('play-sound', (_event, value) => callback(value)),
 });

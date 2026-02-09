@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import BrowserManager from '../core/browser.js';
@@ -11,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+let tray = null;
 let botInstance = null;
 let browserManager = null;
 
@@ -27,8 +28,68 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
-    // Open DevTools in dev mode
-    mainWindow.webContents.openDevTools();
+    // Open DevTools in development
+    // mainWindow.webContents.openDevTools();
+
+    // Create system tray
+    createTray();
+}
+
+function createTray() {
+    // Use simple emoji/text as icon for now (can replace with actual icon file later)
+    const iconPath = nativeImage.createFromDataURL(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3Njape.org5vuPBoAAAEMSURBVDiNpdIxSwNBEAbgL2dIYWFhYaGFhYWFhf+gf8DCwsJCCwsLCwstLCwsLCwsLLSwsLBQsLCw0MLCwsJCCwsLC/+AhYWFhYWGhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFT7C8d3u7m5nJ7mbv9nY3M5Pd3d3MzOz+wP/AzOwPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w/8H/gAOqY4TZiV8XYAAAAASUVORK5CYII='
+    );
+
+    tray = new Tray(iconPath);
+
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: 'Show/Hide',
+            click: () => {
+                if (mainWindow.isVisible()) {
+                    mainWindow.hide();
+                } else {
+                    mainWindow.show();
+                    mainWindow.focus();
+                }
+            }
+        },
+        { type: 'separator' },
+        {
+            label: 'Quit',
+            click: () => {
+                app.quit();
+            }
+        }
+    ]);
+
+    tray.setToolTip('Ganenblue Bot');
+    tray.setContextMenu(contextMenu);
+
+    // Double-click to show window
+    tray.on('click', () => {
+        if (mainWindow.isVisible()) {
+            mainWindow.hide();
+        } else {
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+}
+
+function showNotification(title, body, playSound = false) {
+    const notification = new Notification({
+        title,
+        body,
+        silent: !playSound
+    });
+
+    notification.show();
+
+    if (playSound && mainWindow) {
+        mainWindow.webContents.send('play-sound', 'notification');
+    }
 }
 
 app.whenReady().then(() => {
@@ -118,9 +179,30 @@ ipcMain.handle('bot:start', async (event, settings) => {
         }
 
         // Start bot loop (non-blocking)
-        botInstance.start().catch(err => {
+        botInstance.start().then(() => {
+            const stats = botInstance.getStats();
+            const completed = stats.questsCompleted || stats.raidsCompleted || 0;
+            const type = settings.mode === 'quest' ? 'quests' : 'raids';
+
+            logger.info(`Bot completed: ${completed} ${type}`);
+            mainWindow.webContents.send('bot:status', 'Stopped');
+
+            // Show completion notification
+            showNotification(
+                'Farming Complete! 🎉',
+                `Completed ${completed} ${type}`,
+                true
+            );
+        }).catch(err => {
             logger.error('Bot execution error:', err);
             mainWindow.webContents.send('bot:status', 'Error');
+
+            // Show error notification
+            showNotification(
+                'Bot Error',
+                'An error occurred during farming',
+                true
+            );
         });
 
         return { success: true };

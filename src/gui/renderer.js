@@ -14,8 +14,38 @@ const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
 const statsDisplay = document.getElementById('stats-display');
 
-// Bot Mode Change Handler
-selectBotMode.addEventListener('change', () => {
+// === Persistent Settings ===
+function saveSettings() {
+    const settings = {
+        botMode: selectBotMode.value,
+        questUrl: inputQuestUrl.value,
+        maxRuns: inputMaxRuns.value,
+        browserType: selectBrowserType.value,
+        battleMode: selectBattleMode.value
+    };
+    localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
+}
+
+function loadSettings() {
+    try {
+        const saved = localStorage.getItem('ganenblue_settings');
+        if (saved) {
+            const settings = JSON.parse(saved);
+            selectBotMode.value = settings.botMode || 'quest';
+            inputQuestUrl.value = settings.questUrl || '';
+            inputMaxRuns.value = settings.maxRuns || 0;
+            selectBrowserType.value = settings.browserType || 'chromium';
+            selectBattleMode.value = settings.battleMode || 'full_auto';
+
+            // Trigger UI updates for bot mode
+            updateUIForBotMode();
+        }
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+    }
+}
+
+function updateUIForBotMode() {
     const mode = selectBotMode.value;
     if (mode === 'quest') {
         questUrlGroup.style.display = 'flex';
@@ -23,6 +53,64 @@ selectBotMode.addEventListener('change', () => {
     } else if (mode === 'raid') {
         questUrlGroup.style.display = 'none';
         maxRunsLabel.textContent = 'Max Raids';
+    }
+}
+
+// Debounced save to avoid excessive writes
+let saveTimeout;
+function debouncedSave() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => saveSettings(), 500);
+}
+
+// Load settings on startup
+window.addEventListener('DOMContentLoaded', () => {
+    loadSettings();
+});
+
+// Auto-save on changes
+selectBotMode.addEventListener('change', debouncedSave);
+selectBrowserType.addEventListener('change', debouncedSave);
+selectBattleMode.addEventListener('change', debouncedSave);
+inputQuestUrl.addEventListener('input', debouncedSave);
+inputMaxRuns.addEventListener('input', debouncedSave);
+
+// Bot Mode Change Handler
+selectBotMode.addEventListener('change', () => {
+    updateUIForBotMode();
+});
+
+// === Sound Playback ===
+window.electronAPI.onPlaySound((soundType) => {
+    // Simple beep using Web Audio API (no external files needed)
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        // Notification sound: 2 quick beeps
+        oscillator.frequency.value = 800;
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+
+        // Second beep
+        const oscillator2 = audioContext.createOscillator();
+        const gainNode2 = audioContext.createGain();
+        oscillator2.connect(gainNode2);
+        gainNode2.connect(audioContext.destination);
+        oscillator2.frequency.value = 1000;
+        gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
+        gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+        oscillator2.start(audioContext.currentTime + 0.15);
+        oscillator2.stop(audioContext.currentTime + 0.25);
+    } catch (error) {
+        console.error('Sound playback failed:', error);
     }
 });
 
