@@ -6,6 +6,7 @@ const btnResetStats = document.getElementById('btn-reset-stats');
 const statusBadge = document.getElementById('status-badge');
 const logContainer = document.getElementById('log-container');
 const selectBotMode = document.getElementById('bot-mode');
+const selectBrowserType = document.getElementById('browser-type');
 const inputQuestUrl = document.getElementById('quest-url');
 const questUrlGroup = document.getElementById('quest-url-group');
 const inputMaxRuns = document.getElementById('max-runs');
@@ -31,7 +32,8 @@ btnLaunch.addEventListener('click', async () => {
     btnLaunch.textContent = 'Browser Open';
     addLog({ level: 'info', message: 'Launching browser...', timestamp: new Date().toISOString() });
 
-    const result = await window.electronAPI.launchBrowser();
+    const browserType = selectBrowserType.value;
+    const result = await window.electronAPI.launchBrowser(browserType);
 
     if (result.success) {
         addLog({ level: 'info', message: 'Browser launched. Please login manually.', timestamp: new Date().toISOString() });

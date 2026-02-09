@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
+import { existsSync } from 'fs';
 
 // Apply stealth plugin
 puppeteer.use(StealthPlugin());
@@ -12,10 +13,31 @@ class BrowserManager {
         this.page = null;
     }
 
+    /**
+     * Detect Edge browser executable path on Windows
+     */
+    getEdgePath() {
+        const possiblePaths = [
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+            process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\Application\\msedge.exe'
+        ];
+
+        for (const path of possiblePaths) {
+            if (existsSync(path)) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
     async launch() {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
+        const browserType = this.config.browser_type || 'chromium';
 
-        this.browser = await puppeteer.launch({
+        // Prepare launch options
+        const launchOptions = {
             headless: this.config.headless ? 'new' : false,
             args: [
                 '--no-sandbox',
@@ -32,7 +54,20 @@ class BrowserManager {
             ],
             defaultViewport: { width: 1920, height: 1080 },
             ignoreDefaultArgs: ['--enable-automation'],
-        });
+        };
+
+        // Use Edge if specified
+        if (browserType === 'edge') {
+            const edgePath = this.getEdgePath();
+            if (edgePath) {
+                launchOptions.executablePath = edgePath;
+                console.log('Using Microsoft Edge:', edgePath);
+            } else {
+                console.warn('Edge not found, falling back to Chromium');
+            }
+        }
+
+        this.browser = await puppeteer.launch(launchOptions);
 
         this.page = await this.browser.newPage();
 

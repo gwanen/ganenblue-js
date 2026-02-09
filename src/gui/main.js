@@ -50,20 +50,23 @@ app.on('window-all-closed', async () => {
 });
 
 // --- IPC Handlers ---
-
-ipcMain.handle('browser:launch', async (event, settings) => {
+ipcMain.handle('browser:launch', async (event, browserType = 'chromium') => {
+    // Prevent multiple browser instances
     if (browserManager) {
         logger.info('Browser already open, reusing...');
         return { success: true, message: 'Browser already open' };
     }
 
     try {
-        logger.info('Launching browser for manual login...');
+        logger.info(`Launching ${browserType} browser for manual login...`);
 
-        // Config overrides if needed (e.g. headless)
-        // config.set('browser.headless', false); // Always visible for login
+        // Override browser type in config
+        const browserConfig = {
+            ...config.get('browser'),
+            browser_type: browserType
+        };
 
-        browserManager = new BrowserManager(config.get('browser'));
+        browserManager = new BrowserManager(browserConfig);
         const page = await browserManager.launch();
 
         // Go to GBF handling page
