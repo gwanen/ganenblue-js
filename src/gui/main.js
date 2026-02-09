@@ -267,8 +267,6 @@ ipcMain.handle('credentials:save', async (event, credentials) => {
 ipcMain.handle('credentials:load', async () => {
     try {
         const credPath = path.join(__dirname, '../../config/credentials.yaml');
-        logger.info(`Looking for credentials at: ${credPath}`);
-        logger.info(`File exists: ${existsSync(credPath)}`);
 
         if (!existsSync(credPath)) {
             return { success: true, credentials: null };
@@ -276,8 +274,6 @@ ipcMain.handle('credentials:load', async () => {
 
         const fileContents = readFileSync(credPath, 'utf8');
         const data = yaml.load(fileContents);
-
-        logger.info(`Loaded credentials for: ${data?.mobage?.email || 'unknown'}`);
 
         return {
             success: true,
