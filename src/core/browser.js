@@ -107,7 +107,16 @@ class BrowserManager {
 
         // Apply Emulation
         if (deviceToEmulate) {
-            await this.page.emulate(deviceToEmulate);
+            // Override touch settings to allow mouse interaction in headful mode
+            const deviceOverride = {
+                ...deviceToEmulate,
+                viewport: {
+                    ...deviceToEmulate.viewport,
+                    hasTouch: false, // Critical for mouse interaction
+                    isMobile: true   // Keep mobile layout behavior
+                }
+            };
+            await this.page.emulate(deviceOverride);
         } else {
             // Set viewport size if not emulating a device
             await this.page.setViewport({ width: windowWidth, height: windowHeight });
