@@ -159,6 +159,68 @@ selectBotMode.addEventListener('change', () => {
     updateUIForBotMode();
 });
 
+// === Input Validation ===
+function validateQuestUrl(url) {
+    if (!url) return true;// Empty is valid
+    return url.startsWith('http://game.granbluefantasy.jp/') || url.startsWith('https://game.granbluefantasy.jp/');
+}
+
+// Real-time URL validation
+inputQuestUrl.addEventListener('input', (e) => {
+    const url = e.target.value.trim();
+    const errorEl = document.getElementById('quest-url-error');
+
+    if (url && !validateQuestUrl(url)) {
+        inputQuestUrl.classList.add('input-error');
+        inputQuestUrl.classList.remove('input-success');
+        errorEl.classList.add('show');
+    } else if (url) {
+        inputQuestUrl.classList.remove('input-error');
+        inputQuestUrl.classList.add('input-success');
+        errorEl.classList.remove('show');
+    } else {
+        inputQuestUrl.classList.remove('input-error', 'input-success');
+        errorEl.classList.remove('show');
+    }
+});
+
+// === Collapsible Sections ===
+function toggleCredentials() {
+    const content = document.getElementById('credentials-content');
+    const chevron = document.getElementById('credentials-chevron');
+
+    if (content.classList.contains('open')) {
+        content.classList.remove('open');
+        chevron.textContent = '▼';
+    } else {
+        content.classList.add('open');
+        chevron.textContent = '▲';
+    }
+}
+window.toggleCredentials = toggleCredentials;
+
+// === Keyboard Shortcuts ===
+document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + Enter to start bot
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnStart.disabled) {
+        e.preventDefault();
+        btnStart.click();
+        showToast('Bot started via keyboard shortcut', 'info', 2000);
+    }
+
+    // Ctrl/Cmd + . to stop bot
+    if ((e.ctrlKey || e.metaKey) && e.key === '.' && !btnStop.disabled) {
+        e.preventDefault();
+        btnStop.click();
+    }
+
+    // Prevent default Ctrl+R
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        showToast('Use the Reload App button instead', 'warning', 2000);
+    }
+});
+
 // === Sound Playback ===
 window.electronAPI.onPlaySound((soundType) => {
     // Simple beep using Web Audio API (no external files needed)

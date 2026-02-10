@@ -488,6 +488,85 @@
             pointer-events: none;
             opacity: 0.8;
         }
+
+        /* Input Validation */
+        .input-error {
+            border-color: var(--accent-red) !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .error-message {
+            color: var(--accent-red);
+            font-size: 11px;
+            margin-top: 4px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .input-success {
+            border-color: var(--accent-green) !important;
+        }
+
+        /* Collapsible Sections */
+        .collapsible-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px 0;
+            margin: 16px 0 8px 0;
+            border-top: 1px solid var(--border);
+            user-select: none;
+        }
+
+        .collapsible-header:hover {
+            color: var(--accent-blue);
+        }
+
+        .collapsible-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .collapsible-chevron {
+            font-size: 12px;
+            transition: transform 0.2s ease;
+            color: var(--text-secondary);
+        }
+
+        .collapsible-header:hover .collapsible-chevron {
+            color: var(--accent-blue);
+        }
+
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .collapsible-content.open {
+            max-height: 500px;
+        }
+
+        /* Keyboard Shortcut Hint */
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            margin-left: 8px;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -518,6 +597,7 @@
             <div class="form-group" id="quest-url-group">
                 <label for="quest-url">Quest URL</label>
                 <input type="text" id="quest-url" placeholder="http://game.granbluefantasy.jp/..." value="">
+                <div class="error-message" id="quest-url-error">Please enter a valid GBF quest URL</div>
             </div>
 
             <div class="form-group" id="max-runs-group">
@@ -542,12 +622,13 @@
             </div>
 
             <!-- Credentials Section (collapsible) -->
-            <div id="credentials-section">
-                <hr style="margin: 20px 0; border-color: var(--border);">
-
+            <div class="collapsible-header" onclick="toggleCredentials()">
+                <span class="collapsible-title">🔐 Auto-Login Credentials</span>
+                <span class="collapsible-chevron" id="credentials-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="credentials-content">
                 <div class="form-group">
-                    <label for="mobage-email">Mobage Email <span style="font-size: 0.8em; opacity: 0.7;">(for
-                            auto-login)</span></label>
+                    <label for="mobage-email">Mobage Email</label>
                     <input type="email" id="mobage-email" placeholder="your.email@example.com" value="">
                 </div>
 
@@ -557,11 +638,9 @@
                 </div>
 
                 <button id="btn-save-credentials"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
                     Save Credentials
                 </button>
-
-                <hr style="margin: 20px 0; border-color: var(--border);">
             </div>
 
             <div class="button-section">
@@ -573,8 +652,9 @@
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
                     Control</h4>
-                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming</button>
-                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot</button>
+                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming<span
+                        class="kbd">Ctrl+Enter</span></button>
+                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot<span class="kbd">Ctrl+.</span></button>
             </div>
 
             <div class="button-section">
