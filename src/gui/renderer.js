@@ -515,9 +515,9 @@ setInterval(async () => {
         const result = await window.electronAPI.getStatus();
         if (result.stats) {
             const botMode = selectBotMode.value;
-            const completed = result.stats.completedRuns || result.stats.completedQuests || 0;
+            const completed = result.stats.completedRuns || result.stats.completedQuests || result.stats.raidsCompleted || 0;
             const max = result.stats.maxRuns || 0;
-            const completedLabel = result.stats.botMode === 'raid' ? 'Raids' : 'Quests';
+            const completedLabel = result.stats.botMode === 'raid' ? 'Raids Done' : 'Battles Done';
 
             // Update completed runs
             document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
@@ -535,7 +535,13 @@ setInterval(async () => {
             document.getElementById('avg-battle').textContent = avgTimeDisplay;
 
             // Calculate runs per hour
-            if (farmingStartTime && completed > 0) {
+            if (result.stats.averageBattleTime > 0) {
+                // Interpolate using average battle time + 15 seconds (navigation time buffer)
+                // Formula: 3600000 / (avg_ms + 15000)
+                const runsPerHour = (3600000 / (result.stats.averageBattleTime + 15000)).toFixed(1);
+                document.getElementById('runs-per-hour').textContent = `~${runsPerHour}`;
+            } else if (farmingStartTime && completed > 0) {
+                // Fallback to historical average
                 const elapsedHours = (Date.now() - farmingStartTime) / 3600000;
                 const runsPerHour = (completed / elapsedHours).toFixed(1);
                 document.getElementById('runs-per-hour').textContent = runsPerHour;

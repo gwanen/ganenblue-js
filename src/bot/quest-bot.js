@@ -151,7 +151,25 @@ class QuestBot {
         const summonSelector = '.prt-supporter-detail';
         if (await this.controller.elementExists(summonSelector)) {
             logger.info('Found summon, clicking...');
-            await this.controller.clickSafe(summonSelector);
+
+            // Double check URL before interaction
+            if (this.controller.page.url().includes('#raid') || this.controller.page.url().includes('_raid')) {
+                logger.info('Moved to battle screen (pre-click check), skipping summon selection.');
+                return;
+            }
+
+            try {
+                await this.controller.clickSafe(summonSelector);
+            } catch (error) {
+                // If click fails, check if we entered battle (race condition)
+                const currentUrl = this.controller.page.url();
+                if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                    logger.info('Moved to battle screen (during click), ignoring error.');
+                    return;
+                }
+                throw error;
+            }
+
             // EST: Reduced delay for speed (0.3-0.8s)
             await sleep(randomDelay(300, 800));
 
@@ -185,7 +203,11 @@ class QuestBot {
             }
         }
 
-        throw new Error('No summons available');
+        // Check if no summons found after trying fallbacks
+        // Instead of throwing error, we'll log warning and try to proceed to battle check
+        // This handles cases where summon selection was skipped or handled externally
+        logger.warn('No summon selected (from known lists), attempting to proceed to battle...');
+        return;
     }
 
     pause() {
