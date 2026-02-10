@@ -1,5 +1,4 @@
 import puppeteer from 'puppeteer-extra';
-import { KnownDevices } from 'puppeteer';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
 import { existsSync, readFileSync } from 'fs';
@@ -48,20 +47,8 @@ class BrowserManager {
         // Default window size
         let windowWidth = 600;
         let windowHeight = 900;
-        let deviceToEmulate = null;
-
-        // Configure Emulation
-        if (emulation.mode && emulation.mode !== 'desktop' && emulation.mode !== 'custom') {
-            // Mobile Device (iPhone, iPad, etc.)
-            deviceToEmulate = KnownDevices[emulation.mode];
-            if (deviceToEmulate) {
-                // Approximate window size from device viewport (plus some chrome overhead)
-                windowWidth = deviceToEmulate.viewport.width + 20;
-                windowHeight = deviceToEmulate.viewport.height + 150;
-                console.log(`Emulating device: ${emulation.mode}`);
-            }
-        } else if (emulation.mode === 'custom') {
-            // Custom Size
+        // Configure Window Size
+        if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 900;
             console.log(`Using custom window size: ${windowWidth}x${windowHeight}`);
@@ -105,22 +92,8 @@ class BrowserManager {
 
         this.page = await this.browser.newPage();
 
-        // Apply Emulation
-        if (deviceToEmulate) {
-            // Override touch settings to allow mouse interaction in headful mode
-            const deviceOverride = {
-                ...deviceToEmulate,
-                viewport: {
-                    ...deviceToEmulate.viewport,
-                    hasTouch: false, // Critical for mouse interaction
-                    isMobile: true   // Keep mobile layout behavior
-                }
-            };
-            await this.page.emulate(deviceOverride);
-        } else {
-            // Set viewport size if not emulating a device
-            await this.page.setViewport({ width: windowWidth, height: windowHeight });
-        }
+        // Set viewport size
+        await this.page.setViewport({ width: windowWidth, height: windowHeight });
 
         // Additional stealth measures
         await this.applyStealth();

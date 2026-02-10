@@ -649,18 +649,16 @@
                 <span class="collapsible-chevron" id="device-chevron">▼</span>
             </div>
             <div class="collapsible-content" id="device-content">
-                <div class="form-group">
-                    <label for="emulation-mode">Emulation Mode</label>
-                    <select id="emulation-mode">
-                        <option value="desktop">No Emulation (Desktop)</option>
-                        <option value="iPhone 12 Pro">iPhone 12 Pro</option>
-                        <option value="iPad Pro">iPad Pro</option>
-                        <option value="custom">Custom Size</option>
-                    </select>
+                <div
+                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 5px 0;">
+                    <label for="enable-custom-size"
+                        style="margin: 0; cursor: pointer; color: var(--text-primary); font-size: 13px;">Enable Custom
+                        Window Size</label>
+                    <input type="checkbox" id="enable-custom-size" style="width: auto; margin: 0; cursor: pointer;">
                 </div>
 
                 <div id="custom-size-inputs"
-                    style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                    style="display: none; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="window-width" style="font-size: 11px;">Width (px)</label>

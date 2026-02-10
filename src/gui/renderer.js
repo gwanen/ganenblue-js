@@ -12,7 +12,7 @@ const questUrlGroup = document.getElementById('quest-url-group');
 const inputMaxRuns = document.getElementById('max-runs');
 const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
-const selectEmulationMode = document.getElementById('emulation-mode');
+const checkboxEnableCustom = document.getElementById('enable-custom-size');
 const inputWindowWidth = document.getElementById('window-width');
 const inputWindowHeight = document.getElementById('window-height');
 const customSizeContainer = document.getElementById('custom-size-inputs');
@@ -105,7 +105,7 @@ function saveSettings() {
         maxRuns: inputMaxRuns.value,
         browserType: selectBrowserType.value,
         battleMode: selectBattleMode.value,
-        emulationMode: selectEmulationMode.value,
+        customSize: checkboxEnableCustom.checked,
         windowWidth: inputWindowWidth.value,
         windowHeight: inputWindowHeight.value
     };
@@ -122,13 +122,13 @@ function loadSettings() {
             inputMaxRuns.value = settings.maxRuns || 0;
             selectBrowserType.value = settings.browserType || 'chromium';
             selectBattleMode.value = settings.battleMode || 'full_auto';
-            selectEmulationMode.value = settings.emulationMode || 'desktop';
+            checkboxEnableCustom.checked = settings.customSize || false;
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
 
             // Trigger UI updates
             updateUIForBotMode();
-            updateUIForEmulationMode();
+            updateUIForCustomSize();
 
             // Trigger UI updates for bot mode
             updateUIForBotMode();
@@ -149,9 +149,8 @@ function updateUIForBotMode() {
     }
 }
 
-function updateUIForEmulationMode() {
-    const mode = selectEmulationMode.value;
-    if (mode === 'custom') {
+function updateUIForCustomSize() {
+    if (checkboxEnableCustom.checked) {
         customSizeContainer.style.display = 'block';
     } else {
         customSizeContainer.style.display = 'none';
@@ -176,13 +175,13 @@ selectBrowserType.addEventListener('change', debouncedSave);
 selectBattleMode.addEventListener('change', debouncedSave);
 inputQuestUrl.addEventListener('input', debouncedSave);
 inputMaxRuns.addEventListener('input', debouncedSave);
-selectEmulationMode.addEventListener('change', debouncedSave);
+checkboxEnableCustom.addEventListener('change', debouncedSave);
 inputWindowWidth.addEventListener('input', debouncedSave);
 inputWindowHeight.addEventListener('input', debouncedSave);
 
-// Emulation Mode Change Handler
-selectEmulationMode.addEventListener('change', () => {
-    updateUIForEmulationMode();
+// Custom Size Toggle Handler
+checkboxEnableCustom.addEventListener('change', () => {
+    updateUIForCustomSize();
 });
 
 // Bot Mode Change Handler
@@ -344,7 +343,7 @@ btnLaunch.addEventListener('click', async () => {
 
     const browserType = selectBrowserType.value;
     const deviceSettings = {
-        mode: selectEmulationMode.value,
+        mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
         width: parseInt(inputWindowWidth.value),
         height: parseInt(inputWindowHeight.value)
     };
