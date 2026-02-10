@@ -323,10 +323,19 @@ class BattleHandler {
                     }
                 }
             } else if (mode === 'semi_auto') {
+                // For Semi-Auto, click Attack if available, THEN click Auto
+                const attackFound = await this.controller.elementExists(this.selectors.attackButton, 500);
+                if (attackFound) {
+                    await this.controller.clickSafe(this.selectors.attackButton);
+                    logger.info('[SA] Attack initiated (after refresh)');
+                    await sleep(500);
+                }
+
                 const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
                 if (autoFound) {
                     await this.controller.clickSafe(this.selectors.autoButton);
                     logger.info('[SA] Auto mode enabled (after refresh)');
+
 
                     // Verification check
                     await sleep(1000);
