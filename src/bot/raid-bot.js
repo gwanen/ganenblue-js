@@ -47,8 +47,10 @@ class RaidBot {
                     break;
                 }
 
-                await this.runSingleRaid();
-                this.raidsCompleted++;
+                const success = await this.runSingleRaid();
+                if (success) {
+                    this.raidsCompleted++;
+                }
 
 
                 // Random delay between raids
@@ -85,6 +87,11 @@ class RaidBot {
 
         // Handle battle
         const result = await this.battle.executeBattle(this.battleMode, { honorTarget: this.honorTarget });
+
+        if (result?.raidEnded) {
+            return false;
+        }
+
         this.updateDetailStats(result);
 
         // Store battle time and turns

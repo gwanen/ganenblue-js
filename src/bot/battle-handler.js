@@ -212,7 +212,15 @@ class BattleHandler {
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
-            // 4. Raid Logic (while on raid page)
+            // 4. Raid Ended popup (Join phase race condition)
+            if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
+                logger.info('[Raid] Battle already ended.');
+                await this.controller.clickSafe(this.selectors.raidEndedOkButton);
+                await sleep(1000);
+                return { duration: 0, turns: 0, raidEnded: true };
+            }
+
+            // 5. Raid Logic (while on raid page)
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                 // Animation Skipping (Immediate Reload)
                 if (await this.controller.elementExists('.btn-attack-start.display-off', 150)) {
