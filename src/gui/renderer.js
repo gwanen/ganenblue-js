@@ -417,9 +417,11 @@ btnLaunch.addEventListener('click', async () => {
         btnStart.disabled = false;
 
         // Hide credentials section after browser launches
-        const credSection = document.getElementById('credentials-section');
-        if (credSection) {
-            credSection.style.display = 'none';
+        const credContent = document.getElementById('credentials-content');
+        if (credContent) {
+            credContent.classList.remove('open');
+            const credChevron = document.getElementById('credentials-chevron');
+            if (credChevron) credChevron.textContent = '▼';
         }
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
