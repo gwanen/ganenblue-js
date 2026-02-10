@@ -173,6 +173,7 @@ class BattleHandler {
                 if (currentTurn > lastTurn) {
                     lastTurn = currentTurn;
                     turnCount = currentTurn;
+                    logger.info(`[Turn ${currentTurn}]`);
                 }
             } catch (e) {
                 // Ignore
@@ -330,13 +331,27 @@ class BattleHandler {
     async getTurnNumber() {
         try {
             return await this.controller.page.evaluate(() => {
-                const container = document.querySelector('#js-turn-num-count');
+                // Try different possible IDs for the turn counter container
+                const containerIds = ['#js-turn-num-count', '#js-turn-num'];
+                let container = null;
+
+                for (const id of containerIds) {
+                    container = document.querySelector(id);
+                    if (container) break;
+                }
+
                 if (!container) return 0;
 
-                // Get all digit divs (num-infoX)
-                const digits = container.querySelectorAll('div[class*="num-info"]');
-                let str = '';
+                // For #js-turn-num, the digits might be inside a child div with id="js-turn-num-count"
+                const countContainer = container.id === 'js-turn-num-count'
+                    ? container
+                    : container.querySelector('#js-turn-num-count') || container;
 
+                // Get all digit divs (num-infoX)
+                const digits = countContainer.querySelectorAll('div[class*="num-info"]');
+                if (digits.length === 0) return 0;
+
+                let str = '';
                 // Collect digits in order
                 for (const d of digits) {
                     const match = d.className.match(/num-info(\d+)/);
