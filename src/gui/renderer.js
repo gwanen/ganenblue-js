@@ -56,11 +56,13 @@ function showToast(message, type = 'info', duration = 3000) {
 function setButtonLoading(button, isLoading, loadingText = '') {
     if (isLoading) {
         button.classList.add('loading');
-        button.dataset.originalText = button.textContent;
-        button.innerHTML = `<span class="spinner"></span>${loadingText || button.textContent}`;
+        button.dataset.originalHtml = button.innerHTML;
+        button.innerHTML = `<span class="spinner"></span>${loadingText || button.innerHTML}`;
     } else {
         button.classList.remove('loading');
-        button.textContent = button.dataset.originalText || button.textContent;
+        if (button.dataset.originalHtml) {
+            button.innerHTML = button.dataset.originalHtml;
+        }
     }
 }
 
@@ -553,7 +555,9 @@ setInterval(async () => {
         const result = await window.electronAPI.getStatus();
         if (result.stats) {
             const botMode = selectBotMode.value;
-            const completed = result.stats.completedRuns || result.stats.completedQuests || result.stats.raidsCompleted || 0;
+            // Update completed runs (Battles Done)
+            // Prioritize battleCount for "Battles Done" display
+            const completed = result.stats.battleCount || result.stats.completedQuests || result.stats.raidsCompleted || 0;
             const max = result.stats.maxRuns || 0;
             const completedLabel = result.stats.botMode === 'raid' ? 'Raids Done' : 'Battles Done';
 
@@ -561,10 +565,13 @@ setInterval(async () => {
             document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
             document.getElementById('completed-label').textContent = completedLabel;
 
+            // Update Avg Turns
+            document.getElementById('avg-turns').textContent = result.stats.avgTurns || '0.0';
+
             // Calculate average time display
             let avgTimeDisplay = '--:--';
-            if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
-                const avgMs = result.stats.averageBattleTime;
+            if (result.stats.avgBattleTime > 0) {
+                const avgMs = result.stats.avgBattleTime;
                 const totalSeconds = Math.floor(avgMs / 1000);
                 const minutes = Math.floor(totalSeconds / 60);
                 const seconds = totalSeconds % 60;
@@ -572,20 +579,13 @@ setInterval(async () => {
             }
             document.getElementById('avg-battle').textContent = avgTimeDisplay;
 
-            // Calculate runs per hour
-            if (result.stats.averageBattleTime > 0) {
-                // Interpolate using average battle time + 15 seconds (navigation time buffer)
-                // Formula: 3600000 / (avg_ms + 15000)
-                const runsPerHour = (3600000 / (result.stats.averageBattleTime + 15000)).toFixed(1);
-                document.getElementById('runs-per-hour').textContent = `~${runsPerHour}`;
-            } else if (farmingStartTime && completed > 0) {
-                // Per Hour calculation: 60 / (avgBattleTime + 1 min buffer)
-                let perHour = 0;
-                if (result.stats.avgBattleTime > 0) {
-                    const avgMin = result.stats.avgBattleTime / 60000; // ms to min
-                    perHour = (60 / (avgMin + 1)).toFixed(1);
-                }
+            // Calculate runs per hour: 60 / (avgBattleTime + 15 sec buffer)
+            if (result.stats.avgBattleTime > 0) {
+                const avgMin = result.stats.avgBattleTime / 60000;
+                const perHour = (60 / (avgMin + 0.25)).toFixed(1);
                 document.getElementById('runs-per-hour').textContent = perHour;
+            } else {
+                document.getElementById('runs-per-hour').textContent = '0.0';
             }
 
             // Update progress bar
@@ -601,7 +601,7 @@ setInterval(async () => {
                     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                 };
 
-                const avgTime = formatTime(result.stats.averageBattleTime);
+                const avgTime = formatTime(result.stats.avgBattleTime);
 
                 let html = `<div style="margin-bottom: 10px; color: var(--accent-green); font-weight: bold;">Average: ${avgTime}</div>`;
                 html += '<div style="border-top: 1px solid var(--border); padding-top: 5px;">';

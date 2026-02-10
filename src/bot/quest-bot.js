@@ -87,6 +87,11 @@ class QuestBot {
             const result = await this.battle.executeBattle(this.battleMode);
             this.updateDetailStats(result);
 
+            // Store battle time
+            if (this.battle.lastBattleDuration > 0) {
+                this.battleTimes.push(this.battle.lastBattleDuration);
+            }
+
             // User Optimization: Skip clicking OK button. Just return to loop (which navigates to Quest URL)
             return; // Skip the rest of runSingleQuest (summon selection etc)
         }
@@ -264,12 +269,14 @@ class QuestBot {
         }
 
         return {
-            questsCompleted: this.questsCompleted,
+            completedQuests: this.questsCompleted,
             isRunning: this.isRunning,
             isPaused: this.isPaused,
             startTime: this.startTime,
             avgBattleTime: this.getAverageBattleTime(),
-            avgTurns: avgTurns
+            avgTurns: avgTurns,
+            battleTimes: this.battleTimes,
+            battleCount: this.battleCount || 0
         };
     }
 }

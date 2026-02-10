@@ -71,6 +71,10 @@ class BattleHandler {
     }
 
     async handleFullAuto() {
+        // Fetch turn number before clicking
+        const turn = await this.getTurnNumber();
+        logger.info(`In battle : turn ${turn}`);
+
         // Click Full Auto button
         if (await this.controller.elementExists(this.selectors.fullAutoButton)) {
             await this.controller.clickSafe(this.selectors.fullAutoButton);

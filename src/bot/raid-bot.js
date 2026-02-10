@@ -307,8 +307,10 @@ class RaidBot {
             isRunning: this.isRunning,
             isPaused: this.isPaused,
             startTime: this.startTime,
-            avgBattleTime: this.getAverageBattleTime(), // Raids vary too much for this to be useful usually
-            avgTurns: avgTurns
+            avgBattleTime: this.getAverageBattleTime(),
+            avgTurns: avgTurns,
+            battleTimes: this.battleTimes,
+            battleCount: this.battleCount || 0
         };
     }
 }

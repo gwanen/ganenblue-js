@@ -193,35 +193,81 @@
         }
 
         button:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
         }
 
         .btn-launch {
-            background: linear-gradient(135deg, var(--accent-blue), #6366f1);
-            color: white;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid var(--accent-blue);
+            color: var(--text-primary);
+            padding: 10px;
+            font-size: 13px;
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: 600;
+        }
+
+        .btn-launch:hover:not(:disabled) {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #6366f1;
         }
 
         .btn-start {
-            background: linear-gradient(135deg, var(--accent-green), #059669);
-            color: white;
+            background: #1e4d3b;
+            /* Solid Warm Green */
+            color: #d1fae5;
         }
 
         .btn-stop {
-            background: linear-gradient(135deg, var(--accent-red), #dc2626);
-            color: white;
+            background: #5c1f1f;
+            /* Solid Warm Red */
+            color: #fee2e2;
+        }
+
+        .btn-reset {
+            background: #2e3b5c;
+            /* Solid Warm Blue */
+            color: #e0e7ff;
+        }
+
+        .btn-reload {
+            background: #5c411f;
+            /* Solid Warm Orange/Gold */
+            color: #fef3c7;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .btn-square {
+            width: 42px !important;
+            height: 42px !important;
+            padding: 0 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px !important;
+            border-radius: 6px !important;
+            margin: 0 !important;
+            flex-shrink: 0;
+            box-shadow: none !important;
         }
 
         #log-container {
-            flex: 1;
+            height: 180px;
+            /* Increased a bit as requested */
             overflow-y: auto;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 13px;
             background: var(--bg-tertiary);
             padding: 10px;
             border-radius: 8px;
-            height: 100%;
             line-height: 1.4;
+            border: 1px solid var(--border);
         }
 
         .log-entry {
@@ -376,43 +422,37 @@
         /* Stats Cards */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-            gap: 10px;
-            margin-bottom: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
         }
 
         .stat-card {
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 6px;
+            padding: 8px 4px;
             text-align: center;
             transition: all 0.2s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-1px);
             border-color: var(--accent-blue);
-            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.1);
-        }
-
-        .stat-icon {
-            font-size: 20px;
-            margin-bottom: 6px;
         }
 
         .stat-value {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         .stat-label {
-            font-size: 10px;
+            font-size: 9px;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             font-weight: 500;
         }
 
@@ -767,24 +807,18 @@
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
                 </h4>
-                <button id="btn-launch" class="btn-launch">🚀 Launch Browser</button>
+                <button id="btn-launch" class="btn-launch">Open Browser</button>
             </div>
 
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
-                    Control</h4>
-                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming</button>
-                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot</button>
-            </div>
-
-            <div class="button-section">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">
-                    Utilities</h4>
-                <button id="btn-reset-stats" class="btn-launch">🔄 Reset Stats</button>
-                <button id="btn-reload"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">⚡
-                    Reload
-                    App</button>
+                    Actions</h4>
+                <div class="btn-group">
+                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
+                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
+                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
+                </div>
             </div>
         </div>
 
@@ -793,36 +827,31 @@
             <h3>Logs</h3>
             <div id="log-container"></div>
 
-            <h3 style="margin-top: 20px;">Performance</h3>
+            <h3 style="margin-top: 10px; font-size: 13px;">Performance</h3>
 
             <!-- Stats Grid -->
             <div class="stats-grid" id="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-icon">⏱️</div>
                     <div class="stat-value" id="elapsed-time">00:00:00</div>
                     <div class="stat-label">Elapsed</div>
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">⚡</div>
                     <div class="stat-value" id="avg-battle">--:--</div>
                     <div class="stat-label">Avg Battle</div>
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">🔄</div>
                     <div class="stat-value" id="avg-turns">0.0</div>
                     <div class="stat-label">Avg Turns</div>
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">✅</div>
                     <div class="stat-value" id="completed-runs">0</div>
                     <div class="stat-label" id="completed-label">Completed</div>
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">📊</div>
                     <div class="stat-value" id="runs-per-hour">0.0</div>
                     <div class="stat-label">Per Hour</div>
                 </div>
@@ -845,10 +874,10 @@
                 </div>
             </div>
 
-            <h3 style="margin-top: 20px;">Battle Times</h3>
+            <h3 style="margin-top: 15px; font-size: 13px;">Battle History</h3>
             <div id="battle-times-display"
-                style="max-height: 200px; overflow-y: auto; font-size: 0.9em; background-color: var(--bg-tertiary); padding: 10px; border-radius: 4px;">
-                <div style="color: var(--text-secondary);">No battles yet</div>
+                style="height: 80px; overflow-y: auto; font-size: 0.85em; background-color: var(--bg-tertiary); padding: 8px; border-radius: 6px; border: 1px solid var(--border);">
+                <div style="color: var(--text-secondary); text-align: center; padding-top: 20px;">No battles yet</div>
             </div>
         </div>
     </div>
