@@ -12,7 +12,90 @@ const questUrlGroup = document.getElementById('quest-url-group');
 const inputMaxRuns = document.getElementById('max-runs');
 const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
-const statsDisplay = document.getElementById('stats-display');
+const checkboxEnableCustom = document.getElementById('enable-custom-size');
+const inputWindowWidth = document.getElementById('window-width');
+const inputWindowHeight = document.getElementById('window-height');
+const customSizeContainer = document.getElementById('custom-size-inputs');
+
+// === Toast Notifications ===
+function showToast(message, type = 'info', duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+
+    const icon = document.createElement('div');
+    icon.className = 'toast-icon';
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+    icon.textContent = icons[type] || icons.info;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = 'toast-message';
+    messageEl.textContent = message;
+
+    toast.appendChild(icon);
+    toast.appendChild(messageEl);
+
+    const container = document.getElementById('toast-container');
+    container.appendChild(toast);
+
+    // Trigger animation
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Auto-dismiss
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// === Loading State Helpers ===
+function setButtonLoading(button, isLoading, loadingText = '') {
+    if (isLoading) {
+        button.classList.add('loading');
+        button.dataset.originalText = button.textContent;
+        button.innerHTML = `<span class="spinner"></span>${loadingText || button.textContent}`;
+    } else {
+        button.classList.remove('loading');
+        button.textContent = button.dataset.originalText || button.textContent;
+    }
+}
+
+// === Progress Tracking ===
+let farmingStartTime = null;
+
+function updateProgressBar(current, max) {
+    const progressSection = document.getElementById('progress-section');
+    const progressFill = document.getElementById('progress-fill');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressEta = document.getElementById('progress-eta');
+    const progressRemaining = document.getElementById('progress-remaining');
+
+    if (max > 0) {
+        progressSection.style.display = 'block';
+        const percent = Math.min(100, (current / max) * 100);
+        progressFill.style.width = `${percent}%`;
+        progressPercent.textContent = `${Math.round(percent)}%`;
+
+        // Calculate ETA
+        if (current > 0 && farmingStartTime) {
+            const elapsed = Date.now() - farmingStartTime;
+            const avgTimePerRun = elapsed / current;
+            const remaining = max - current;
+            const etaMs = remaining * avgTimePerRun;
+
+            const etaMinutes = Math.floor(etaMs / 60000);
+            const etaSeconds = Math.floor((etaMs % 60000) / 1000);
+            progressEta.textContent = `Est: ${etaMinutes}m ${etaSeconds}s`;
+            progressRemaining.textContent = `${remaining} remaining`;
+        }
+    } else {
+        progressSection.style.display = 'none';
+    }
+}
 
 // === Persistent Settings ===
 function saveSettings() {
@@ -21,7 +104,10 @@ function saveSettings() {
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
         browserType: selectBrowserType.value,
-        battleMode: selectBattleMode.value
+        battleMode: selectBattleMode.value,
+        customSize: checkboxEnableCustom.checked,
+        windowWidth: inputWindowWidth.value,
+        windowHeight: inputWindowHeight.value
     };
     localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
@@ -36,6 +122,13 @@ function loadSettings() {
             inputMaxRuns.value = settings.maxRuns || 0;
             selectBrowserType.value = settings.browserType || 'chromium';
             selectBattleMode.value = settings.battleMode || 'full_auto';
+            checkboxEnableCustom.checked = settings.customSize || false;
+            inputWindowWidth.value = settings.windowWidth || 500;
+            inputWindowHeight.value = settings.windowHeight || 850;
+
+            // Trigger UI updates
+            updateUIForBotMode();
+            updateUIForCustomSize();
 
             // Trigger UI updates for bot mode
             updateUIForBotMode();
@@ -53,6 +146,14 @@ function updateUIForBotMode() {
     } else if (mode === 'raid') {
         questUrlGroup.style.display = 'none';
         maxRunsLabel.textContent = 'Max Raids';
+    }
+}
+
+function updateUIForCustomSize() {
+    if (checkboxEnableCustom.checked) {
+        customSizeContainer.style.display = 'block';
+    } else {
+        customSizeContainer.style.display = 'none';
     }
 }
 
@@ -74,10 +175,84 @@ selectBrowserType.addEventListener('change', debouncedSave);
 selectBattleMode.addEventListener('change', debouncedSave);
 inputQuestUrl.addEventListener('input', debouncedSave);
 inputMaxRuns.addEventListener('input', debouncedSave);
+checkboxEnableCustom.addEventListener('change', debouncedSave);
+inputWindowWidth.addEventListener('input', debouncedSave);
+inputWindowHeight.addEventListener('input', debouncedSave);
+
+// Custom Size Toggle Handler
+checkboxEnableCustom.addEventListener('change', () => {
+    updateUIForCustomSize();
+});
 
 // Bot Mode Change Handler
 selectBotMode.addEventListener('change', () => {
     updateUIForBotMode();
+});
+
+// === Input Validation ===
+function validateQuestUrl(url) {
+    if (!url) return true;// Empty is valid
+    return url.startsWith('http://game.granbluefantasy.jp/') || url.startsWith('https://game.granbluefantasy.jp/');
+}
+
+// Real-time URL validation
+inputQuestUrl.addEventListener('input', (e) => {
+    const url = e.target.value.trim();
+    const errorEl = document.getElementById('quest-url-error');
+
+    if (url && !validateQuestUrl(url)) {
+        inputQuestUrl.classList.add('input-error');
+        inputQuestUrl.classList.remove('input-success');
+        errorEl.classList.add('show');
+    } else if (url) {
+        inputQuestUrl.classList.remove('input-error');
+        inputQuestUrl.classList.add('input-success');
+        errorEl.classList.remove('show');
+    } else {
+        inputQuestUrl.classList.remove('input-error', 'input-success');
+        errorEl.classList.remove('show');
+    }
+});
+
+// === Collapsible Sections ===
+// === Collapsible Sections ===
+function toggleSection(sectionName) {
+    const content = document.getElementById(`${sectionName}-content`);
+    const chevron = document.getElementById(`${sectionName}-chevron`);
+
+    if (content.classList.contains('open')) {
+        content.classList.remove('open');
+        chevron.textContent = '▼';
+    } else {
+        content.classList.add('open');
+        chevron.textContent = '▲';
+    }
+}
+window.toggleSection = toggleSection;
+
+// Legacy support for toggleCredentials (if called directly)
+window.toggleCredentials = () => toggleSection('credentials');
+
+// === Keyboard Shortcuts ===
+document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + Enter to start bot
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnStart.disabled) {
+        e.preventDefault();
+        btnStart.click();
+        showToast('Bot started via keyboard shortcut', 'info', 2000);
+    }
+
+    // Ctrl/Cmd + . to stop bot
+    if ((e.ctrlKey || e.metaKey) && e.key === '.' && !btnStop.disabled) {
+        e.preventDefault();
+        btnStop.click();
+    }
+
+    // Prevent default Ctrl+R
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        showToast('Use the Reload App button instead', 'warning', 2000);
+    }
 });
 
 // === Sound Playback ===
@@ -162,15 +337,25 @@ btnSaveCredentials.addEventListener('click', async () => {
 
 // 1. Launch Browser
 btnLaunch.addEventListener('click', async () => {
+    setButtonLoading(btnLaunch, true, 'Launching...');
     btnLaunch.disabled = true;
-    btnLaunch.textContent = 'Browser Open';
     addLog({ level: 'info', message: 'Launching browser...', timestamp: new Date().toISOString() });
 
     const browserType = selectBrowserType.value;
-    const result = await window.electronAPI.launchBrowser(browserType);
+    const deviceSettings = {
+        mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
+        width: parseInt(inputWindowWidth.value),
+        height: parseInt(inputWindowHeight.value)
+    };
+
+    const result = await window.electronAPI.launchBrowser(browserType, deviceSettings);
+
+    setButtonLoading(btnLaunch, false);
 
     if (result.success) {
+        btnLaunch.textContent = 'Browser Open';
         addLog({ level: 'info', message: 'Browser launched. Please login manually.', timestamp: new Date().toISOString() });
+        showToast('Browser launched successfully!', 'success');
         btnStart.disabled = false;
 
         // Hide credentials section after browser launches
@@ -180,6 +365,7 @@ btnLaunch.addEventListener('click', async () => {
         }
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
+        showToast(`Launch failed: ${result.message}`, 'error');
         btnLaunch.disabled = false;
         btnLaunch.textContent = 'Launch Browser';
     }
@@ -198,19 +384,24 @@ btnStart.addEventListener('click', async () => {
     // Validate quest mode requires URL
     if (botMode === 'quest' && !settings.questUrl) {
         addLog({ level: 'warn', message: 'Please enter a Quest URL', timestamp: new Date().toISOString() });
+        showToast('Please enter a Quest URL', 'warning');
         return;
     }
 
+    farmingStartTime = Date.now();
     setRunningState(true);
     startTimer(); // Start elapsed timer
     addLog({ level: 'info', message: 'Starting farming...', timestamp: new Date().toISOString() });
+    showToast('Bot started successfully!', 'success');
 
     const result = await window.electronAPI.startBot(settings);
 
     if (!result.success) {
         addLog({ level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
+        showToast(`Start failed: ${result.message}`, 'error');
         setRunningState(false);
         stopTimer(); // Stop timer if failed
+        farmingStartTime = null;
     }
 });
 
@@ -220,6 +411,7 @@ btnStop.addEventListener('click', async () => {
     await window.electronAPI.stopBot();
     setRunningState(false);
     stopTimer(); // Stop elapsed timer
+    farmingStartTime = null;
 
     // Reset state
     // btnLaunch.disabled = false; // Keep browser button disabled as browser is open
@@ -227,9 +419,10 @@ btnStop.addEventListener('click', async () => {
 
     // Ensure Start is enabled for next run
     btnStart.disabled = false;
-    btnStart.textContent = '2. Start Farming';
+    btnStart.textContent = 'Start Farming';
 
     addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
+    showToast('Bot stopped', 'info');
 });
 
 // Timer functionality
@@ -271,8 +464,12 @@ btnResetStats.addEventListener('click', async () => {
     const result = await window.electronAPI.resetStats();
     if (result.success) {
         addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
-        document.getElementById('battle-times-display').innerHTML = '<div style="color: #565f89;">No battles yet</div>';
-        statsDisplay.innerHTML = 'Runs Completed: 0';
+        showToast('Stats reset successfully', 'success');
+        document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
+        document.getElementById('completed-runs').textContent = '0';
+        document.getElementById('avg-battle').textContent = '--:--';
+        document.getElementById('runs-per-hour').textContent = '0.0';
+        farmingStartTime = null;
     }
 });
 
@@ -318,12 +515,16 @@ setInterval(async () => {
         const result = await window.electronAPI.getStatus();
         if (result.stats) {
             const botMode = selectBotMode.value;
-            const completed = result.stats.completedRuns || result.stats.completedQuests || 0;
-            const max = result.stats.maxRuns || '∞';
-            const completedLabel = result.stats.botMode === 'raid' ? 'Raids' : 'Quests';
+            const completed = result.stats.completedRuns || result.stats.completedQuests || result.stats.raidsCompleted || 0;
+            const max = result.stats.maxRuns || 0;
+            const completedLabel = result.stats.botMode === 'raid' ? 'Raids Done' : 'Battles Done';
+
+            // Update completed runs
+            document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
+            document.getElementById('completed-label').textContent = completedLabel;
 
             // Calculate average time display
-            let avgTimeDisplay = 'N/A';
+            let avgTimeDisplay = '--:--';
             if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
                 const avgMs = result.stats.averageBattleTime;
                 const totalSeconds = Math.floor(avgMs / 1000);
@@ -331,12 +532,23 @@ setInterval(async () => {
                 const seconds = totalSeconds % 60;
                 avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             }
+            document.getElementById('avg-battle').textContent = avgTimeDisplay;
 
-            statsDisplay.innerHTML = `
-                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">${document.getElementById('elapsed-time')?.textContent || '00:00:00'}</span></div>
-                <div style="margin-bottom: 8px;"><strong>Avg Battle:</strong> ${avgTimeDisplay}</div>
-                <div>${completedLabel} Completed: ${completed} / ${max}</div>
-            `;
+            // Calculate runs per hour
+            if (result.stats.averageBattleTime > 0) {
+                // Interpolate using average battle time + 15 seconds (navigation time buffer)
+                // Formula: 3600000 / (avg_ms + 15000)
+                const runsPerHour = (3600000 / (result.stats.averageBattleTime + 15000)).toFixed(1);
+                document.getElementById('runs-per-hour').textContent = `~${runsPerHour}`;
+            } else if (farmingStartTime && completed > 0) {
+                // Fallback to historical average
+                const elapsedHours = (Date.now() - farmingStartTime) / 3600000;
+                const runsPerHour = (completed / elapsedHours).toFixed(1);
+                document.getElementById('runs-per-hour').textContent = runsPerHour;
+            }
+
+            // Update progress bar
+            updateProgressBar(completed, max);
 
             // Update battle times display
             const battleTimesContainer = document.getElementById('battle-times-display');

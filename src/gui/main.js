@@ -113,7 +113,7 @@ app.on('window-all-closed', async () => {
 });
 
 // --- IPC Handlers ---
-ipcMain.handle('browser:launch', async (event, browserType = 'chromium') => {
+ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceSettings = {}) => {
     // Prevent multiple browser instances
     if (browserManager) {
         logger.info('Browser already open, reusing...');
@@ -126,7 +126,8 @@ ipcMain.handle('browser:launch', async (event, browserType = 'chromium') => {
         // Override browser type in config
         const browserConfig = {
             ...config.get('browser'),
-            browser_type: browserType
+            browser_type: browserType,
+            emulation: deviceSettings // Pass full settings object
         };
 
         browserManager = new BrowserManager(browserConfig);

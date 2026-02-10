@@ -198,35 +198,60 @@
         #log-container {
             flex: 1;
             overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 13px;
             background: var(--bg-tertiary);
-            padding: 16px;
+            padding: 10px;
             border-radius: 8px;
             height: 100%;
+            line-height: 1.4;
         }
 
         .log-entry {
-            margin-bottom: 6px;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 2px;
+            padding: 3px 6px;
+            border-radius: 4px;
+            border-left: 2px solid transparent;
+            transition: all 0.15s ease;
+            font-size: 12px;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.04);
         }
 
         .log-time {
             color: var(--text-secondary);
             font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
         }
 
         .log-level-info {
             color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-info) {
+            border-left-color: var(--accent-blue);
         }
 
         .log-level-warn {
             color: var(--accent-yellow);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-warn) {
+            border-left-color: var(--accent-yellow);
         }
 
         .log-level-error {
             color: var(--accent-red);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-error) {
+            border-left-color: var(--accent-red);
         }
 
         .button-section {
@@ -270,10 +295,281 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent-blue);
         }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transform: translateX(400px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            min-width: 280px;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .toast-warning {
+            border-left: 3px solid var(--accent-yellow);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--accent-red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .toast-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .toast-message {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.1);
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+
+        /* Progress Bar */
+        .progress-section {
+            margin-bottom: 20px;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .progress-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .progress-percent {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), #6366f1);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-shine {
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shine 2s infinite;
+        }
+
+        @keyframes shine {
+            to {
+                left: 100%;
+            }
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        button.loading {
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        /* Input Validation */
+        .input-error {
+            border-color: var(--accent-red) !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .error-message {
+            color: var(--accent-red);
+            font-size: 11px;
+            margin-top: 4px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .input-success {
+            border-color: var(--accent-green) !important;
+        }
+
+        /* Collapsible Sections */
+        .collapsible-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px 0;
+            margin: 16px 0 8px 0;
+            border-top: 1px solid var(--border);
+            user-select: none;
+        }
+
+        .collapsible-header:hover {
+            color: var(--accent-blue);
+        }
+
+        .collapsible-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .collapsible-chevron {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .collapsible-header:hover .collapsible-chevron {
+            color: var(--accent-blue);
+        }
+
+        .collapsible-content {
+            display: none;
+        }
+
+        .collapsible-content.open {
+            display: block;
+        }
+
+        /* Keyboard Shortcut Hint */
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            margin-left: 8px;
+            font-family: monospace;
+        }
     </style>
 </head>
 
 <body>
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
     <div class="header">
         <div class="header-left">
             <div class="logo">G</div>
@@ -298,6 +594,7 @@
             <div class="form-group" id="quest-url-group">
                 <label for="quest-url">Quest URL</label>
                 <input type="text" id="quest-url" placeholder="http://game.granbluefantasy.jp/..." value="">
+                <div class="error-message" id="quest-url-error">Please enter a valid GBF quest URL</div>
             </div>
 
             <div class="form-group" id="max-runs-group">
@@ -322,12 +619,13 @@
             </div>
 
             <!-- Credentials Section (collapsible) -->
-            <div id="credentials-section">
-                <hr style="margin: 20px 0; border-color: var(--border);">
-
+            <div class="collapsible-header" onclick="toggleSection('credentials')">
+                <span class="collapsible-title">🔐 Auto-Login Credentials</span>
+                <span class="collapsible-chevron" id="credentials-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="credentials-content">
                 <div class="form-group">
-                    <label for="mobage-email">Mobage Email <span style="font-size: 0.8em; opacity: 0.7;">(for
-                            auto-login)</span></label>
+                    <label for="mobage-email">Mobage Email</label>
                     <input type="email" id="mobage-email" placeholder="your.email@example.com" value="">
                 </div>
 
@@ -337,32 +635,61 @@
                 </div>
 
                 <button id="btn-save-credentials"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
                     Save Credentials
                 </button>
+            </div>
 
-                <hr style="margin: 20px 0; border-color: var(--border);">
+            <!-- Device Emulation Section (collapsible) -->
+            <div class="collapsible-header" onclick="toggleSection('device')">
+                <span class="collapsible-title">📱 Device & Window Size</span>
+                <span class="collapsible-chevron" id="device-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="device-content">
+                <div
+                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 5px 0;">
+                    <label for="enable-custom-size"
+                        style="margin: 0; cursor: pointer; color: var(--text-primary); font-size: 13px;">Enable Custom
+                        Window Size</label>
+                    <input type="checkbox" id="enable-custom-size" style="width: auto; margin: 0; cursor: pointer;">
+                </div>
+
+                <div id="custom-size-inputs"
+                    style="display: none; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="window-width" style="font-size: 11px;">Width (px)</label>
+                            <input type="number" id="window-width" value="500" min="300" max="2560">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="window-height" style="font-size: 11px;">Height (px)</label>
+                            <input type="number" id="window-height" value="850" min="300" max="1440">
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
                 </h4>
-                <button id="btn-launch" class="btn-launch">Launch Browser</button>
+                <button id="btn-launch" class="btn-launch">🚀 Launch Browser</button>
             </div>
 
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
                     Control</h4>
-                <button id="btn-start" class="btn-start" disabled>Start Farming</button>
-                <button id="btn-stop" class="btn-stop" disabled>Stop Bot</button>
+                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming<span
+                        class="kbd">Ctrl+Enter</span></button>
+                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot<span class="kbd">Ctrl+.</span></button>
             </div>
 
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">
                     Utilities</h4>
-                <button id="btn-reset-stats" class="btn-launch">Reset Stats</button>
+                <button id="btn-reset-stats" class="btn-launch">🔄 Reset Stats</button>
                 <button id="btn-reload"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">Reload
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">⚡
+                    Reload
                     App</button>
             </div>
         </div>
@@ -372,11 +699,50 @@
             <h3>Logs</h3>
             <div id="log-container"></div>
 
-            <h3 style="margin-top: 20px;">Stats</h3>
-            <div id="stats-display" style="margin-bottom: 15px;">
-                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">00:00:00</span>
+            <h3 style="margin-top: 20px;">Performance</h3>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-value" id="elapsed-time">00:00:00</div>
+                    <div class="stat-label">Elapsed</div>
                 </div>
-                <div>Runs Completed: 0</div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-value" id="avg-battle">--:--</div>
+                    <div class="stat-label">Avg Battle</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value" id="completed-runs">0</div>
+                    <div class="stat-label" id="completed-label">Completed</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value" id="runs-per-hour">0.0</div>
+                    <div class="stat-label">Per Hour</div>
+                </div>
+            </div>
+
+            <!-- Progress Bar (hidden by default) -->
+            <div class="progress-section" id="progress-section" style="display: none;">
+                <div class="progress-info">
+                    <span class="progress-label">Progress</span>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%">
+                        <div class="progress-shine"></div>
+                    </div>
+                </div>
+                <div class="progress-meta">
+                    <span id="progress-eta">Est: calculating...</span>
+                    <span id="progress-remaining">-- remaining</span>
+                </div>
             </div>
 
             <h3 style="margin-top: 20px;">Battle Times</h3>
@@ -385,13 +751,6 @@
                 <div style="color: var(--text-secondary);">No battles yet</div>
             </div>
         </div>
-    </div>
-    </div>
-
-    <!-- Logs -->
-    <div class="panel logs-panel">
-        <h3>Usage Logs</h3>
-        <div id="log-container"></div>
     </div>
     </div>
 

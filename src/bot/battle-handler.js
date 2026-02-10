@@ -140,6 +140,12 @@ class BattleHandler {
 
             // 2. Raid Logic (Strictly wait while on Raid URL)
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                // Check for OK button (Battle End) - catch-all for completion state overlay
+                if (await this.controller.elementExists(this.selectors.okButton, 500)) {
+                    logger.info('Battle completed (OK button found in raid URL)!');
+                    return true;
+                }
+
                 // User Condition: Auto-refresh if Attack/Cancel buttons are missing for ~10s
                 // AND immediate refresh if 'display-off' (animation start) is detected to skip animation
 

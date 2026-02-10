@@ -42,6 +42,19 @@ class BrowserManager {
     async launch() {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
         const browserType = this.config.browser_type || 'chromium';
+        const emulation = this.config.emulation || {};
+
+        // Default window size
+        let windowWidth = 600;
+        let windowHeight = 900;
+        // Configure Window Size
+        if (emulation.mode === 'custom') {
+            windowWidth = emulation.width || 600;
+            windowHeight = emulation.height || 900;
+            console.log(`Using custom window size: ${windowWidth}x${windowHeight}`);
+        } else {
+            console.log('Using default desktop mode');
+        }
 
         // Prepare launch options
         const launchOptions = {
@@ -51,7 +64,7 @@ class BrowserManager {
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--window-size=500,850', // Optimized height for GBF
+                `--window-size=${windowWidth},${windowHeight}`,
                 // Disable password and security popups
                 '--password-store=basic',
                 '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
@@ -78,6 +91,9 @@ class BrowserManager {
         this.browser = await puppeteer.launch(launchOptions);
 
         this.page = await this.browser.newPage();
+
+        // Set viewport size
+        await this.page.setViewport({ width: windowWidth, height: windowHeight });
 
         // Additional stealth measures
         await this.applyStealth();

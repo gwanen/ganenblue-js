@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    launchBrowser: (browserType) => ipcRenderer.invoke('browser:launch', browserType),
+    launchBrowser: (browserType, settings) => ipcRenderer.invoke('browser:launch', browserType, settings),
     startBot: (settings) => ipcRenderer.invoke('bot:start', settings),
     stopBot: () => ipcRenderer.invoke('bot:stop'),
     getStatus: () => ipcRenderer.invoke('bot:get-status'),
