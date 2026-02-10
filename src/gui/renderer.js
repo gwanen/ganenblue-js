@@ -355,7 +355,7 @@ btnSaveCredentials.addEventListener('click', async () => {
             // Only load email, keep password empty for security
             inputMobageEmail.value = result.credentials.email || '';
             // Don't log email or password
-            addLog({ level: 'info', message: `✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
+            addLog({ level: 'info', message: `[Login] ✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
         } else {
             console.log('No credentials found or load failed');
             addLog({ level: 'info', message: 'No saved credentials found', timestamp: new Date().toISOString() });
@@ -370,7 +370,7 @@ btnSaveCredentials.addEventListener('click', async () => {
 btnLaunch.addEventListener('click', async () => {
     setButtonLoading(btnLaunch, true, 'Launching...');
     btnLaunch.disabled = true;
-    addLog({ level: 'info', message: 'Launching browser...', timestamp: new Date().toISOString() });
+    addLog({ level: 'info', message: '[Login] Launching browser...', timestamp: new Date().toISOString() });
 
     const browserType = selectBrowserType.value;
     const deviceSettings = {
@@ -385,7 +385,7 @@ btnLaunch.addEventListener('click', async () => {
 
     if (result.success) {
         btnLaunch.textContent = 'Browser Open';
-        addLog({ level: 'info', message: 'Browser launched. Please login manually.', timestamp: new Date().toISOString() });
+        addLog({ level: 'info', message: '[Login] Browser launched. Please login manually.', timestamp: new Date().toISOString() });
         showToast('Browser launched successfully!', 'success');
         btnStart.disabled = false;
 

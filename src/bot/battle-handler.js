@@ -32,6 +32,12 @@ class BattleHandler {
         logger.info(`[Battle] Engaging encounter (${mode})`);
 
         try {
+            // Optimization: Skip wait if already finished
+            const currentUrl = this.controller.page.url();
+            if (currentUrl.includes('#result')) {
+                return await this.waitForBattleEnd(mode);
+            }
+
             // Wait for battle screen to load (look for Auto button)
             const battleLoaded = await this.controller.waitForElement('.btn-auto', 20000);
 
@@ -73,7 +79,11 @@ class BattleHandler {
     async handleFullAuto() {
         // Fetch turn number before clicking
         const turn = await this.getTurnNumber();
-        logger.info(`[Turn ${turn}]`);
+        if (turn > 0) {
+            logger.info(`[Turn ${turn}]`);
+        } else {
+            logger.info('[Battle] Initializing...');
+        }
 
         // Wait for Full Auto button with 5s timeout
         const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);

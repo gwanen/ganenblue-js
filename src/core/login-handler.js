@@ -13,7 +13,7 @@ class LoginHandler {
      */
     async performLogin(credentials) {
         try {
-            logger.info('Starting automated login flow...');
+            logger.info('[Login] Starting automated flow...');
 
             // Step 1: Click main login button
             await this.clickLoginButton();
@@ -27,7 +27,7 @@ class LoginHandler {
             // Step 4: Return to GBF page
             await this.returnToGBF();
 
-            logger.info('✓ Automated login completed successfully!');
+            logger.info('[Login] ✓ Automated login completed successfully!');
             return true;
         } catch (error) {
             logger.error('Login automation failed:', error.message);
@@ -39,7 +39,7 @@ class LoginHandler {
      * Click the initial login button on GBF home page
      */
     async clickLoginButton() {
-        logger.info('Waiting for login button...');
+        logger.info('[Login] Waiting for login button...');
 
         try {
             await this.page.waitForSelector(this.selectors.loginButton, {
@@ -61,7 +61,7 @@ class LoginHandler {
      * Select Mobage authentication option
      */
     async selectMobageAuth() {
-        logger.info('Selecting Mobage authentication...');
+        logger.info('[Login] Selecting Mobage authentication...');
 
         try {
             await this.page.waitForSelector(this.selectors.mobageOption, {
@@ -73,7 +73,7 @@ class LoginHandler {
 
             // Click Mobage - this will open a new tab
             await this.page.click(this.selectors.mobageOption);
-            logger.info('✓ Selected Mobage login');
+            logger.info('[Login] ✓ Selected Mobage login');
 
             // Wait for new tab to open
             await sleep(3000);
@@ -85,7 +85,7 @@ class LoginHandler {
             if (pages.length > 1) {
                 // Switch to the new tab (last page)
                 this.page = pages[pages.length - 1];
-                logger.info('✓ Switched to Mobage login tab');
+                logger.info('[Login] ✓ Switched to Mobage login tab');
             } else {
                 logger.info('Login page opened in same tab');
             }
@@ -98,11 +98,11 @@ class LoginHandler {
      * Handle Mobage login page (might be in new tab or iframe)
      */
     async handleMobageLogin(credentials) {
-        logger.info('Handling Mobage login page...');
+        logger.info('[Login] Handling Mobage login page...');
 
         try {
             // Wait longer for page navigation
-            logger.info('Waiting for Mobage login page to load...');
+            logger.info('[Login] Waiting for login page to load...');
 
             // Wait for email field to appear (indicates login page loaded)
             await this.page.waitForSelector(this.selectors.emailField, {
@@ -110,31 +110,31 @@ class LoginHandler {
                 timeout: 30000
             });
 
-            logger.info('Mobage login page loaded');
+            logger.info('[Login] Mobage login page loaded');
             await sleep(1000);
 
             // Fill email - click first to focus
             await this.page.click(this.selectors.emailField);
             await sleep(500);
             await this.page.type(this.selectors.emailField, credentials.email, { delay: 100 });
-            logger.info('✓ Filled email');
+            logger.info('[Login] ✓ Filled email');
             await sleep(1000);
 
             // Fill password - click first to focus
             await this.page.click(this.selectors.passwordField);
             await sleep(500);
             await this.page.type(this.selectors.passwordField, credentials.password, { delay: 100 });
-            logger.info('✓ Filled password');
+            logger.info('[Login] ✓ Filled password');
             await sleep(1500);
 
             // Click login button
             const loginButton = await this.page.$(this.selectors.submitButton);
             if (loginButton) {
                 await loginButton.click();
-                logger.info('✓ Clicked login button');
+                logger.info('[Login] ✓ Clicked login button');
 
                 // Wait for login to process
-                logger.info('Waiting for login to process (may require reCAPTCHA)...');
+                logger.info('[Login] Waiting for login to process (may require reCAPTCHA)...');
                 await sleep(10000); // Longer wait for reCAPTCHA
             } else {
                 throw new Error('Login button not found');
@@ -148,7 +148,7 @@ class LoginHandler {
      * Click close button to return to GBF
      */
     async returnToGBF() {
-        logger.info('Returning to GBF...');
+        logger.info('[Login] Returning to GBF...');
 
         try {
             // Look for close button (閉じる)
@@ -159,11 +159,11 @@ class LoginHandler {
             if (closeButton) {
                 await sleep(2000);
                 await closeButton.click();
-                logger.info('✓ Clicked close button');
+                logger.info('[Login] ✓ Clicked close button');
                 await sleep(3000);
             }
 
-            logger.info('✓ Returned to GBF page');
+            logger.info('[Login] ✓ Returned to GBF page');
         } catch (error) {
             logger.warn('Close button not found - login may have completed already');
         }
