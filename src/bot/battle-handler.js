@@ -75,12 +75,22 @@ class BattleHandler {
         const turn = await this.getTurnNumber();
         logger.info(`[Turn ${turn}]`);
 
-        // Click Full Auto button
-        if (await this.controller.elementExists(this.selectors.fullAutoButton)) {
+        // Wait for Full Auto button with 5s timeout
+        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+
+        if (found) {
             await this.controller.clickSafe(this.selectors.fullAutoButton);
             logger.info('[FA] Full Auto enabled');
         } else {
-            logger.warn('Full Auto button not found, may already be active');
+            logger.warn('[Wait] Auto button timeout. Refreshing page...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            // Wait for battle screen to reload
+            await this.controller.waitForElement(this.selectors.battleScreen, 10000);
+            // Re-attempt FA once after refresh
+            if (await this.controller.elementExists(this.selectors.fullAutoButton, 5000)) {
+                await this.controller.clickSafe(this.selectors.fullAutoButton);
+                logger.info('[FA] Full Auto enabled (after refresh)');
+            }
         }
     }
 
@@ -91,11 +101,15 @@ class BattleHandler {
             await this.controller.clickSafe(this.selectors.attackButton);
             logger.info('Semi Auto: Attack initiated');
 
-            // Enable Auto (not Full Auto)
-            if (await this.controller.elementExists(this.selectors.autoButton, 3000)) {
+            // Enable Auto (not Full Auto) with 5s timeout
+            const found = await this.controller.waitForElement(this.selectors.autoButton, 5000);
+            if (found) {
                 await sleep(randomDelay(500, 1000));
                 await this.controller.clickSafe(this.selectors.autoButton);
                 logger.info('Auto mode enabled');
+            } else {
+                logger.warn('[Wait] Auto button timeout. Refreshing page...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             }
         }
     }
