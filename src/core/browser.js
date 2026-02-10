@@ -72,6 +72,11 @@ class BrowserManager {
                 '--disable-infobars',
                 '--disable-notifications',
                 '--disable-save-password-bubble', // Disable password manager popup
+                '--disable-gpu', // Reduce graphics load
+                '--mute-audio', // Save CPU by silencing browser
+                '--disable-canvas-aa', // Disable antialiasing for performance
+                '--disable-2d-canvas-clip-aa', // Further canvas optimization
+                '--disable-gl-drawing-for-tests',
             ],
             defaultViewport: null, // Dynamic viewport that matches window size
             ignoreDefaultArgs: ['--enable-automation'],
