@@ -77,16 +77,11 @@ class BattleHandler {
     }
 
     async handleFullAuto() {
-        // Fetch turn number before clicking
-        const turn = await this.getTurnNumber();
-        if (turn > 0) {
-            logger.info(`[Turn ${turn}]`);
-        } else {
-            // Check URL before saying Initializing - we might be on result screen
-            const url = this.controller.page.url();
-            if (url.includes('#result') || url.includes('#quest/index')) return;
-            logger.info('[Battle] Initializing...');
-        }
+        // Check URL before saying Initializing - we might be on result screen
+        const url = this.controller.page.url();
+        if (url.includes('#result') || url.includes('#quest/index')) return;
+
+        logger.info('[Battle] Initializing...');
 
         // Wait for Full Auto button with 5s timeout
         const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
@@ -155,10 +150,15 @@ class BattleHandler {
         const startTime = Date.now();
         const checkInterval = 1000;
         let missingUiCount = 0;
-        let lastTurn = 0;
-        let turnCount = 0;
+
+        // Initial turn detection to avoid duplicate logging
+        let turnCount = await this.getTurnNumber();
+        let lastTurn = turnCount;
 
         logger.info('[Wait] Resolving turn...');
+        if (turnCount > 0) {
+            logger.info(`[Turn ${turnCount}]`);
+        }
 
         while (Date.now() - startTime < maxWaitMs) {
             if (this.stopped) {
