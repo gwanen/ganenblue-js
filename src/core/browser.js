@@ -72,6 +72,7 @@ class BrowserManager {
                 '--disable-infobars',
                 '--disable-notifications',
                 '--disable-save-password-bubble', // Disable password manager popup
+                '--mute-audio', // Save CPU by silencing browser
             ],
             defaultViewport: null, // Dynamic viewport that matches window size
             ignoreDefaultArgs: ['--enable-automation'],

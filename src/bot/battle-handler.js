@@ -32,6 +32,12 @@ class BattleHandler {
         logger.info(`[Battle] Engaging encounter (${mode})`);
 
         try {
+            // Optimization: Skip wait if already finished
+            const currentUrl = this.controller.page.url();
+            if (currentUrl.includes('#result')) {
+                return await this.waitForBattleEnd(mode);
+            }
+
             // Wait for battle screen to load (look for Auto button)
             const battleLoaded = await this.controller.waitForElement('.btn-auto', 20000);
 
@@ -73,14 +79,43 @@ class BattleHandler {
     async handleFullAuto() {
         // Fetch turn number before clicking
         const turn = await this.getTurnNumber();
-        logger.info(`[Turn ${turn}]`);
+        if (turn > 0) {
+            logger.info(`[Turn ${turn}]`);
+        } else {
+            logger.info('[Battle] Initializing...');
+        }
 
-        // Click Full Auto button
-        if (await this.controller.elementExists(this.selectors.fullAutoButton)) {
+        // Wait for Full Auto button with 5s timeout
+        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+
+        if (found) {
             await this.controller.clickSafe(this.selectors.fullAutoButton);
             logger.info('[FA] Full Auto enabled');
         } else {
-            logger.warn('Full Auto button not found, may already be active');
+            logger.warn('[Wait] Auto button timeout. Refreshing page...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+
+            // Post-Refresh Recovery: Check if battle ended during reload
+            const postRefreshUrl = this.controller.page.url();
+            if (postRefreshUrl.includes('#result')) {
+                return; // Finished
+            }
+
+            // Check for OK button (completion modal)
+            if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
+                logger.info('[Cleared] Battle finished during reload');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                return;
+            }
+
+            // Still in battle? Wait for battle screen to reload
+            await this.controller.waitForElement(this.selectors.battleScreen, 10000);
+
+            // Re-attempt FA once after refresh
+            if (await this.controller.elementExists(this.selectors.fullAutoButton, 5000)) {
+                await this.controller.clickSafe(this.selectors.fullAutoButton);
+                logger.info('[FA] Full Auto enabled (after refresh)');
+            }
         }
     }
 
@@ -91,11 +126,25 @@ class BattleHandler {
             await this.controller.clickSafe(this.selectors.attackButton);
             logger.info('Semi Auto: Attack initiated');
 
-            // Enable Auto (not Full Auto)
-            if (await this.controller.elementExists(this.selectors.autoButton, 3000)) {
+            // Enable Auto (not Full Auto) with 5s timeout
+            const found = await this.controller.waitForElement(this.selectors.autoButton, 5000);
+            if (found) {
                 await sleep(randomDelay(500, 1000));
                 await this.controller.clickSafe(this.selectors.autoButton);
                 logger.info('Auto mode enabled');
+            } else {
+                logger.warn('[Wait] Auto button timeout. Refreshing page...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+
+                // Post-Refresh Recovery
+                const postRefreshUrl = this.controller.page.url();
+                if (postRefreshUrl.includes('#result')) return;
+
+                if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
+                    logger.info('[Cleared] Battle finished during reload');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    return;
+                }
             }
         }
     }
