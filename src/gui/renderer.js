@@ -520,8 +520,12 @@ function addLog(log) {
     const levelClass = `log-level-${log.level}`;
 
     let message = log.message;
+
+    // Auto-colorize tags like [Quest], [FA], [Cleared]
+    message = message.replace(/^(\[.*?\])/, '<span class="log-tag">$1</span>');
+
     // Highlight Keywords
-    message = message.replace(/(Battle start|Battle completed|Starting quest|Starting raid)/gi, '<span class="log-highlight-battle">$1</span>');
+    message = message.replace(/(Battle start|Battle completed|Starting quest|Starting raid|Victory)/gi, '<span class="log-highlight-battle">$1</span>');
     message = message.replace(/(Loot|Drop)/gi, '<span class="log-highlight-loot">$1</span>');
     message = message.replace(/(successfully|✓)/gi, '<span class="log-highlight-success">$1</span>');
 

@@ -28,7 +28,7 @@ class QuestBot {
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
         logger.info('Set viewport to 1000x1799');
 
-        logger.info('Quest Bot started');
+        logger.info('[Bot] Bot started. Good luck!');
         logger.info(`Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
 
         try {
@@ -63,7 +63,7 @@ class QuestBot {
     }
 
     async runSingleQuest() {
-        logger.info(`Starting quest ${this.questsCompleted + 1}...`);
+        logger.info(`[Quest] Quest started (${this.questsCompleted + 1})`);
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
@@ -117,7 +117,7 @@ class QuestBot {
         // User Optimization: Skip clicking OK button.
         // await this.battle.handleResult();
 
-        logger.info('Quest completed successfully');
+        logger.info('[Cleared] Victory!');
     }
 
     async selectSummon() {
@@ -136,7 +136,7 @@ class QuestBot {
 
         // Check for 'btn-usual-ok' (Confirmation popup that might block view)
         if (await this.controller.elementExists('.btn-usual-ok')) {
-            logger.info('Found confirmation popup, clicking OK...');
+            logger.info('[Bot] Found confirmation popup, clicking OK...');
             await this.controller.clickSafe('.btn-usual-ok');
             await sleep(1500); // Reduced from 3000ms for snappier response
 
@@ -155,7 +155,7 @@ class QuestBot {
         // Try to click the first available summon button/panel
         const summonSelector = '.prt-supporter-detail';
         if (await this.controller.elementExists(summonSelector)) {
-            logger.info('Found summon, clicking...');
+            logger.info('[Summon] Selecting Supporter...');
 
             // Double check URL before interaction
             if (this.controller.page.url().includes('#raid') || this.controller.page.url().includes('_raid')) {

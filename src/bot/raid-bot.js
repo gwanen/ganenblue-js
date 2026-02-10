@@ -28,7 +28,7 @@ class RaidBot {
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
         logger.info('Set viewport to 1000x1799');
 
-        logger.info('Raid Bot started');
+        logger.info('[Bot] Bot started. Good luck!');
         logger.info(`Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
 
         try {
@@ -63,7 +63,7 @@ class RaidBot {
     }
 
     async runSingleRaid() {
-        logger.info(`Starting raid ${this.raidsCompleted + 1}...`);
+        logger.info(`[Raid] Searching for backups (${this.raidsCompleted + 1})...`);
 
         // Try to find and join a raid
         const joined = await this.findAndJoinRaid();
@@ -91,13 +91,13 @@ class RaidBot {
             this.battleTimes.push(this.battle.lastBattleDuration);
         }
 
-        logger.info('Raid completed successfully');
+        logger.info('[Cleared] Victory!');
         return true;
     }
 
     async findAndJoinRaid() {
         // Navigate to raid backup page
-        logger.info('Navigating to raid backup page...');
+        logger.info('[Raid] Navigating to backup page...');
         await this.controller.goto(this.raidBackupUrl);
         // EST: Reduced delay for speed (0.5-1s)
         await sleep(randomDelay(500, 1000));

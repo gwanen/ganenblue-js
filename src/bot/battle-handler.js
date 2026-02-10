@@ -29,7 +29,7 @@ class BattleHandler {
     async executeBattle(mode = 'full_auto') {
         // Start timing
         this.battleStartTime = Date.now();
-        logger.info(`Starting battle in ${mode} mode`);
+        logger.info(`[Battle] Engaging encounter (${mode})`);
 
         try {
             // Wait for battle screen to load (look for Auto button)
@@ -60,7 +60,7 @@ class BattleHandler {
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
-            logger.info(`Battle completed in ${formattedTime}`);
+            logger.info(`[Summary] Duration ${formattedTime}`);
 
             return result;
         } catch (error) {
@@ -73,12 +73,12 @@ class BattleHandler {
     async handleFullAuto() {
         // Fetch turn number before clicking
         const turn = await this.getTurnNumber();
-        logger.info(`In battle : turn ${turn}`);
+        logger.info(`[Turn ${turn}]`);
 
         // Click Full Auto button
         if (await this.controller.elementExists(this.selectors.fullAutoButton)) {
             await this.controller.clickSafe(this.selectors.fullAutoButton);
-            logger.info('Full Auto activated');
+            logger.info('[FA] Full Auto enabled');
         } else {
             logger.warn('Full Auto button not found, may already be active');
         }
@@ -111,7 +111,7 @@ class BattleHandler {
         let lastTurn = 0;
         let turnCount = 0;
 
-        logger.info('Waiting for battle to complete...');
+        logger.info('[Wait] Resolving turn...');
 
         while (Date.now() - startTime < maxWaitMs) {
             if (this.stopped) {
@@ -136,7 +136,7 @@ class BattleHandler {
             // 1. Result URL (Most reliable)
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#result')) {
-                logger.info('Battle completed (detected via URL)');
+                logger.info('[Cleared] Victory!');
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
@@ -166,7 +166,7 @@ class BattleHandler {
 
                 // Animation Skipping
                 if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
-                    logger.info('Skipping animation...');
+                    logger.info('[Reload] Skipping animations...');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
 
                     // Wait for battle UI to reappear before re-engaging
