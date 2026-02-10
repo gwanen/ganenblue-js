@@ -12,7 +12,86 @@ const questUrlGroup = document.getElementById('quest-url-group');
 const inputMaxRuns = document.getElementById('max-runs');
 const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
-const statsDisplay = document.getElementById('stats-display');
+
+// === Toast Notifications ===
+function showToast(message, type = 'info', duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+
+    const icon = document.createElement('div');
+    icon.className = 'toast-icon';
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+    icon.textContent = icons[type] || icons.info;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = 'toast-message';
+    messageEl.textContent = message;
+
+    toast.appendChild(icon);
+    toast.appendChild(messageEl);
+
+    const container = document.getElementById('toast-container');
+    container.appendChild(toast);
+
+    // Trigger animation
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Auto-dismiss
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// === Loading State Helpers ===
+function setButtonLoading(button, isLoading, loadingText = '') {
+    if (isLoading) {
+        button.classList.add('loading');
+        button.dataset.originalText = button.textContent;
+        button.innerHTML = `<span class="spinner"></span>${loadingText || button.textContent}`;
+    } else {
+        button.classList.remove('loading');
+        button.textContent = button.dataset.originalText || button.textContent;
+    }
+}
+
+// === Progress Tracking ===
+let farmingStartTime = null;
+
+function updateProgressBar(current, max) {
+    const progressSection = document.getElementById('progress-section');
+    const progressFill = document.getElementById('progress-fill');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressEta = document.getElementById('progress-eta');
+    const progressRemaining = document.getElementById('progress-remaining');
+
+    if (max > 0) {
+        progressSection.style.display = 'block';
+        const percent = Math.min(100, (current / max) * 100);
+        progressFill.style.width = `${percent}%`;
+        progressPercent.textContent = `${Math.round(percent)}%`;
+
+        // Calculate ETA
+        if (current > 0 && farmingStartTime) {
+            const elapsed = Date.now() - farmingStartTime;
+            const avgTimePerRun = elapsed / current;
+            const remaining = max - current;
+            const etaMs = remaining * avgTimePerRun;
+
+            const etaMinutes = Math.floor(etaMs / 60000);
+            const etaSeconds = Math.floor((etaMs % 60000) / 1000);
+            progressEta.textContent = `Est: ${etaMinutes}m ${etaSeconds}s`;
+            progressRemaining.textContent = `${remaining} remaining`;
+        }
+    } else {
+        progressSection.style.display = 'none';
+    }
+}
 
 // === Persistent Settings ===
 function saveSettings() {
@@ -162,15 +241,19 @@ btnSaveCredentials.addEventListener('click', async () => {
 
 // 1. Launch Browser
 btnLaunch.addEventListener('click', async () => {
+    setButtonLoading(btnLaunch, true, 'Launching...');
     btnLaunch.disabled = true;
-    btnLaunch.textContent = 'Browser Open';
     addLog({ level: 'info', message: 'Launching browser...', timestamp: new Date().toISOString() });
 
     const browserType = selectBrowserType.value;
     const result = await window.electronAPI.launchBrowser(browserType);
 
+    setButtonLoading(btnLaunch, false);
+
     if (result.success) {
+        btnLaunch.textContent = 'Browser Open';
         addLog({ level: 'info', message: 'Browser launched. Please login manually.', timestamp: new Date().toISOString() });
+        showToast('Browser launched successfully!', 'success');
         btnStart.disabled = false;
 
         // Hide credentials section after browser launches
@@ -180,6 +263,7 @@ btnLaunch.addEventListener('click', async () => {
         }
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
+        showToast(`Launch failed: ${result.message}`, 'error');
         btnLaunch.disabled = false;
         btnLaunch.textContent = 'Launch Browser';
     }
@@ -198,19 +282,24 @@ btnStart.addEventListener('click', async () => {
     // Validate quest mode requires URL
     if (botMode === 'quest' && !settings.questUrl) {
         addLog({ level: 'warn', message: 'Please enter a Quest URL', timestamp: new Date().toISOString() });
+        showToast('Please enter a Quest URL', 'warning');
         return;
     }
 
+    farmingStartTime = Date.now();
     setRunningState(true);
     startTimer(); // Start elapsed timer
     addLog({ level: 'info', message: 'Starting farming...', timestamp: new Date().toISOString() });
+    showToast('Bot started successfully!', 'success');
 
     const result = await window.electronAPI.startBot(settings);
 
     if (!result.success) {
         addLog({ level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
+        showToast(`Start failed: ${result.message}`, 'error');
         setRunningState(false);
         stopTimer(); // Stop timer if failed
+        farmingStartTime = null;
     }
 });
 
@@ -220,6 +309,7 @@ btnStop.addEventListener('click', async () => {
     await window.electronAPI.stopBot();
     setRunningState(false);
     stopTimer(); // Stop elapsed timer
+    farmingStartTime = null;
 
     // Reset state
     // btnLaunch.disabled = false; // Keep browser button disabled as browser is open
@@ -227,9 +317,10 @@ btnStop.addEventListener('click', async () => {
 
     // Ensure Start is enabled for next run
     btnStart.disabled = false;
-    btnStart.textContent = '2. Start Farming';
+    btnStart.textContent = 'Start Farming';
 
     addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
+    showToast('Bot stopped', 'info');
 });
 
 // Timer functionality
@@ -271,8 +362,12 @@ btnResetStats.addEventListener('click', async () => {
     const result = await window.electronAPI.resetStats();
     if (result.success) {
         addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
-        document.getElementById('battle-times-display').innerHTML = '<div style="color: #565f89;">No battles yet</div>';
-        statsDisplay.innerHTML = 'Runs Completed: 0';
+        showToast('Stats reset successfully', 'success');
+        document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
+        document.getElementById('completed-runs').textContent = '0';
+        document.getElementById('avg-battle').textContent = '--:--';
+        document.getElementById('runs-per-hour').textContent = '0.0';
+        farmingStartTime = null;
     }
 });
 
@@ -319,11 +414,15 @@ setInterval(async () => {
         if (result.stats) {
             const botMode = selectBotMode.value;
             const completed = result.stats.completedRuns || result.stats.completedQuests || 0;
-            const max = result.stats.maxRuns || '∞';
+            const max = result.stats.maxRuns || 0;
             const completedLabel = result.stats.botMode === 'raid' ? 'Raids' : 'Quests';
 
+            // Update completed runs
+            document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
+            document.getElementById('completed-label').textContent = completedLabel;
+
             // Calculate average time display
-            let avgTimeDisplay = 'N/A';
+            let avgTimeDisplay = '--:--';
             if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
                 const avgMs = result.stats.averageBattleTime;
                 const totalSeconds = Math.floor(avgMs / 1000);
@@ -331,12 +430,17 @@ setInterval(async () => {
                 const seconds = totalSeconds % 60;
                 avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             }
+            document.getElementById('avg-battle').textContent = avgTimeDisplay;
 
-            statsDisplay.innerHTML = `
-                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">${document.getElementById('elapsed-time')?.textContent || '00:00:00'}</span></div>
-                <div style="margin-bottom: 8px;"><strong>Avg Battle:</strong> ${avgTimeDisplay}</div>
-                <div>${completedLabel} Completed: ${completed} / ${max}</div>
-            `;
+            // Calculate runs per hour
+            if (farmingStartTime && completed > 0) {
+                const elapsedHours = (Date.now() - farmingStartTime) / 3600000;
+                const runsPerHour = (completed / elapsedHours).toFixed(1);
+                document.getElementById('runs-per-hour').textContent = runsPerHour;
+            }
+
+            // Update progress bar
+            updateProgressBar(completed, max);
 
             // Update battle times display
             const battleTimesContainer = document.getElementById('battle-times-display');
