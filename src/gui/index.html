@@ -198,35 +198,60 @@
         #log-container {
             flex: 1;
             overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 13px;
             background: var(--bg-tertiary);
             padding: 16px;
             border-radius: 8px;
             height: 100%;
+            line-height: 1.6;
         }
 
         .log-entry {
-            margin-bottom: 6px;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 6px;
+            border-left: 2px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.04);
         }
 
         .log-time {
             color: var(--text-secondary);
             font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
         }
 
         .log-level-info {
             color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-info) {
+            border-left-color: var(--accent-blue);
         }
 
         .log-level-warn {
             color: var(--accent-yellow);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-warn) {
+            border-left-color: var(--accent-yellow);
         }
 
         .log-level-error {
             color: var(--accent-red);
+            font-weight: 600;
+        }
+
+        .log-entry:has(.log-level-error) {
+            border-left-color: var(--accent-red);
         }
 
         .button-section {
@@ -270,10 +295,205 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent-blue);
         }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transform: translateX(400px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            min-width: 280px;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .toast-warning {
+            border-left: 3px solid var(--accent-yellow);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--accent-red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .toast-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .toast-message {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.1);
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+
+        /* Progress Bar */
+        .progress-section {
+            margin-bottom: 20px;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .progress-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .progress-percent {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), #6366f1);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-shine {
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shine 2s infinite;
+        }
+
+        @keyframes shine {
+            to {
+                left: 100%;
+            }
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        button.loading {
+            pointer-events: none;
+            opacity: 0.8;
+        }
     </style>
 </head>
 
 <body>
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
     <div class="header">
         <div class="header-left">
             <div class="logo">G</div>
@@ -372,11 +592,50 @@
             <h3>Logs</h3>
             <div id="log-container"></div>
 
-            <h3 style="margin-top: 20px;">Stats</h3>
-            <div id="stats-display" style="margin-bottom: 15px;">
-                <div style="margin-bottom: 8px;"><strong>Elapsed Time:</strong> <span id="elapsed-time">00:00:00</span>
+            <h3 style="margin-top: 20px;">Performance</h3>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-value" id="elapsed-time">00:00:00</div>
+                    <div class="stat-label">Elapsed</div>
                 </div>
-                <div>Runs Completed: 0</div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-value" id="avg-battle">--:--</div>
+                    <div class="stat-label">Avg Battle</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value" id="completed-runs">0</div>
+                    <div class="stat-label" id="completed-label">Completed</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value" id="runs-per-hour">0.0</div>
+                    <div class="stat-label">Per Hour</div>
+                </div>
+            </div>
+
+            <!-- Progress Bar (hidden by default) -->
+            <div class="progress-section" id="progress-section" style="display: none;">
+                <div class="progress-info">
+                    <span class="progress-label">Progress</span>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%">
+                        <div class="progress-shine"></div>
+                    </div>
+                </div>
+                <div class="progress-meta">
+                    <span id="progress-eta">Est: calculating...</span>
+                    <span id="progress-remaining">-- remaining</span>
+                </div>
             </div>
 
             <h3 style="margin-top: 20px;">Battle Times</h3>
@@ -385,13 +644,6 @@
                 <div style="color: var(--text-secondary);">No battles yet</div>
             </div>
         </div>
-    </div>
-    </div>
-
-    <!-- Logs -->
-    <div class="panel logs-panel">
-        <h3>Usage Logs</h3>
-        <div id="log-container"></div>
     </div>
     </div>
 
