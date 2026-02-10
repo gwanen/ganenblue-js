@@ -521,12 +521,23 @@ function addLog(log) {
 
     let message = log.message;
 
-    // Auto-colorize tags like [Quest], [FA], [Cleared]
-    message = message.replace(/^(\[.*?\])/, '<span class="log-tag">$1</span>');
+    // Multi-color tag mapping
+    const tagColors = {
+        'quest': 'quest', 'raid': 'quest', 'summon': 'quest',
+        'battle': 'battle', 'turn': 'battle',
+        'wait': 'wait', 'reload': 'wait', 'fa': 'wait',
+        'cleared': 'success', 'summary': 'success', 'victory': 'success', 'loot': 'success', 'drop': 'success',
+        'bot': 'bot'
+    };
 
-    // Highlight Keywords
-    message = message.replace(/(Battle start|Battle completed|Starting quest|Starting raid|Victory)/gi, '<span class="log-highlight-battle">$1</span>');
-    message = message.replace(/(Loot|Drop)/gi, '<span class="log-highlight-loot">$1</span>');
+    // Replace all bracketed tags with colorized spans
+    message = message.replace(/\[(.*?)\]/g, (match, tag) => {
+        const cleanTag = tag.toLowerCase().split(' ')[0]; // Handle [Turn 1] -> turn
+        const colorClass = tagColors[cleanTag] || 'bot';
+        return `<span class="log-tag log-tag-${colorClass}">${match}</span>`;
+    });
+
+    // Highlight Keywords (remaining text highlights)
     message = message.replace(/(successfully|✓)/gi, '<span class="log-highlight-success">$1</span>');
 
     entry.innerHTML = `
