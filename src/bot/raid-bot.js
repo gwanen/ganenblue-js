@@ -17,12 +17,14 @@ class RaidBot {
         this.isRunning = false;
         this.isPaused = false;
         this.battleTimes = []; // Array to store battle durations
+        this.battleTurns = []; // Array to store turn counts
     }
 
     async start() {
         this.isRunning = true;
         this.raidsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
+        this.battleTurns = []; // Reset battle turns on start
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
@@ -84,9 +86,10 @@ class RaidBot {
         const result = await this.battle.executeBattle(this.battleMode);
         this.updateDetailStats(result);
 
-        // Store battle time
+        // Store battle time and turns
         if (this.battle.lastBattleDuration > 0) {
             this.battleTimes.push(this.battle.lastBattleDuration);
+            this.battleTurns.push(result.turns || 0);
         }
 
         logger.info('[Cleared] Victory!');
@@ -382,6 +385,7 @@ class RaidBot {
             avgBattleTime: this.getAverageBattleTime(),
             avgTurns: avgTurns,
             battleTimes: this.battleTimes,
+            battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0
         };
     }

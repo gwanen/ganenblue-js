@@ -66,7 +66,7 @@ class BattleHandler {
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
-            logger.info(`[Summary] Duration ${formattedTime}`);
+            logger.info(`[Summary] Duration ${formattedTime} (${result.turns} turns)`);
 
             return result;
         } catch (error) {

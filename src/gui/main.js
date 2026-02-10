@@ -235,10 +235,15 @@ ipcMain.handle('bot:get-status', () => {
 });
 
 ipcMain.handle('bot:reset-stats', () => {
-    if (botInstance && botInstance.battleTimes) {
-        botInstance.battleTimes = [];
+    if (botInstance) {
+        if (botInstance.battleTimes) botInstance.battleTimes = [];
+        if (botInstance.battleTurns) botInstance.battleTurns = [];
         botInstance.questsCompleted = 0;
         botInstance.raidsCompleted = 0;
+        // Also reset battleCount if it exists
+        if (typeof botInstance.battleCount !== 'undefined') botInstance.battleCount = 0;
+        if (typeof botInstance.totalTurns !== 'undefined') botInstance.totalTurns = 0;
+
         logger.info('[Gui] Stats reset');
         return { success: true };
     }
