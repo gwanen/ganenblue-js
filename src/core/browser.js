@@ -6,7 +6,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import logger from '../utils/logger.js';
 import { fileURLToPath } from 'url';
-import { fileURLToPath } from 'url';
 import LoginHandler from './login-handler.js';
 
 const __filename = fileURLToPath(import.meta.url);
