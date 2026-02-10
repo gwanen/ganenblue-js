@@ -54,6 +54,11 @@ class BattleHandler {
             // EST: Reduced delay for speed
             await sleep(randomDelay(500, 1000));
 
+            this.browser = await puppeteer.launch(launchOptions);
+
+            // Reuse the initial blank page if available, otherwise create one
+            const pages = await this.browser.pages();
+            this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
             if (mode === 'full_auto') {
                 await this.handleFullAuto();
             } else if (mode === 'semi_auto') {
@@ -94,28 +99,7 @@ class BattleHandler {
         } else {
             logger.warn('[Wait] Auto button timeout. Refreshing page...');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-
-            // Post-Refresh Recovery: Check if battle ended during reload
-            const postRefreshUrl = this.controller.page.url();
-            if (postRefreshUrl.includes('#result')) {
-                return; // Finished
-            }
-
-            // Check for OK button (completion modal)
-            if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
-                logger.info('[Cleared] Battle finished during reload');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                return;
-            }
-
-            // Still in battle? Wait for battle screen to reload
-            await this.controller.waitForElement(this.selectors.battleScreen, 10000);
-
-            // Re-attempt FA once after refresh
-            if (await this.controller.elementExists(this.selectors.fullAutoButton, 5000)) {
-                await this.controller.clickSafe(this.selectors.fullAutoButton);
-                logger.info('[FA] Full Auto enabled (after refresh)');
-            }
+            await this.checkStateAndResume('full_auto');
         }
     }
 
@@ -209,15 +193,7 @@ class BattleHandler {
                     logger.info('[Reload] Skipping animations...');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
 
-                    // Wait for battle UI to reappear before re-engaging
-                    await this.controller.waitForElement('.btn-attack-start', 15000);
-                    await sleep(1000);
-
-                    // Re-engage Auto after refresh
-                    if (!this.stopped) {
-                        if (mode === 'full_auto') await this.handleFullAuto();
-                        else if (mode === 'semi_auto') await this.handleSemiAuto();
-                    }
+                    if (await this.checkStateAndResume(mode)) return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                     continue;
                 }
 
@@ -239,14 +215,7 @@ class BattleHandler {
                         logger.warn('UI missing for too long. Refreshing...');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
 
-                        await this.controller.waitForElement('.btn-attack-start', 15000);
-                        await sleep(1000);
-
-                        // Re-engage Auto after refresh
-                        if (!this.stopped) {
-                            if (mode === 'full_auto') await this.handleFullAuto();
-                            else if (mode === 'semi_auto') await this.handleSemiAuto();
-                        }
+                        if (await this.checkStateAndResume(mode)) return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                         missingUiCount = 0;
                     }
                 }

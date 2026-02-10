@@ -91,7 +91,9 @@ class BrowserManager {
 
         this.browser = await puppeteer.launch(launchOptions);
 
-        this.page = await this.browser.newPage();
+        // Reuse the initial blank page if available, otherwise create one
+        const pages = await this.browser.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
         // Set viewport size
         await this.page.setViewport({ width: windowWidth, height: windowHeight });
