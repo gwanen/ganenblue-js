@@ -77,7 +77,11 @@ class RaidBot {
         }
 
         // Select summon
-        await this.selectSummon();
+        const summonStatus = await this.selectSummon();
+
+        if (summonStatus === 'ended') {
+            return false;
+        }
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
@@ -285,17 +289,30 @@ class RaidBot {
             await sleep(1000);
         }
 
-        // Check for confirmation popup
+        // Check for confirmation popup (General or Raid Ended)
         if (await this.controller.elementExists('.btn-usual-ok')) {
+            // Specific check for ended raid popup body
+            const popupText = await this.controller.page.evaluate(() => {
+                const body = document.querySelector('.txt-popup-body');
+                return body ? body.innerText : '';
+            });
+
+            if (popupText.includes('already ended')) {
+                logger.info('[Raid] Battle already ended (during summon selection).');
+                await this.controller.clickSafe('.btn-usual-ok');
+                await sleep(1000);
+                return 'ended';
+            }
+
             logger.info('[Wait] Found confirmation popup, clicking OK...');
             await this.controller.clickSafe('.btn-usual-ok');
             await sleep(1500);
 
-            // Check if we moved to battle
+            // Check if we moved to battle (exclude supporter screen false positives)
             const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+            if (currentUrl.includes('#raid') && !currentUrl.includes('supporter')) {
                 logger.info('[Bot] Moved to battle screen, skipping summon selection.');
-                return;
+                return 'success';
             }
         }
 
