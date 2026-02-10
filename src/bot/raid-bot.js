@@ -175,6 +175,11 @@ class RaidBot {
                     // Check for error popup after clicking
                     const clickError = await this.handleErrorPopup();
                     if (clickError.detected) {
+                        if (clickError.text === 'max_raids_limit') {
+                            logger.warn('[Raid] Concurrent limit reached. Restarting cycle...');
+                            return false;
+                        }
+
                         if (clickError.text.includes('pending battles')) {
                             logger.info('[Wait] Pending battles detected after click. Clearing...');
                             await this.clearPendingBattles();
@@ -228,6 +233,15 @@ class RaidBot {
             }, bodySelector);
 
             logger.info(`[Wait] Error popup detected: ${errorText.trim()}`);
+
+            if (errorText.toLowerCase().includes('three raid battles')) {
+                logger.warn('[Wait] Concurrent raid limit reached (max 3). Waiting 10 seconds...');
+                try {
+                    await this.controller.clickSafe(errorPopupSelector);
+                } catch (e) { }
+                await sleep(10000);
+                return { detected: true, text: 'max_raids_limit' };
+            }
 
             try {
                 await this.controller.clickSafe(errorPopupSelector);

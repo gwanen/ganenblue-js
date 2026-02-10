@@ -166,8 +166,13 @@ class BattleHandler {
 
             const currentUrl = this.controller.page.url();
 
-            // 1. Definite End: Result URL
+            // 1. Definite End: Result URL or Empty Result Notice
             if (currentUrl.includes('#result')) {
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+            }
+
+            if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                logger.info('[Wait] Empty result screen detected.');
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
@@ -258,7 +263,8 @@ class BattleHandler {
                 // Note: We deliberately do NOT check for OK button here to avoid premature exit on popups.
             } else {
                 // 5. Backup for non-raid URLs (Event quests, etc)
-                if (await this.controller.elementExists(this.selectors.okButton, 300)) {
+                if (await this.controller.elementExists(this.selectors.okButton, 300) ||
+                    await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
             }
@@ -286,9 +292,10 @@ class BattleHandler {
             return true;
         }
 
-        // 2. Check for OK button (completion modal)
-        if (await this.controller.elementExists(this.selectors.okButton, 2000)) {
-            logger.info('[Cleared] Battle finished during reload');
+        // 2. Check for OK button (completion modal) or Empty Result Notice
+        if (await this.controller.elementExists(this.selectors.okButton, 2000) ||
+            await this.controller.elementExists(this.selectors.emptyResultNotice, 500)) {
+            logger.info('[Cleared] Battle finished');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             return true;
         }

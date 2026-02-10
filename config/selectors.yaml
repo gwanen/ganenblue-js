@@ -17,6 +17,7 @@ battle:
   turnDigits: '#js-turn-num-count > div'
   resultScreen: '.prt-result'
   okButton: '.pop-usual.pop-exp.pop-show .btn-usual-ok'
+  emptyResultNotice: '.txt-empty-notice'
   nextButton: '.btn-usual-next'
   closeButton: '.btn-usual-close'
 
@@ -31,6 +32,8 @@ raid:
   unclaimedRaidEntry: '.btn-multi-raid.lis-raid'
   raidEndedPopup: '.pop-result-assist-raid.pop-show'
   raidEndedOkButton: '.pop-result-assist-raid.pop-show .btn-usual-ok'
+  maxRaidsPopup: '.common-pop-error'
+  maxRaidsOkButton: '.common-pop-error .btn-usual-ok'
 
 replicard:
   nodeMap: '.prt-replicard-map'
