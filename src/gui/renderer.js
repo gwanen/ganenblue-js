@@ -586,10 +586,21 @@ function setRunningState(isRunning) {
     statusBadge.textContent = isRunning ? 'Running' : 'Stopped';
 
     // Disable inputs while running
-    selectBotMode.disabled = isRunning;
-    inputQuestUrl.disabled = isRunning;
-    inputMaxRuns.disabled = isRunning;
-    selectBattleMode.disabled = isRunning;
+    const inputs = [
+        selectBotMode,
+        inputQuestUrl,
+        inputMaxRuns,
+        selectBrowserType,
+        selectBattleMode,
+        inputHonorTarget,
+        checkboxEnableCustom,
+        inputWindowWidth,
+        inputWindowHeight
+    ];
+
+    inputs.forEach(input => {
+        if (input) input.disabled = isRunning;
+    });
 }
 
 // Poll for stats every second if running

@@ -27,6 +27,7 @@ class BattleHandler {
     async executeBattle(mode = 'full_auto', options = {}) {
         this.stopped = false;
         this.options = options; // Store options like honorTarget
+        this.lastHonors = 0; // Reset honor for new battle
         // Start timing
         this.battleStartTime = Date.now();
         logger.info(`[Battle] Engaging encounter (${mode})`);
@@ -156,7 +157,7 @@ class BattleHandler {
         logger.info('[Wait] Resolving turn...');
         if (turnCount > 0) {
             const honors = await this.getHonors();
-            logger.info(`[Turn ${turnCount}] (${honors.toLocaleString()} honor)`);
+            logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
 
             if (honorTarget > 0 && honors >= honorTarget) {
                 logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
@@ -360,7 +361,7 @@ class BattleHandler {
                 context.lastTurn = currentTurn;
                 context.turnCount = currentTurn;
                 const honors = await this.getHonors();
-                logger.info(`[Turn ${currentTurn}] (${honors.toLocaleString()} honor)`);
+                logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
                 return true;
             }
         } catch (e) {
