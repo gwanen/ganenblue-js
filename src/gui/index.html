@@ -622,7 +622,7 @@
             </div>
 
             <!-- Credentials Section (collapsible) -->
-            <div class="collapsible-header" onclick="toggleCredentials()">
+            <div class="collapsible-header" onclick="toggleSection('credentials')">
                 <span class="collapsible-title">🔐 Auto-Login Credentials</span>
                 <span class="collapsible-chevron" id="credentials-chevron">▼</span>
             </div>
@@ -641,6 +641,37 @@
                     style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
                     Save Credentials
                 </button>
+            </div>
+
+            <!-- Device Emulation Section (collapsible) -->
+            <div class="collapsible-header" onclick="toggleSection('device')">
+                <span class="collapsible-title">📱 Device & Window Size</span>
+                <span class="collapsible-chevron" id="device-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="device-content">
+                <div class="form-group">
+                    <label for="emulation-mode">Emulation Mode</label>
+                    <select id="emulation-mode">
+                        <option value="desktop">No Emulation (Desktop)</option>
+                        <option value="iPhone 12 Pro">iPhone 12 Pro</option>
+                        <option value="iPad Pro">iPad Pro</option>
+                        <option value="custom">Custom Size</option>
+                    </select>
+                </div>
+
+                <div id="custom-size-inputs"
+                    style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="window-width" style="font-size: 11px;">Width (px)</label>
+                            <input type="number" id="window-width" value="500" min="300" max="2560">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="window-height" style="font-size: 11px;">Height (px)</label>
+                            <input type="number" id="window-height" value="850" min="300" max="1440">
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="button-section">

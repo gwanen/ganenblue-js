@@ -12,6 +12,10 @@ const questUrlGroup = document.getElementById('quest-url-group');
 const inputMaxRuns = document.getElementById('max-runs');
 const maxRunsLabel = document.getElementById('max-runs-label');
 const selectBattleMode = document.getElementById('battle-mode');
+const selectEmulationMode = document.getElementById('emulation-mode');
+const inputWindowWidth = document.getElementById('window-width');
+const inputWindowHeight = document.getElementById('window-height');
+const customSizeContainer = document.getElementById('custom-size-inputs');
 
 // === Toast Notifications ===
 function showToast(message, type = 'info', duration = 3000) {
@@ -100,7 +104,10 @@ function saveSettings() {
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
         browserType: selectBrowserType.value,
-        battleMode: selectBattleMode.value
+        battleMode: selectBattleMode.value,
+        emulationMode: selectEmulationMode.value,
+        windowWidth: inputWindowWidth.value,
+        windowHeight: inputWindowHeight.value
     };
     localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
@@ -115,6 +122,13 @@ function loadSettings() {
             inputMaxRuns.value = settings.maxRuns || 0;
             selectBrowserType.value = settings.browserType || 'chromium';
             selectBattleMode.value = settings.battleMode || 'full_auto';
+            selectEmulationMode.value = settings.emulationMode || 'desktop';
+            inputWindowWidth.value = settings.windowWidth || 500;
+            inputWindowHeight.value = settings.windowHeight || 850;
+
+            // Trigger UI updates
+            updateUIForBotMode();
+            updateUIForEmulationMode();
 
             // Trigger UI updates for bot mode
             updateUIForBotMode();
@@ -132,6 +146,15 @@ function updateUIForBotMode() {
     } else if (mode === 'raid') {
         questUrlGroup.style.display = 'none';
         maxRunsLabel.textContent = 'Max Raids';
+    }
+}
+
+function updateUIForEmulationMode() {
+    const mode = selectEmulationMode.value;
+    if (mode === 'custom') {
+        customSizeContainer.style.display = 'block';
+    } else {
+        customSizeContainer.style.display = 'none';
     }
 }
 
@@ -153,6 +176,14 @@ selectBrowserType.addEventListener('change', debouncedSave);
 selectBattleMode.addEventListener('change', debouncedSave);
 inputQuestUrl.addEventListener('input', debouncedSave);
 inputMaxRuns.addEventListener('input', debouncedSave);
+selectEmulationMode.addEventListener('change', debouncedSave);
+inputWindowWidth.addEventListener('input', debouncedSave);
+inputWindowHeight.addEventListener('input', debouncedSave);
+
+// Emulation Mode Change Handler
+selectEmulationMode.addEventListener('change', () => {
+    updateUIForEmulationMode();
+});
 
 // Bot Mode Change Handler
 selectBotMode.addEventListener('change', () => {
@@ -185,9 +216,10 @@ inputQuestUrl.addEventListener('input', (e) => {
 });
 
 // === Collapsible Sections ===
-function toggleCredentials() {
-    const content = document.getElementById('credentials-content');
-    const chevron = document.getElementById('credentials-chevron');
+// === Collapsible Sections ===
+function toggleSection(sectionName) {
+    const content = document.getElementById(`${sectionName}-content`);
+    const chevron = document.getElementById(`${sectionName}-chevron`);
 
     if (content.classList.contains('open')) {
         content.classList.remove('open');
@@ -197,7 +229,10 @@ function toggleCredentials() {
         chevron.textContent = '▲';
     }
 }
-window.toggleCredentials = toggleCredentials;
+window.toggleSection = toggleSection;
+
+// Legacy support for toggleCredentials (if called directly)
+window.toggleCredentials = () => toggleSection('credentials');
 
 // === Keyboard Shortcuts ===
 document.addEventListener('keydown', (e) => {
@@ -308,7 +343,13 @@ btnLaunch.addEventListener('click', async () => {
     addLog({ level: 'info', message: 'Launching browser...', timestamp: new Date().toISOString() });
 
     const browserType = selectBrowserType.value;
-    const result = await window.electronAPI.launchBrowser(browserType);
+    const deviceSettings = {
+        mode: selectEmulationMode.value,
+        width: parseInt(inputWindowWidth.value),
+        height: parseInt(inputWindowHeight.value)
+    };
+
+    const result = await window.electronAPI.launchBrowser(browserType, deviceSettings);
 
     setButtonLoading(btnLaunch, false);
 

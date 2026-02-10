@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-extra';
+import { KnownDevices } from 'puppeteer';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
 import { existsSync, readFileSync } from 'fs';
@@ -42,6 +43,31 @@ class BrowserManager {
     async launch() {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
         const browserType = this.config.browser_type || 'chromium';
+        const emulation = this.config.emulation || {};
+
+        // Default window size
+        let windowWidth = 600;
+        let windowHeight = 900;
+        let deviceToEmulate = null;
+
+        // Configure Emulation
+        if (emulation.mode && emulation.mode !== 'desktop' && emulation.mode !== 'custom') {
+            // Mobile Device (iPhone, iPad, etc.)
+            deviceToEmulate = KnownDevices[emulation.mode];
+            if (deviceToEmulate) {
+                // Approximate window size from device viewport (plus some chrome overhead)
+                windowWidth = deviceToEmulate.viewport.width + 20;
+                windowHeight = deviceToEmulate.viewport.height + 150;
+                console.log(`Emulating device: ${emulation.mode}`);
+            }
+        } else if (emulation.mode === 'custom') {
+            // Custom Size
+            windowWidth = emulation.width || 600;
+            windowHeight = emulation.height || 900;
+            console.log(`Using custom window size: ${windowWidth}x${windowHeight}`);
+        } else {
+            console.log('Using default desktop mode');
+        }
 
         // Prepare launch options
         const launchOptions = {
@@ -51,7 +77,7 @@ class BrowserManager {
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--window-size=500,850', // Optimized height for GBF
+                `--window-size=${windowWidth},${windowHeight}`,
                 // Disable password and security popups
                 '--password-store=basic',
                 '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
@@ -78,6 +104,14 @@ class BrowserManager {
         this.browser = await puppeteer.launch(launchOptions);
 
         this.page = await this.browser.newPage();
+
+        // Apply Emulation
+        if (deviceToEmulate) {
+            await this.page.emulate(deviceToEmulate);
+        } else {
+            // Set viewport size if not emulating a device
+            await this.page.setViewport({ width: windowWidth, height: windowHeight });
+        }
 
         // Additional stealth measures
         await this.applyStealth();
