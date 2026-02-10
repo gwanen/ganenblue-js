@@ -20,7 +20,7 @@ let browserManager = null;
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 850,
-        height: 700,
+        height: 850,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
