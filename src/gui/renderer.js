@@ -153,7 +153,7 @@ function loadSettings() {
 function updateUIForBotMode() {
     const mode = selectBotMode.value;
     if (mode === 'quest') {
-        questUrlGroup.style.display = 'flex';
+        questUrlGroup.style.display = 'block';
         maxRunsLabel.textContent = 'Max Quests';
         honorTargetGroup.style.display = 'none';
     } else if (mode === 'raid') {
