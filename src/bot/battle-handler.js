@@ -40,7 +40,7 @@ class BattleHandler {
                 // Check if we are actually in battle but maybe button is different or obscured
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     logger.warn('On battle page but Auto button not found. Attempting to proceed...');
-                } else {
+                } else if (!currentUrl.includes('#result')) {
                     throw new Error(`Battle failed to load. URL: ${currentUrl}`);
                 }
             }
@@ -54,18 +54,19 @@ class BattleHandler {
                 await this.handleSemiAuto();
             }
 
-            // Wait for battle to complete
-            await this.waitForBattleEnd(mode);
+            // Wait for battle to complete - return result for stats
+            const result = await this.waitForBattleEnd(mode);
 
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
             logger.info(`Battle completed in ${formattedTime}`);
 
-            return true;
+            return result;
         } catch (error) {
             logger.error('Battle execution failed:', error);
-            throw error;
+            // Return empty result to avoid breaking stats update loop
+            return { duration: 0, turns: 0 };
         }
     }
 
@@ -80,15 +81,18 @@ class BattleHandler {
     }
 
     async handleSemiAuto() {
-        // Click Attack button to start
-        await this.controller.clickSafe(this.selectors.attackButton);
-        logger.info('Semi Auto: Attack initiated');
+        // Wait for attack button
+        if (await this.controller.waitForElement(this.selectors.attackButton, 10000)) {
+            // Click Attack button to start
+            await this.controller.clickSafe(this.selectors.attackButton);
+            logger.info('Semi Auto: Attack initiated');
 
-        // Enable Auto (not Full Auto)
-        if (await this.controller.elementExists(this.selectors.autoButton)) {
-            await sleep(randomDelay(500, 1000));
-            await this.controller.clickSafe(this.selectors.autoButton);
-            logger.info('Auto mode enabled');
+            // Enable Auto (not Full Auto)
+            if (await this.controller.elementExists(this.selectors.autoButton, 3000)) {
+                await sleep(randomDelay(500, 1000));
+                await this.controller.clickSafe(this.selectors.autoButton);
+                logger.info('Auto mode enabled');
+            }
         }
     }
 
@@ -99,171 +103,147 @@ class BattleHandler {
         this.stopped = false; // Reset stop flag
         const maxWaitMs = maxWaitMinutes * 60 * 1000;
         const startTime = Date.now();
-        const checkInterval = 2000;
         let missingUiCount = 0;
+        let lastTurn = 0;
+        let turnCount = 0;
 
         logger.info('Waiting for battle to complete...');
 
         while (Date.now() - startTime < maxWaitMs) {
             if (this.stopped) {
                 logger.info('Battle wait cancelled (bot stopped)');
-                return false;
+                const duration = (Date.now() - startTime) / 1000;
+                return { duration, turns: turnCount };
             }
 
-            // Check for rematch fail popup (battle already ended by other players)
-            // Both popup-1 and popup-2 can appear
-            const rematchFailPopup = await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 500);
-            if (rematchFailPopup) {
-                logger.info('Rematch fail detected - battle already completed by others. Refreshing page...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(2000);
-                return true;
+            // Check turn number (safely)
+            try {
+                const currentTurn = await this.getTurnNumber();
+                if (currentTurn > lastTurn) {
+                    lastTurn = currentTurn;
+                    turnCount = currentTurn;
+                }
+            } catch (e) {
+                // Ignore
             }
 
-            // Check for character death (cheer button appears when character dies in raid)
-            const cheerButton = await this.controller.elementExists('.btn-cheer', 500);
-            if (cheerButton) {
-                logger.info('Character died in raid. Moving to next raid...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(2000);
-                return true;
-            }
+            // Checks: Completion or Failure
 
+            // 1. Result URL (Most reliable)
             const currentUrl = this.controller.page.url();
-
-            // 1. Definite End: Result URL
             if (currentUrl.includes('#result')) {
-                logger.info('Battle completed (detected via URL)! Immediate return.');
-                // EST: Maximum Speed - No wait for OK button.
-                return true;
+                logger.info('Battle completed (detected via URL)');
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
-            // 2. Raid Logic (Strictly wait while on Raid URL)
+            // 2. Rematch fail popup
+            if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
+                logger.info('Rematch fail detected. Refreshing...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(2000);
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+            }
+
+            // 3. Character death
+            if (await this.controller.elementExists('.btn-cheer', 100)) {
+                logger.info('Party wiped (cheer button found).');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(2000);
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+            }
+
+            // 4. Raid Logic (while on raid page)
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                // Check for OK button (Battle End) - catch-all for completion state overlay
-                if (await this.controller.elementExists(this.selectors.okButton, 500)) {
-                    logger.info('Battle completed (OK button found in raid URL)!');
-                    return true;
+                // OK button as backup completion
+                if (await this.controller.elementExists(this.selectors.okButton, 100)) {
+                    logger.info('Battle completed (OK button found)');
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
 
-                // User Condition: Auto-refresh if Attack/Cancel buttons are missing for ~10s
-                // AND immediate refresh if 'display-off' (animation start) is detected to skip animation
-
-                // 1. Check for Animation Start (Immediate Refresh)
-                const attackOff = await this.controller.elementExists('.btn-attack-start.display-off', 200);
-                if (attackOff) {
-                    // Check stop before refresh
-                    if (this.stopped) {
-                        logger.info('Battle wait cancelled (bot stopped before refresh)');
-                        return false;
-                    }
-
-                    logger.info('Attack animation started (display-off). Refreshing to skip...');
+                // Animation Skipping
+                if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
+                    logger.info('Skipping animation...');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(1500); // Reduced from 3000ms for snappier response
 
-                    // Check stop after reload delay
-                    if (this.stopped) {
-                        logger.info('Battle wait cancelled (bot stopped after refresh)');
-                        return false;
+                    // Wait for battle UI to reappear before re-engaging
+                    await this.controller.waitForElement('.btn-attack-start', 15000);
+                    await sleep(1000);
+
+                    // Re-engage Auto after refresh
+                    if (!this.stopped) {
+                        if (mode === 'full_auto') await this.handleFullAuto();
+                        else if (mode === 'semi_auto') await this.handleSemiAuto();
                     }
-
-                    // Optimization: Check URL first to decide what to wait for
-                    const postRefreshUrl = this.controller.page.url();
-
-                    if (postRefreshUrl.includes('#result')) {
-                        logger.info('Battle ended (URL=#result). Immediate return.');
-                        return true;
-                    } else {
-                        // Still in raid or unknown state: Wait for Battle UI OR unexpected OK button
-                        const loaded = await this.controller.waitForElement('.btn-usual-ok, .btn-auto, .btn-attack-start', 15000);
-
-                        if (loaded) {
-                            // Check if it's the OK button (Battle Done)
-                            if (await this.controller.elementExists(this.selectors.okButton, 500)) {
-                                logger.info('Battle completed (OK button found after refresh)!');
-                                return true;
-                            }
-
-                            // If we are here, it means FA/Attack button was found (Battle Continues)
-                            logger.info('Battle continues (FA/Attack button found after refresh). Re-engaging...');
-
-                            // Check stop before re-engagement
-                            if (this.stopped) {
-                                logger.info('Battle wait cancelled (bot stopped before re-engagement)');
-                                return false;
-                            }
-
-                            // Re-engage Auto/Attack if needed after refresh
-                            if (mode === 'full_auto') {
-                                await this.handleFullAuto();
-                            } else if (mode === 'semi_auto') {
-                                await this.handleSemiAuto();
-                            }
-                        } else {
-                            logger.warn('Refresh complete but neither OK nor Battle UI found within timeout.');
-                        }
-                    }
-
-                    // Reset counter just in case
-                    missingUiCount = 0;
                     continue;
                 }
 
-                // 2. Check for Stuck State (Missing UI)
-                const attackVisible = await this.controller.elementExists('.btn-attack-start.display-on', 200);
-                const cancelVisible = await this.controller.elementExists('.btn-usual-cancel', 200);
-
-                if (!attackVisible && !cancelVisible) {
-                    missingUiCount++;
-                    logger.debug(`Battle UI (Attack/Cancel) missing count: ${missingUiCount}/5`);
-
-                    if (missingUiCount >= 5) { // ~10 seconds
-                        // Check stop before refresh
-                        if (this.stopped) {
-                            logger.info('Battle wait cancelled (bot stopped before stuck state refresh)');
-                            return false;
-                        }
-
-                        logger.info('Battle UI missing (Attack and Cancel not visible). Auto-refreshing page...');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(2000); // Reduced from 4000ms for snappier response
-
-                        // Check stop after reload delay
-                        if (this.stopped) {
-                            logger.info('Battle wait cancelled (bot stopped after stuck state refresh)');
-                            return false;
-                        }
-
-                        missingUiCount = 0;
-                        // After refresh, the loop continues and naturally checks state again
-                        continue;
+                // Stuck detection
+                const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto'];
+                let uiFound = false;
+                for (const sel of uiElements) {
+                    if (await this.controller.elementExists(sel, 100)) {
+                        uiFound = true;
+                        break;
                     }
-                } else {
-                    missingUiCount = 0;
                 }
 
-                // Note: We deliberately do NOT check for OK button here to avoid premature exit on popups.
+                if (uiFound) {
+                    missingUiCount = 0;
+                } else {
+                    missingUiCount++;
+                    if (missingUiCount >= 10) {
+                        logger.warn('UI missing for too long. Refreshing...');
+                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
 
+                        await this.controller.waitForElement('.btn-attack-start', 15000);
+                        await sleep(1000);
+
+                        // Re-engage Auto after refresh
+                        if (!this.stopped) {
+                            if (mode === 'full_auto') await this.handleFullAuto();
+                            else if (mode === 'semi_auto') await this.handleSemiAuto();
+                        }
+                        missingUiCount = 0;
+                    }
+                }
             } else {
-                // 3. Not on Raid URL (and not Result URL)
-                // Check for OK button here (fallback check)
-                if (await this.controller.elementExists(this.selectors.okButton, 500)) {
-                    logger.info('Battle completed (OK button found in non-raid URL)!');
-                    return true;
+                // Backup for non-raid URLs
+                if (await this.controller.elementExists(this.selectors.okButton, 300)) {
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
             }
 
-            await sleep(checkInterval);
+            await sleep(1000);
         }
 
-        throw new Error('Battle timeout - exceeded maximum wait time');
+        throw new Error('Battle timeout');
     }
 
     async handleResult() {
-        // Method kept for API compatibility, but effectively empty for "no-click" optimization
-        // unless called explicitly for legacy reasons.
-        // User requested NO clicking of OK button.
+        // Skips clicking OK as requested.
+    }
+
+    async getTurnNumber() {
+        try {
+            return await this.controller.page.evaluate(() => {
+                const container = document.querySelector('#js-turn-num-count');
+                if (!container) return 0;
+
+                // Get all digit divs (num-infoX)
+                const digits = container.querySelectorAll('div[class*="num-info"]');
+                let str = '';
+
+                // Collect digits in order
+                for (const d of digits) {
+                    const match = d.className.match(/num-info(\d+)/);
+                    if (match) str += match[1];
+                }
+
+                return parseInt(str, 10) || 0;
+            });
+        } catch (e) {
+            return 0;
+        }
     }
 }
 

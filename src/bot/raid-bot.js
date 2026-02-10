@@ -50,7 +50,8 @@ class RaidBot {
                 logger.info(`Raids completed: ${this.raidsCompleted}${this.maxRaids > 0 ? '/' + this.maxRaids : ''}`);
 
                 // Random delay between raids
-                await sleep(randomDelay(1000, 2000));
+                // EST: Reduced delay for speed (0.5-1s)
+                await sleep(randomDelay(500, 1000));
             }
         } catch (error) {
             logger.error('Raid bot error:', error);
@@ -82,7 +83,8 @@ class RaidBot {
         }
 
         // Handle battle
-        await this.battle.executeBattle(this.battleMode);
+        const result = await this.battle.executeBattle(this.battleMode);
+        this.updateDetailStats(result);
 
         // Store battle time
         if (this.battle.lastBattleDuration > 0) {
@@ -90,13 +92,15 @@ class RaidBot {
         }
 
         logger.info('Raid completed successfully');
+        return true;
     }
 
     async findAndJoinRaid() {
         // Navigate to raid backup page
         logger.info('Navigating to raid backup page...');
         await this.controller.goto(this.raidBackupUrl);
-        await sleep(randomDelay(1000, 2000));
+        // EST: Reduced delay for speed (0.5-1s)
+        await sleep(randomDelay(500, 1000));
 
         let attempts = 0;
         const maxAttempts = 10; // Prevent infinite loops
@@ -217,7 +221,8 @@ class RaidBot {
         if (await this.controller.elementExists(summonSelector)) {
             logger.info('Found summon, clicking...');
             await this.controller.clickSafe(summonSelector);
-            await sleep(randomDelay(300, 800));
+            // EST: Reduced delay for speed (0.2-0.5s)
+            await sleep(randomDelay(200, 500));
 
             // Check for start confirmation popup
             if (await this.controller.elementExists('.btn-usual-ok')) {
@@ -270,18 +275,40 @@ class RaidBot {
         logger.info('Raid Bot stop requested');
     }
 
+    updateDetailStats(result) {
+        if (!result) return;
+
+        // Initialize if not present
+        if (!this.totalTurns) this.totalTurns = 0;
+        if (!this.battleCount) this.battleCount = 0;
+
+        // Update counts
+        this.battleCount++;
+        if (result.turns > 0) {
+            this.totalTurns += result.turns;
+        }
+    }
+
+    getAverageBattleTime() {
+        if (this.battleTimes.length === 0) return 0;
+        const sum = this.battleTimes.reduce((a, b) => a + b, 0);
+        return Math.round(sum / this.battleTimes.length);
+    }
+
     getStats() {
-        const avgTime = this.battleTimes.length > 0
-            ? this.battleTimes.reduce((a, b) => a + b, 0) / this.battleTimes.length
-            : 0;
+        // Calculate average turns
+        let avgTurns = 0;
+        if (this.battleCount > 0) {
+            avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
+        }
 
         return {
             raidsCompleted: this.raidsCompleted,
-            maxRaids: this.maxRaids,
             isRunning: this.isRunning,
             isPaused: this.isPaused,
-            battleTimes: this.battleTimes,
-            averageBattleTime: avgTime
+            startTime: this.startTime,
+            avgBattleTime: this.getAverageBattleTime(), // Raids vary too much for this to be useful usually
+            avgTurns: avgTurns
         };
     }
 }

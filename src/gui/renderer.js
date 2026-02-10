@@ -126,9 +126,18 @@ function loadSettings() {
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
 
+            inputWindowWidth.value = settings.windowWidth || 500;
+            inputWindowHeight.value = settings.windowHeight || 850;
+
             // Trigger UI updates
             updateUIForBotMode();
             updateUIForCustomSize();
+
+            // Restore Compact Mode
+            if (settings.compactMode) {
+                document.body.classList.add('compact-mode');
+                if (btnCompact) btnCompact.textContent = '🔼';
+            }
 
             // Trigger UI updates for bot mode
             updateUIForBotMode();
@@ -233,61 +242,83 @@ window.toggleSection = toggleSection;
 // Legacy support for toggleCredentials (if called directly)
 window.toggleCredentials = () => toggleSection('credentials');
 
-// === Keyboard Shortcuts ===
-document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Enter to start bot
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnStart.disabled) {
-        e.preventDefault();
-        btnStart.click();
-        showToast('Bot started via keyboard shortcut', 'info', 2000);
-    }
+// === Compact Mode Toggle ===
+const btnCompact = document.getElementById('btn-compact');
+btnCompact.addEventListener('click', () => {
+    document.body.classList.toggle('compact-mode');
+    const isCompact = document.body.classList.contains('compact-mode');
+    btnCompact.textContent = isCompact ? '🔼' : '👁️';
 
-    // Ctrl/Cmd + . to stop bot
-    if ((e.ctrlKey || e.metaKey) && e.key === '.' && !btnStop.disabled) {
-        e.preventDefault();
-        btnStop.click();
-    }
+    // Save state
+    const currentSettings = JSON.parse(localStorage.getItem('ganenblue_settings') || '{}');
+    currentSettings.compactMode = isCompact;
+    localStorage.setItem('ganenblue_settings', JSON.stringify(currentSettings));
+});
 
-    // Prevent default Ctrl+R
-    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-        e.preventDefault();
-        showToast('Use the Reload App button instead', 'warning', 2000);
+// === Legacy Support ===
+// Keeping this for potential future restoring if needed, but listeners are removed as per request.
+
+// === Interactive Status Badge ===
+// === Interactive Status Badge ===
+statusBadge.addEventListener('click', () => {
+    console.log('Status badge clicked');
+    const currentStatus = statusBadge.textContent.trim();
+
+    if (currentStatus === 'Stopped') {
+        // Check if browser is launched
+        if (btnStart.disabled) {
+            console.log('Cannot start: Browser not launched');
+            showToast('Please launch browser first', 'warning');
+            return;
+        }
+
+        // Confirm Start
+        if (confirm('Start farming?')) {
+            btnStart.click();
+        }
+    } else if (currentStatus === 'Running' || currentStatus === 'Paused') {
+        // Confirm Stop
+        if (confirm('Stop the bot?')) {
+            btnStop.click();
+        }
     }
 });
 
 // === Sound Playback ===
-window.electronAPI.onPlaySound((soundType) => {
-    // Simple beep using Web Audio API (no external files needed)
-    try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+if (window.electronAPI && window.electronAPI.onPlaySound) {
+    window.electronAPI.onPlaySound((soundType) => {
+        // Simple beep using Web Audio API (no external files needed)
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
 
-        // Notification sound: 2 quick beeps
-        oscillator.frequency.value = 800;
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            // Notification sound: 2 quick beeps
+            oscillator.frequency.value = 800;
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
 
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
 
-        // Second beep
-        const oscillator2 = audioContext.createOscillator();
-        const gainNode2 = audioContext.createGain();
-        oscillator2.connect(gainNode2);
-        gainNode2.connect(audioContext.destination);
-        oscillator2.frequency.value = 1000;
-        gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
-        gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
-        oscillator2.start(audioContext.currentTime + 0.15);
-        oscillator2.stop(audioContext.currentTime + 0.25);
-    } catch (error) {
-        console.error('Sound playback failed:', error);
-    }
-});
+            // Second beep
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode2 = audioContext.createGain();
+            oscillator2.connect(gainNode2);
+            gainNode2.connect(audioContext.destination);
+            oscillator2.frequency.value = 1000;
+            gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
+            gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+            oscillator2.start(audioContext.currentTime + 0.15);
+            oscillator2.stop(audioContext.currentTime + 0.25);
+        } catch (error) {
+            console.error('Sound playback failed:', error);
+        }
+    });
+}
 
 // Save Credentials Button
 const btnSaveCredentials = document.getElementById('btn-save-credentials');
@@ -315,15 +346,13 @@ btnSaveCredentials.addEventListener('click', async () => {
 // Load credentials on startup
 (async () => {
     try {
-        console.log('Loading credentials...');
+        console.log('Loading saved credentials...');
         const result = await window.electronAPI.loadCredentials();
-        console.log('Load result:', result);
 
         if (result.success && result.credentials) {
             // Only load email, keep password empty for security
             inputMobageEmail.value = result.credentials.email || '';
-            console.log('Email loaded:', inputMobageEmail.value);
-            // Don't populate password - user must re-enter for privacy
+            // Don't log email or password
             addLog({ level: 'info', message: `✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
         } else {
             console.log('No credentials found or load failed');
@@ -468,27 +497,36 @@ btnResetStats.addEventListener('click', async () => {
         document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
         document.getElementById('completed-runs').textContent = '0';
         document.getElementById('avg-battle').textContent = '--:--';
+        document.getElementById('avg-turns').textContent = '0.0'; // Reset avg-turns
         document.getElementById('runs-per-hour').textContent = '0.0';
         farmingStartTime = null;
     }
 });
 
 // Log Updates
-window.electronAPI.onLogUpdate((log) => {
-    addLog(log);
-});
+if (window.electronAPI && window.electronAPI.onLogUpdate) {
+    window.electronAPI.onLogUpdate((log) => {
+        addLog(log);
+    });
+}
 
 function addLog(log) {
     const entry = document.createElement('div');
     entry.className = 'log-entry';
 
-    const time = new Date(log.timestamp).toLocaleTimeString();
+    const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
     const levelClass = `log-level-${log.level}`;
 
+    let message = log.message;
+    // Highlight Keywords
+    message = message.replace(/(Battle start|Battle completed|Starting quest|Starting raid)/gi, '<span class="log-highlight-battle">$1</span>');
+    message = message.replace(/(Loot|Drop)/gi, '<span class="log-highlight-loot">$1</span>');
+    message = message.replace(/(successfully|✓)/gi, '<span class="log-highlight-success">$1</span>');
+
     entry.innerHTML = `
-        <span class="log-time">[${time}]</span>
-        <span class="${levelClass}">${log.level.toUpperCase()}:</span>
-        ${log.message}
+        <span class="log-time">${time}</span>
+        <span class="${levelClass}"></span>
+        ${message}
     `;
 
     logContainer.appendChild(entry);
@@ -541,10 +579,13 @@ setInterval(async () => {
                 const runsPerHour = (3600000 / (result.stats.averageBattleTime + 15000)).toFixed(1);
                 document.getElementById('runs-per-hour').textContent = `~${runsPerHour}`;
             } else if (farmingStartTime && completed > 0) {
-                // Fallback to historical average
-                const elapsedHours = (Date.now() - farmingStartTime) / 3600000;
-                const runsPerHour = (completed / elapsedHours).toFixed(1);
-                document.getElementById('runs-per-hour').textContent = runsPerHour;
+                // Per Hour calculation: 60 / (avgBattleTime + 1 min buffer)
+                let perHour = 0;
+                if (result.stats.avgBattleTime > 0) {
+                    const avgMin = result.stats.avgBattleTime / 60000; // ms to min
+                    perHour = (60 / (avgMin + 1)).toFixed(1);
+                }
+                document.getElementById('runs-per-hour').textContent = perHour;
             }
 
             // Update progress bar

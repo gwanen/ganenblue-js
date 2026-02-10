@@ -13,6 +13,8 @@ battle:
   attackButton: '.btn-attack-start'
   fullAutoButton: '.btn-auto'
   autoButton: '.btn-auto'
+  turnCounter: '#js-turn-num-count'
+  turnDigits: '#js-turn-num-count > div'
   resultScreen: '.prt-result'
   okButton: '.pop-usual.pop-exp.pop-show .btn-usual-ok'
   nextButton: '.btn-usual-next'
@@ -30,3 +32,11 @@ replicard:
   nodeMap: '.prt-replicard-map'
   node: '.map-node'
   startButton: '.btn-start'
+
+login:
+  loginButton: '#login-auth'
+  mobageOption: '#mobage-login'
+  emailField: '#subject-id'
+  passwordField: '#subject-password'
+  submitButton: '#login'
+  closeButton: '.btn-inner.w-btn-m'

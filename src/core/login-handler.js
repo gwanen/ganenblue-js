@@ -1,9 +1,11 @@
 import { sleep } from '../utils/random.js';
 import logger from '../utils/logger.js';
+import config from '../utils/config.js';
 
 class LoginHandler {
     constructor(page) {
         this.page = page;
+        this.selectors = config.selectors.login;
     }
 
     /**
@@ -40,18 +42,18 @@ class LoginHandler {
         logger.info('Waiting for login button...');
 
         try {
-            await this.page.waitForSelector('#login-auth', {
+            await this.page.waitForSelector(this.selectors.loginButton, {
                 visible: true,
                 timeout: 15000
             });
 
             await sleep(1000);
-            await this.page.click('#login-auth');
+            await this.page.click(this.selectors.loginButton);
             logger.info('✓ Clicked login button');
 
             await sleep(2000);
         } catch (error) {
-            throw new Error('Login button not found or not clickable');
+            throw new Error(`Login button (${this.selectors.loginButton}) not found or not clickable`);
         }
     }
 
@@ -62,7 +64,7 @@ class LoginHandler {
         logger.info('Selecting Mobage authentication...');
 
         try {
-            await this.page.waitForSelector('#mobage-login', {
+            await this.page.waitForSelector(this.selectors.mobageOption, {
                 visible: true,
                 timeout: 10000
             });
@@ -70,7 +72,7 @@ class LoginHandler {
             await sleep(1000);
 
             // Click Mobage - this will open a new tab
-            await this.page.click('#mobage-login');
+            await this.page.click(this.selectors.mobageOption);
             logger.info('✓ Selected Mobage login');
 
             // Wait for new tab to open
@@ -101,10 +103,9 @@ class LoginHandler {
         try {
             // Wait longer for page navigation
             logger.info('Waiting for Mobage login page to load...');
-            await sleep(5000);
 
             // Wait for email field to appear (indicates login page loaded)
-            await this.page.waitForSelector('#subject-id', {
+            await this.page.waitForSelector(this.selectors.emailField, {
                 visible: true,
                 timeout: 30000
             });
@@ -113,21 +114,21 @@ class LoginHandler {
             await sleep(1000);
 
             // Fill email - click first to focus
-            await this.page.click('#subject-id');
+            await this.page.click(this.selectors.emailField);
             await sleep(500);
-            await this.page.type('#subject-id', credentials.email, { delay: 100 });
+            await this.page.type(this.selectors.emailField, credentials.email, { delay: 100 });
             logger.info('✓ Filled email');
             await sleep(1000);
 
             // Fill password - click first to focus
-            await this.page.click('#subject-password');
+            await this.page.click(this.selectors.passwordField);
             await sleep(500);
-            await this.page.type('#subject-password', credentials.password, { delay: 100 });
+            await this.page.type(this.selectors.passwordField, credentials.password, { delay: 100 });
             logger.info('✓ Filled password');
             await sleep(1500);
 
             // Click login button
-            const loginButton = await this.page.$('#login');
+            const loginButton = await this.page.$(this.selectors.submitButton);
             if (loginButton) {
                 await loginButton.click();
                 logger.info('✓ Clicked login button');
@@ -151,7 +152,7 @@ class LoginHandler {
 
         try {
             // Look for close button (閉じる)
-            const closeButton = await this.page.waitForSelector('.btn-inner.w-btn-m', {
+            const closeButton = await this.page.waitForSelector(this.selectors.closeButton, {
                 timeout: 30000
             });
 

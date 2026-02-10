@@ -50,8 +50,8 @@ class QuestBot {
                 logger.info(`Quests completed: ${this.questsCompleted}${this.maxQuests > 0 ? '/' + this.maxQuests : ''}`);
 
                 // Random delay between quests
-                // EST: Reduced delay for speed (1-2s)
-                await sleep(randomDelay(1000, 2000));
+                // EST: Reduced delay for speed (0.5-1s)
+                await sleep(randomDelay(500, 1000));
             }
         } catch (error) {
             logger.error('Quest bot error:', error);
@@ -67,8 +67,8 @@ class QuestBot {
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
-        // EST: Reduced delay for speed (0.8-1.5s)
-        await sleep(randomDelay(800, 1500));
+        // EST: Reduced delay for speed (0.5-1s)
+        await sleep(randomDelay(500, 1000));
 
         // Check for existing battle state (Redirected or Resume)
         const currentUrl = this.controller.page.url();
@@ -84,11 +84,10 @@ class QuestBot {
                 return;
             }
 
-            await this.battle.executeBattle(this.battleMode);
+            const result = await this.battle.executeBattle(this.battleMode);
+            this.updateDetailStats(result);
 
             // User Optimization: Skip clicking OK button. Just return to loop (which navigates to Quest URL)
-            // await this.battle.handleResult(); 
-
             return; // Skip the rest of runSingleQuest (summon selection etc)
         }
 
@@ -102,7 +101,8 @@ class QuestBot {
         }
 
         // Handle battle
-        await this.battle.executeBattle(this.battleMode);
+        const result = await this.battle.executeBattle(this.battleMode);
+        this.updateDetailStats(result);
 
         // Store battle time
         if (this.battle.lastBattleDuration > 0) {
@@ -165,13 +165,21 @@ class QuestBot {
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     logger.info('Moved to battle screen (during click), ignoring error.');
+                    // Wait for battle to complete
+                    const result = await this.battle.waitForBattleEnd();
+
+                    // Track stats
+                    this.updateDetailStats(result);
+
+                    // Wait a bit before next action
+                    await sleep(randomDelay(500, 1000));
                     return;
                 }
                 throw error;
             }
 
-            // EST: Reduced delay for speed (0.3-0.8s)
-            await sleep(randomDelay(300, 800));
+            // EST: Reduced delay for speed (0.2-0.5s)
+            await sleep(randomDelay(200, 500));
 
             // Check for another confirmation popup after clicking summon (Start Quest)
             if (await this.controller.elementExists('.btn-usual-ok')) {
@@ -228,18 +236,40 @@ class QuestBot {
         logger.info('Bot stop requested');
     }
 
+    updateDetailStats(result) {
+        if (!result) return;
+
+        // Initialize if not present
+        if (!this.totalTurns) this.totalTurns = 0;
+        if (!this.battleCount) this.battleCount = 0;
+
+        // Update counts
+        this.battleCount++;
+        if (result.turns > 0) {
+            this.totalTurns += result.turns;
+        }
+    }
+
+    getAverageBattleTime() {
+        if (this.battleTimes.length === 0) return 0;
+        const sum = this.battleTimes.reduce((a, b) => a + b, 0);
+        return Math.round(sum / this.battleTimes.length);
+    }
+
     getStats() {
-        const avgTime = this.battleTimes.length > 0
-            ? this.battleTimes.reduce((a, b) => a + b, 0) / this.battleTimes.length
-            : 0;
+        // Calculate average turns
+        let avgTurns = 0;
+        if (this.battleCount > 0) {
+            avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
+        }
 
         return {
             questsCompleted: this.questsCompleted,
-            maxQuests: this.maxQuests,
             isRunning: this.isRunning,
             isPaused: this.isPaused,
-            battleTimes: this.battleTimes,
-            averageBattleTime: avgTime
+            startTime: this.startTime,
+            avgBattleTime: this.getAverageBattleTime(),
+            avgTurns: avgTurns
         };
     }
 }

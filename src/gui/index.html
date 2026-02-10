@@ -15,9 +15,11 @@
             --text-primary: #e2e8f0;
             --text-secondary: #94a3b8;
             --accent-blue: #3b82f6;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
+            --accent-green: #059669;
+            /* Muted Green */
+            --accent-red: #b91c1c;
+            /* Muted Red */
+            --accent-yellow: #d97706;
             --border: #2d3550;
             --glow-blue: rgba(59, 130, 246, 0.3);
         }
@@ -25,14 +27,14 @@
         * {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            box-sizing: border-sizing;
         }
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1b3e 100%);
             color: var(--text-primary);
-            padding: 24px;
+            padding: 12px;
             height: 100vh;
             overflow: hidden;
         }
@@ -42,35 +44,35 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 24px;
+            padding: 10px 16px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .logo {
-            width: 40px;
-            height: 40px;
+            width: 32px;
+            height: 32px;
             background: linear-gradient(135deg, var(--accent-blue), #6366f1);
-            border-radius: 10px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 20px;
-            box-shadow: 0 0 20px var(--glow-blue);
+            font-size: 18px;
+            box-shadow: 0 0 15px var(--glow-blue);
         }
 
         h1 {
-            font-size: 28px;
+            font-size: 20px;
             font-weight: 700;
             background: linear-gradient(135deg, var(--accent-blue), #6366f1);
             -webkit-background-clip: text;
@@ -80,13 +82,20 @@
         }
 
         .status-badge {
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 13px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             transition: all 0.3s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .status-badge:hover {
+            filter: brightness(1.2);
+            transform: scale(1.05);
         }
 
         .status-Stopped {
@@ -100,43 +109,44 @@
             color: var(--accent-green);
             border: 1px solid rgba(16, 185, 129, 0.2);
             box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+            animation: pulse-green 2s infinite;
         }
 
         .container {
             display: grid;
-            grid-template-columns: 380px 1fr;
-            gap: 20px;
-            height: calc(100vh - 140px);
+            grid-template-columns: 280px 1fr;
+            gap: 12px;
+            height: calc(100vh - 80px);
         }
 
         .panel {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 20px;
+            padding: 16px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
             overflow-y: auto;
         }
 
         .panel h3 {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-primary);
-            margin-bottom: 20px;
-            padding-bottom: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
             border-bottom: 1px solid var(--border);
         }
 
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
 
         label {
             display: block;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 500;
             color: var(--text-secondary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
 
         input,
@@ -145,9 +155,9 @@
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
             color: var(--text-primary);
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13px;
             transition: all 0.2s ease;
         }
 
@@ -160,14 +170,21 @@
 
         button {
             width: 100%;
-            padding: 12px;
+            padding: 6px 8px;
+            /* Reduced from 8px 10px */
             border: none;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 4px;
+            /* Slightly tighter radius */
+            font-size: 11px;
+            /* Reduced from 12px */
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
-            margin-top: 8px;
+            margin-top: 4px;
+            /* Reduced from 6px */
+            text-transform: uppercase;
+            /* Cleaner look for small buttons */
+            letter-spacing: 0.5px;
         }
 
         button:hover:not(:disabled) {
@@ -255,11 +272,11 @@
         }
 
         .button-section {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .button-section h4 {
-            margin: 0 0 8px 0;
+            margin: 0 0 6px 0;
             padding: 0;
             border: none;
         }
@@ -275,7 +292,7 @@
         hr {
             border: none;
             border-top: 1px solid var(--border);
-            margin: 16px 0;
+            margin: 12px 0;
         }
 
         /* Scrollbar */
@@ -299,8 +316,8 @@
         /* Toast Notifications */
         .toast-container {
             position: fixed;
-            top: 80px;
-            right: 24px;
+            top: 60px;
+            right: 20px;
             z-index: 1000;
             display: flex;
             flex-direction: column;
@@ -312,12 +329,12 @@
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
             transform: translateX(400px);
             opacity: 0;
             transition: all 0.3s ease;
-            min-width: 280px;
+            min-width: 260px;
             pointer-events: auto;
             display: flex;
             align-items: center;
@@ -346,29 +363,29 @@
         }
 
         .toast-icon {
-            font-size: 18px;
+            font-size: 16px;
             flex-shrink: 0;
         }
 
         .toast-message {
             flex: 1;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 500;
         }
 
         /* Stats Cards */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
         }
 
         .stat-card {
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 16px;
+            padding: 12px;
             text-align: center;
             transition: all 0.2s ease;
         }
@@ -380,19 +397,19 @@
         }
 
         .stat-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
+            font-size: 20px;
+            margin-bottom: 6px;
         }
 
         .stat-value {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
 
         .stat-label {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -564,6 +581,81 @@
             margin-left: 8px;
             font-family: monospace;
         }
+
+        /* Pulse Animation */
+        @keyframes pulse-green {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        .status-Running {
+            animation: pulse-green 2s infinite;
+        }
+
+        /* Compact Mode */
+        body.compact-mode .container {
+            grid-template-columns: 1fr;
+            /* Single column */
+            gap: 10px;
+        }
+
+        body.compact-mode .controls-panel {
+            display: none;
+            /* Hide controls in compact mode */
+        }
+
+
+
+        /* Log Highlights */
+        .log-highlight-battle {
+            color: var(--accent-red);
+            font-weight: bold;
+        }
+
+        .log-highlight-loot {
+            color: var(--accent-yellow);
+            font-weight: bold;
+        }
+
+        .log-highlight-success {
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        /* Header Actions */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            margin-top: 0;
+        }
+
+        .btn-icon:hover {
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
     </style>
 </head>
 
@@ -575,7 +667,10 @@
             <div class="logo">G</div>
             <h1>GANENBLUE</h1>
         </div>
-        <div id="status-badge" class="status-badge status-Stopped">Stopped</div>
+        <div class="header-right">
+            <button id="btn-compact" class="btn-icon" title="Toggle Compact Mode">👁️</button>
+            <div id="status-badge" class="status-badge status-Stopped">Stopped</div>
+        </div>
     </div>
 
     <div class="container">
@@ -678,9 +773,8 @@
             <div class="button-section">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
                     Control</h4>
-                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming<span
-                        class="kbd">Ctrl+Enter</span></button>
-                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot<span class="kbd">Ctrl+.</span></button>
+                <button id="btn-start" class="btn-start" disabled>▶️ Start Farming</button>
+                <button id="btn-stop" class="btn-stop" disabled>⏹️ Stop Bot</button>
             </div>
 
             <div class="button-section">
@@ -713,6 +807,12 @@
                     <div class="stat-icon">⚡</div>
                     <div class="stat-value" id="avg-battle">--:--</div>
                     <div class="stat-label">Avg Battle</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🔄</div>
+                    <div class="stat-value" id="avg-turns">0.0</div>
+                    <div class="stat-label">Avg Turns</div>
                 </div>
 
                 <div class="stat-card">
