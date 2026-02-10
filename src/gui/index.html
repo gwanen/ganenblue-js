@@ -730,6 +730,25 @@
         <div class="panel controls-panel">
             <h3>Configuration</h3>
 
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
+                </h4>
+                <button id="btn-launch" class="btn-launch">Open Browser</button>
+            </div>
+
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
+                    Actions</h4>
+                <div class="btn-group">
+                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
+                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
+                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
+                </div>
+            </div>
+
+            <hr>
+
             <div class="form-group">
                 <label for="bot-mode">Bot Mode</label>
                 <select id="bot-mode">
@@ -816,22 +835,6 @@
                 </div>
             </div>
 
-            <div class="button-section">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
-                </h4>
-                <button id="btn-launch" class="btn-launch">Open Browser</button>
-            </div>
-
-            <div class="button-section">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
-                    Actions</h4>
-                <div class="btn-group">
-                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
-                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
-                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
-                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
-                </div>
-            </div>
         </div>
 
         <!-- Logs & Stats -->
