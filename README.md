@@ -42,6 +42,11 @@ A high-performance, stealth-focused Granblue Fantasy automation bot built with *
     # OR
     pnpm install
     ```
+3.  **Configure Credentials** (Optional - for auto-login):
+    - Rename `config/credentials.example.yaml` to `config/credentials.yaml`
+    - Edit the file and fill in your Mobage email and password
+
+
 
 ## 🖥️ Usage
 

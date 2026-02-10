@@ -51,7 +51,7 @@ class BrowserManager {
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--window-size=500,900', // Narrow and compact for mobile layout
+                '--window-size=500,850', // Optimized height for GBF
                 // Disable password and security popups
                 '--password-store=basic',
                 '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
@@ -60,7 +60,7 @@ class BrowserManager {
                 '--disable-notifications',
                 '--disable-save-password-bubble', // Disable password manager popup
             ],
-            defaultViewport: null, // Flexible viewport for natural scrolling
+            defaultViewport: null, // Dynamic viewport that matches window size
             ignoreDefaultArgs: ['--enable-automation'],
         };
 
