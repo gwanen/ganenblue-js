@@ -135,16 +135,7 @@ class BattleHandler {
             } else {
                 logger.warn('[Wait] Auto button timeout. Refreshing page...');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-
-                // Post-Refresh Recovery
-                const postRefreshUrl = this.controller.page.url();
-                if (postRefreshUrl.includes('#result')) return;
-
-                if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
-                    logger.info('[Cleared] Battle finished during reload');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    return;
-                }
+                await this.checkStateAndResume('semi_auto');
             }
         }
     }
@@ -274,6 +265,47 @@ class BattleHandler {
 
     async handleResult() {
         // Skips clicking OK as requested.
+    }
+
+    /**
+     * Standardized state detection after refresh.
+     * Checks URL first, then completion modal, then battle UI.
+     * Returns true if battle is finished.
+     */
+    async checkStateAndResume(mode) {
+        const url = this.controller.page.url();
+
+        // 1. Check URL first (Most reliable)
+        if (url.includes('#result')) {
+            return true;
+        }
+
+        // 2. Check for OK button (completion modal)
+        if (await this.controller.elementExists(this.selectors.okButton, 2000)) {
+            logger.info('[Cleared] Battle finished during reload');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            return true;
+        }
+
+        // 3. Still in battle? Wait for UI components to appear
+        const found = await this.controller.waitForElement('.btn-attack-start', 8000);
+        if (found && !this.stopped) {
+            if (mode === 'full_auto') {
+                // Re-attempt FA
+                const faFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 3000);
+                if (faFound) {
+                    await this.controller.clickSafe(this.selectors.fullAutoButton);
+                    logger.info('[FA] Full Auto enabled (after refresh)');
+                }
+            } else if (mode === 'semi_auto') {
+                const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
+                if (autoFound) {
+                    await this.controller.clickSafe(this.selectors.autoButton);
+                    logger.info('[FA] Auto mode enabled (after refresh)');
+                }
+            }
+        }
+        return false;
     }
 
     async getTurnNumber() {
