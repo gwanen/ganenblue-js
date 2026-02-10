@@ -45,7 +45,7 @@ class BattleHandler {
                 const currentUrl = this.controller.page.url();
                 // Check if we are actually in battle but maybe button is different or obscured
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.warn('On battle page but Auto button not found. Attempting to proceed...');
+                    logger.warn('[Wait] Auto button missing. Attempting recovery...');
                 } else if (!currentUrl.includes('#result')) {
                     throw new Error(`Battle failed to load. URL: ${currentUrl}`);
                 }
@@ -70,7 +70,7 @@ class BattleHandler {
 
             return result;
         } catch (error) {
-            logger.error('Battle execution failed:', error);
+            logger.error('[Error] Battle execution failed:', error);
             // Return empty result to avoid breaking stats update loop
             return { duration: 0, turns: 0 };
         }
@@ -118,14 +118,14 @@ class BattleHandler {
         if (await this.controller.waitForElement(this.selectors.attackButton, 10000)) {
             // Click Attack button to start
             await this.controller.clickSafe(this.selectors.attackButton);
-            logger.info('Semi Auto: Attack initiated');
+            logger.info('[SA] Attack initiated');
 
             // Enable Auto (not Full Auto) with 5s timeout
             const found = await this.controller.waitForElement(this.selectors.autoButton, 5000);
             if (found) {
                 await sleep(400); // Reduced from randomDelay(500, 1000)
                 await this.controller.clickSafe(this.selectors.autoButton);
-                logger.info('Auto mode enabled');
+                logger.info('[SA] Auto mode enabled');
 
                 // Skill Kill Protection
                 await sleep(400);
@@ -162,7 +162,7 @@ class BattleHandler {
 
         while (Date.now() - startTime < maxWaitMs) {
             if (this.stopped) {
-                logger.info('Battle wait cancelled (bot stopped)');
+                logger.info('[Wait] Cancelled (bot stopped)');
                 const duration = (Date.now() - startTime) / 1000;
                 return { duration, turns: turnCount };
             }
@@ -187,7 +187,7 @@ class BattleHandler {
 
             // 2. Rematch fail popup
             if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
-                logger.info('Rematch fail detected. Refreshing...');
+                logger.info('[Wait] Rematch fail detected. Refreshing...');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                 await sleep(1500); // snappier reload
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
@@ -195,7 +195,7 @@ class BattleHandler {
 
             // 3. Character death
             if (await this.controller.elementExists('.btn-cheer', 100)) {
-                logger.info('Party wiped (cheer button found).');
+                logger.info('[Raid] Party wiped (cheer button found).');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                 await sleep(1500); // snappier reload
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
@@ -230,7 +230,7 @@ class BattleHandler {
                 } else {
                     missingUiCount++;
                     if (missingUiCount >= 8) { // ~8 seconds
-                        logger.warn('UI missing for too long. Refreshing...');
+                        logger.warn('[Wait] UI missing (stuck). Refreshing...');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                         await sleep(1200);
 
@@ -303,7 +303,7 @@ class BattleHandler {
                 const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
                 if (autoFound) {
                     await this.controller.clickSafe(this.selectors.autoButton);
-                    logger.info('[FA] Auto mode enabled (after refresh)');
+                    logger.info('[SA] Auto mode enabled (after refresh)');
 
                     // Verification check
                     await sleep(1000);
