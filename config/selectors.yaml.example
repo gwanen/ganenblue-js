@@ -1,0 +1,102 @@
+# =============================================================================
+# GANENBLUE BOT - CSS SELECTORS CONFIGURATION
+# =============================================================================
+# This file contains CSS selectors used to interact with Granblue Fantasy's UI.
+# 
+# IMPORTANT NOTES:
+# - These selectors may need updates if GBF's UI changes
+# - Test selectors carefully before modifying
+# - Use browser DevTools to inspect elements and verify selectors
+#
+# UPDATING SELECTORS:
+# 1. Open GBF in browser
+# 2. Right-click element → Inspect
+# 3. Copy selector from DevTools
+# 4. Update the value below
+# 5. Test thoroughly before committing
+#
+# =============================================================================
+
+# Quest Mode Selectors
+quest:
+  # Summon selection screen (appears after clicking "Start Quest")
+  summonScreen: '.prt-supporter-list'
+  
+  # Individual summon slots (the bot clicks one of these)
+  summonSlot1: '.lis-supporter:nth-child(1) .btn-supporter-use'
+  summonSlot2: '.lis-supporter:nth-child(2) .btn-supporter-use'
+  summonSlot3: '.lis-supporter:nth-child(3) .btn-supporter-use'
+  
+  # "OK" button to start quest after selecting summon
+  startQuestButton: '.btn-usual-ok'
+
+# Battle Selectors
+battle:
+  # Main battle screen container
+  battleScreen: '.prt-battle-window'
+  
+  # Attack button (green "Attack" button in battle)
+  attackButton: '.btn-attack-start'
+  
+  # Full Auto button (activates full auto mode)
+  fullAutoButton: '.btn-auto'
+  
+  # Auto button (same as fullAutoButton, kept for compatibility)
+  autoButton: '.btn-auto'
+  
+  # Result screen (appears after battle ends)
+  resultScreen: '.prt-result'
+  
+  # OK button on result screen (to proceed after battle)
+  okButton: '.pop-usual.pop-exp.pop-show .btn-usual-ok'
+  
+  # Next button (sometimes appears instead of OK)
+  nextButton: '.btn-usual-next'
+  
+  # Close button (for various dialogs)
+  closeButton: '.btn-usual-close'
+
+# Raid Mode Selectors
+raid:
+  # URL for raid backup page
+  raidBackupUrl: 'https://game.granbluefantasy.jp/#quest/assist'
+  
+  # Raid list container
+  raidList: '.prt-raid-list'
+  
+  # Individual raid entry in the list
+  raidEntry: '.btn-multi-raid.lis-raid.search'
+  
+  # Join button to enter a raid
+  joinButton: '.btn-raid-join'
+  
+  # Backup request button
+  backupRequestButton: '.btn-backup-request'
+  
+  # Error popup OK button (e.g., "Raid is full")
+  errorPopup: '.prt-popup-footer .btn-usual-ok'
+
+# Replicard Mode Selectors (Future Feature)
+replicard:
+  # Replicard map screen
+  nodeMap: '.prt-replicard-map'
+  
+  # Individual node on the map
+  node: '.map-node'
+  
+  # Start button for replicard quest
+  startButton: '.btn-start'
+
+# =============================================================================
+# TROUBLESHOOTING:
+# If the bot fails to click buttons, selectors may have changed.
+# Check browser DevTools Console for errors like:
+# - "Element not found: .btn-attack-start"
+# - "Timeout waiting for selector: .btn-auto"
+#
+# Common fixes:
+# 1. Verify element exists on the page
+# 2. Check for typos in class names
+# 3. Ensure no extra spaces in selectors
+# 4. Test with browser's querySelector() in Console
+# =============================================================================

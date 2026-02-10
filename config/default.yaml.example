@@ -1,0 +1,98 @@
+# =============================================================================
+# GANENBLUE BOT - DEFAULT CONFIGURATION
+# =============================================================================
+# This file contains the default settings for the Ganenblue GBF automation bot.
+# Most of these settings can be overridden via the GUI interface.
+#
+# =============================================================================
+
+# Bot Behavior Settings
+bot:
+  # Battle mode: how the bot fights battles
+  # Options: full_auto | semi_auto
+  battle_mode: full_auto
+  
+  # Bot operation mode: what type of content to farm
+  # Options: quest | raid | replicard
+  bot_mode: quest
+  
+  # Maximum number of quests to run (0 = unlimited)
+  # Can be changed in GUI
+  max_quests: 0
+  
+  # Maximum number of raids to run (0 = unlimited)
+  # Only used when bot_mode is 'raid'
+  max_raids: 0
+  
+  # Quest URL for quest mode
+  # Example: "http://game.granbluefantasy.jp/#quest/supporter/510051/5"
+  # Can be set in GUI
+  quest_url: ""
+
+# Browser Configuration
+browser:
+  # Browser to use: chromium (recommended) or edge
+  # Options: chromium | edge
+  browser_type: 'chromium'
+  
+  # Run browser in headless mode (no visible window)
+  # Set to false to see the browser window (recommended for first-time setup)
+  headless: false
+  
+  # Browser window size (used for initial launch)
+  width: 1920
+  height: 1080
+  
+  # Default timeout for page operations (in milliseconds)
+  timeout: 30000
+
+# Stealth & Anti-Detection Settings
+stealth:
+  # Randomize viewport size to avoid detection
+  randomize_viewport: true
+  
+  # Randomize user agent string
+  randomize_user_agent: true
+  
+  # Block images/css to improve speed (may affect detection)
+  # Set to false for better stealth (recommended)
+  block_resources: false
+
+# Logging Configuration
+logging:
+  # Log level: how much detail to log
+  # Options: debug | info | warn | error
+  # Use 'debug' for troubleshooting, 'info' for normal operation
+  level: info
+  
+  # Log file location
+  file: logs/bot.log
+  
+  # Also log to console/terminal
+  console: true
+
+# Screenshot Settings
+screenshots:
+  # Take screenshot when errors occur
+  on_error: true
+  
+  # Directory to save screenshots
+  directory: screenshots/
+
+# Timeout Settings (in milliseconds)
+timeouts:
+  # Maximum time to wait for page to load
+  page_load: 30000
+  
+  # Maximum time to wait for elements to appear
+  element_wait: 10000
+  
+  # Maximum time to wait for a battle to complete (10 minutes)
+  battle_max: 600000
+
+# =============================================================================
+# NOTES:
+# - 1000 milliseconds = 1 second
+# - Most GUI settings will override these defaults
+# - Credentials are configured in credentials.yaml (see credentials.yaml.example)
+# =============================================================================
