@@ -107,7 +107,17 @@ class RaidBot {
             attempts++;
 
             // Check for error popup first
-            if (await this.handleErrorPopup()) {
+            const errorResult = await this.handleErrorPopup();
+            if (errorResult.detected) {
+                if (errorResult.text.includes('pending battles')) {
+                    logger.info('[Wait] Pending battles detected. Clearing...');
+                    await this.clearPendingBattles();
+                    // After clearing, return to backup page
+                    await this.controller.goto(this.raidBackupUrl);
+                    await sleep(randomDelay(1500, 2500));
+                    continue;
+                }
+
                 logger.info('[Wait] Error popup detected, refreshing page...');
                 await this.controller.page.reload();
                 await sleep(randomDelay(1500, 2500));
@@ -135,7 +145,16 @@ class RaidBot {
                     }
 
                     // Check for error popup after clicking
-                    if (await this.handleErrorPopup()) {
+                    const clickError = await this.handleErrorPopup();
+                    if (clickError.detected) {
+                        if (clickError.text.includes('pending battles')) {
+                            logger.info('[Wait] Pending battles detected after click. Clearing...');
+                            await this.clearPendingBattles();
+                            await this.controller.goto(this.raidBackupUrl);
+                            await sleep(randomDelay(1500, 2500));
+                            continue;
+                        }
+
                         logger.warn('[Wait] Raid was full or unavailable, refreshing...');
                         await this.controller.page.reload();
                         await sleep(randomDelay(1500, 2500));
@@ -171,19 +190,74 @@ class RaidBot {
     async handleErrorPopup() {
         // Check for error popup with class "prt-popup-footer" containing "btn-usual-ok"
         const errorPopupSelector = '.prt-popup-footer .btn-usual-ok';
+        const bodySelector = '.txt-popup-body';
 
         if (await this.controller.elementExists(errorPopupSelector, 1000)) {
-            logger.info('[Wait] Error popup detected, clicking OK...');
+            // Get error text
+            const errorText = await this.controller.page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                return el ? el.innerText : '';
+            }, bodySelector);
+
+            logger.info(`[Wait] Error popup detected: ${errorText.trim()}`);
+
             try {
-                await closeButton.click();
+                await this.controller.clickSafe(errorPopupSelector);
                 await sleep(1000);
             } catch (error) {
                 logger.warn('[Wait] Failed to click error popup OK button:', error);
             }
-            return true;
+            return { detected: true, text: errorText.toLowerCase() };
         }
 
-        return false;
+        return { detected: false, text: '' };
+    }
+
+    async clearPendingBattles() {
+        const unclaimedUrl = this.selectors.unclaimedRaidUrl || 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0';
+        const entrySelector = this.selectors.unclaimedRaidEntry || '.btn-multi-raid.lis-raid';
+
+        logger.info('[Raid] Starting to clear pending battles...');
+
+        let clearedCount = 0;
+        const maxToClear = 10; // safety limit
+
+        while (clearedCount < maxToClear && this.isRunning) {
+            await this.controller.goto(unclaimedUrl);
+            await sleep(randomDelay(1500, 2500));
+
+            const hasEntries = await this.controller.elementExists(entrySelector, 3000);
+            if (!hasEntries) {
+                logger.info('[Raid] No more pending battles found.');
+                break;
+            }
+
+            logger.info(`[Raid] Clearing unclaimed raid #${clearedCount + 1}...`);
+            try {
+                await this.controller.clickSafe(entrySelector);
+                // Wait for either the result page to load or we are redirected
+                // We wait for the OK button which usually appears on result screens
+                const okButtonSelector = '.btn-usual-ok';
+                logger.info('[Wait] Waiting for result page...');
+
+                // Wait up to 10 seconds for the OK button to appear
+                const foundOk = await this.controller.elementExists(okButtonSelector, 10000);
+                if (foundOk) {
+                    logger.info('[Raid] Result processed.');
+                    // Optional: tiny delay to ensure state is saved
+                    await sleep(500);
+                } else {
+                    logger.warn('[Wait] OK button not found within 10s, proceeding anyway...');
+                }
+
+                clearedCount++;
+            } catch (error) {
+                logger.error('[Error] Failed to click unclaimed raid:', error);
+                break;
+            }
+        }
+
+        logger.info(`[Raid] Finished clearing ${clearedCount} pending battles.`);
     }
 
     async selectSummon() {
