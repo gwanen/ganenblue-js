@@ -184,16 +184,16 @@ ipcMain.handle('bot:start', async (event, settings) => {
         // Start bot loop (non-blocking)
         botInstance.start().then(() => {
             const stats = botInstance.getStats();
-            const completed = stats.questsCompleted || stats.raidsCompleted || 0;
-            const type = settings.mode === 'quest' ? 'quests' : 'raids';
+            const quests = stats.completedQuests || 0;
+            const raids = stats.raidsCompleted || 0;
 
-            logger.info(`Bot completed: ${completed} ${type}`);
+            logger.info(`[Bot] Finished: Quest ${quests} | Raid ${raids}`);
             mainWindow.webContents.send('bot:status', 'Stopped');
 
             // Show completion notification
             showNotification(
                 'Farming Complete! 🎉',
-                `Completed ${completed} ${type}`,
+                `Quest ${quests} | Raid ${raids}`,
                 true
             );
         }).catch(err => {

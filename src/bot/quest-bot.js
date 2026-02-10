@@ -47,7 +47,6 @@ class QuestBot {
                 await this.runSingleQuest();
                 this.questsCompleted++;
 
-                logger.info(`Quests completed: ${this.questsCompleted}${this.maxQuests > 0 ? '/' + this.maxQuests : ''}`);
 
                 // Random delay between quests
                 // EST: Reduced delay for speed (0.5-1s)
@@ -58,7 +57,6 @@ class QuestBot {
             throw error;
         } finally {
             this.isRunning = false;
-            logger.info('Quest Bot stopped');
         }
     }
 

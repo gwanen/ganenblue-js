@@ -47,7 +47,6 @@ class RaidBot {
                 await this.runSingleRaid();
                 this.raidsCompleted++;
 
-                logger.info(`Raids completed: ${this.raidsCompleted}${this.maxRaids > 0 ? '/' + this.maxRaids : ''}`);
 
                 // Random delay between raids
                 // EST: Reduced delay for speed (0.5-1s)
@@ -58,7 +57,6 @@ class RaidBot {
             throw error;
         } finally {
             this.isRunning = false;
-            logger.info('Raid Bot stopped');
         }
     }
 
