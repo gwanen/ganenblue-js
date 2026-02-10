@@ -96,6 +96,11 @@ class RaidBot {
             return false;
         }
 
+        const honorReached = result?.honorReached || false;
+        if (honorReached) {
+            logger.info(`[Target] Honor goal exceeded: ${this.honorTarget.toLocaleString()}. Withdrawing...`);
+        }
+
         this.updateDetailStats(result);
 
         // Store battle time and turns
@@ -104,7 +109,15 @@ class RaidBot {
             this.battleTurns.push(result.turns || 0);
         }
 
-        logger.info('[Cleared] Victory!');
+        if (honorReached) {
+            logger.info('[Cleared] Goal reached!');
+            // Immediate navigation back to raid list to ensure we move on
+            await this.controller.goto(this.raidBackupUrl);
+            await sleep(1000);
+        } else {
+            logger.info('[Cleared] Victory!');
+        }
+
         return true;
     }
 

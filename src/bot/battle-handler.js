@@ -116,29 +116,11 @@ class BattleHandler {
             await this.controller.clickSafe(this.selectors.attackButton);
             logger.info('[SA] Attack initiated');
 
-            // Enable Auto (not Full Auto) with 5s timeout
-            const found = await this.controller.waitForElement(this.selectors.autoButton, 5000);
-            if (found) {
-                await sleep(400); // Reduced from randomDelay(500, 1000)
-                await this.controller.clickSafe(this.selectors.autoButton);
-                logger.info('[SA] Auto mode enabled');
-
-                // Skill Kill Protection
-                await sleep(400);
-                const stillExists = await this.controller.elementExists(this.selectors.autoButton, 300);
-                if (!stillExists) {
-                    const url = this.controller.page.url();
-                    if (!url.includes('#result') && !url.includes('#quest/index')) {
-                        logger.warn('[Wait] Auto button vanished without result. Refreshing state...');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await this.checkStateAndResume('semi_auto');
-                    }
-                }
-            } else {
-                logger.warn('[Wait] Auto button timeout. Refreshing page...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await this.checkStateAndResume('semi_auto');
-            }
+            // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
+        } else {
+            logger.warn('[Wait] Attack button timeout. Refreshing page...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await this.checkStateAndResume('semi_auto');
         }
     }
 
@@ -331,30 +313,13 @@ class BattleHandler {
                     }
                 }
             } else if (mode === 'semi_auto') {
-                // For Semi-Auto, click Attack if available, THEN click Auto
+                // For Semi-Auto, click Attack if available
                 const attackFound = await this.controller.elementExists(this.selectors.attackButton, 500);
                 if (attackFound) {
                     await this.controller.clickSafe(this.selectors.attackButton);
                     logger.info('[SA] Attack initiated (after refresh)');
-                    await sleep(500);
                 }
-
-                const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
-                if (autoFound) {
-                    await this.controller.clickSafe(this.selectors.autoButton);
-                    logger.info('[SA] Auto mode enabled (after refresh)');
-
-
-                    // Verification check
-                    await sleep(1000);
-                    if (!await this.controller.elementExists(this.selectors.autoButton, 500)) {
-                        const url = this.controller.page.url();
-                        if (!url.includes('#result') && !url.includes('#quest/index')) {
-                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                            return await this.checkStateAndResume(mode);
-                        }
-                    }
-                }
+                // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
             }
         }
 
