@@ -10,6 +10,7 @@ class BattleHandler {
         this.stopped = false;
         this.battleStartTime = null;
         this.lastBattleDuration = 0;
+        this.lastHonors = 0;
     }
 
     formatTime(milliseconds) {
@@ -177,6 +178,8 @@ class BattleHandler {
             turnCount = context.turnCount;
 
             if (turnChanged && honorTarget > 0) {
+                // Wait a bit for honor points to update in DOM after turn change
+                await sleep(500);
                 const currentHonors = await this.getHonors();
                 if (currentHonors >= honorTarget) {
                     logger.info(`[Target] Honor goal reached: ${currentHonors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
@@ -367,18 +370,38 @@ class BattleHandler {
     }
 
     async getHonors() {
-        try {
-            return await this.controller.page.evaluate(() => {
-                const userRow = document.querySelector('.lis-user.guild-member');
-                if (!userRow) return 0;
-                const pointEl = userRow.querySelector('.txt-point');
-                if (!pointEl) return 0;
-                const honorsStr = pointEl.textContent.replace(/,/g, '').replace('pt', '').trim();
-                return parseInt(honorsStr, 10) || 0;
-            });
-        } catch (e) {
-            return 0;
+        let retries = 3;
+        while (retries > 0) {
+            try {
+                const honors = await this.controller.page.evaluate(() => {
+                    const userRow = document.querySelector('.lis-user.guild-member');
+                    if (!userRow) return null; // Distinguish between "not found" and "0"
+                    const pointEl = userRow.querySelector('.txt-point');
+                    if (!pointEl) return null;
+                    const honorsStr = pointEl.textContent.replace(/,/g, '').replace('pt', '').trim();
+                    return parseInt(honorsStr, 10) || 0;
+                });
+
+                // If we found a value (even 0), check if it makes sense
+                if (honors !== null) {
+                    // Regression protection: If it's 0 but we previously had honors, 
+                    // it might be a transient loading state.
+                    if (honors === 0 && this.lastHonors > 0 && retries > 1) {
+                        await sleep(500);
+                        retries--;
+                        continue;
+                    }
+                    this.lastHonors = honors;
+                    return honors;
+                }
+            } catch (e) {
+                // Ignore
+            }
+
+            await sleep(500);
+            retries--;
         }
+        return this.lastHonors; // Fallback to last known honors
     }
 
     async getTurnNumber() {

@@ -112,7 +112,7 @@ function saveSettings() {
         customSize: checkboxEnableCustom.checked,
         windowWidth: inputWindowWidth.value,
         windowHeight: inputWindowHeight.value,
-        honorTarget: inputHonorTarget.value
+        honorTarget: cleanHonorsValue(inputHonorTarget.value)
     };
     localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
@@ -130,10 +130,7 @@ function loadSettings() {
             checkboxEnableCustom.checked = settings.customSize || false;
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
-            inputHonorTarget.value = settings.honorTarget || 0;
-
-            inputWindowWidth.value = settings.windowWidth || 500;
-            inputWindowHeight.value = settings.windowHeight || 850;
+            inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
 
             // Trigger UI updates
             updateUIForBotMode();
@@ -200,6 +197,29 @@ inputHonorTarget.addEventListener('input', debouncedSave);
 // Custom Size Toggle Handler
 checkboxEnableCustom.addEventListener('change', () => {
     updateUIForCustomSize();
+});
+
+// Honor Target Formatting
+function formatHonorsInput(value) {
+    const numeric = value.toString().replace(/\D/g, '');
+    if (!numeric) return '0';
+    return parseInt(numeric, 10).toLocaleString('de-DE'); // Use de-DE or similar for dot separator
+}
+
+function cleanHonorsValue(value) {
+    return value.toString().replace(/\D/g, '') || '0';
+}
+
+inputHonorTarget.addEventListener('input', (e) => {
+    const cursor = e.target.selectionStart;
+    const oldVal = e.target.value;
+    const newVal = formatHonorsInput(e.target.value);
+    e.target.value = newVal;
+
+    // Adjust cursor position if dots were added/removed
+    const diff = newVal.length - oldVal.length;
+    e.target.setSelectionRange(cursor + diff, cursor + diff);
+    debouncedSave();
 });
 
 // Bot Mode Change Handler
@@ -417,7 +437,7 @@ btnStart.addEventListener('click', async () => {
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
         battleMode: selectBattleMode.value,
-        honorTarget: inputHonorTarget.value
+        honorTarget: cleanHonorsValue(inputHonorTarget.value)
     };
 
     // Validate quest mode requires URL
