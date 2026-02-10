@@ -94,8 +94,23 @@ class BattleHandler {
         } else {
             logger.warn('[Wait] Auto button timeout. Refreshing page...');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-            // Wait for battle screen to reload
+
+            // Post-Refresh Recovery: Check if battle ended during reload
+            const postRefreshUrl = this.controller.page.url();
+            if (postRefreshUrl.includes('#result')) {
+                return; // Finished
+            }
+
+            // Check for OK button (completion modal)
+            if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
+                logger.info('[Cleared] Battle finished during reload');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                return;
+            }
+
+            // Still in battle? Wait for battle screen to reload
             await this.controller.waitForElement(this.selectors.battleScreen, 10000);
+
             // Re-attempt FA once after refresh
             if (await this.controller.elementExists(this.selectors.fullAutoButton, 5000)) {
                 await this.controller.clickSafe(this.selectors.fullAutoButton);
@@ -120,6 +135,16 @@ class BattleHandler {
             } else {
                 logger.warn('[Wait] Auto button timeout. Refreshing page...');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+
+                // Post-Refresh Recovery
+                const postRefreshUrl = this.controller.page.url();
+                if (postRefreshUrl.includes('#result')) return;
+
+                if (await this.controller.elementExists(this.selectors.okButton, 3000)) {
+                    logger.info('[Cleared] Battle finished during reload');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    return;
+                }
             }
         }
     }
