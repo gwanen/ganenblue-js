@@ -450,7 +450,7 @@ btnStop.addEventListener('click', async () => {
 
     // Ensure Start is enabled for next run
     btnStart.disabled = false;
-    btnStart.textContent = 'Start Farming';
+    // Removed manual textContent assignment that was causing overlap glitch
 
     addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
     showToast('Bot stopped', 'info');
