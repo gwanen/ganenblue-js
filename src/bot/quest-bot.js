@@ -17,12 +17,14 @@ class QuestBot {
         this.isRunning = false;
         this.isPaused = false;
         this.battleTimes = []; // Array to store battle durations
+        this.battleTurns = []; // Array to store turn counts
     }
 
     async start() {
         this.isRunning = true;
         this.questsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
+        this.battleTurns = []; // Reset battle turns on start
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
@@ -85,9 +87,10 @@ class QuestBot {
             const result = await this.battle.executeBattle(this.battleMode);
             this.updateDetailStats(result);
 
-            // Store battle time
+            // Store battle time and turns
             if (this.battle.lastBattleDuration > 0) {
                 this.battleTimes.push(this.battle.lastBattleDuration);
+                this.battleTurns.push(result.turns || 0);
             }
 
             // User Optimization: Skip clicking OK button. Just return to loop (which navigates to Quest URL)
@@ -107,9 +110,10 @@ class QuestBot {
         const result = await this.battle.executeBattle(this.battleMode);
         this.updateDetailStats(result);
 
-        // Store battle time
+        // Store battle time and turns
         if (this.battle.lastBattleDuration > 0) {
             this.battleTimes.push(this.battle.lastBattleDuration);
+            this.battleTurns.push(result.turns || 0);
         }
 
         // User Optimization: Skip clicking OK button.
@@ -274,6 +278,7 @@ class QuestBot {
             avgBattleTime: this.getAverageBattleTime(),
             avgTurns: avgTurns,
             battleTimes: this.battleTimes,
+            battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0
         };
     }

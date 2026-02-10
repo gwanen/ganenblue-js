@@ -27,6 +27,8 @@ raid:
   joinButton: '.btn-raid-join'
   backupRequestButton: '.btn-backup-request'
   errorPopup: '.prt-popup-footer .btn-usual-ok'
+  unclaimedRaidUrl: 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0'
+  unclaimedRaidEntry: '.btn-multi-raid.lis-raid'
 
 replicard:
   nodeMap: '.prt-replicard-map'

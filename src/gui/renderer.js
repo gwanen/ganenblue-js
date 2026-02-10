@@ -623,7 +623,8 @@ setInterval(async () => {
 
                 result.stats.battleTimes.forEach((time, index) => {
                     const formattedTime = formatTime(time);
-                    html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime}</div>`;
+                    const turns = result.stats.battleTurns ? result.stats.battleTurns[index] : 0;
+                    html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime} (${turns} turns)</div>`;
                 });
 
                 html += '</div>';
