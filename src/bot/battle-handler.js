@@ -54,11 +54,6 @@ class BattleHandler {
             // EST: Reduced delay for speed
             await sleep(randomDelay(500, 1000));
 
-            this.browser = await puppeteer.launch(launchOptions);
-
-            // Reuse the initial blank page if available, otherwise create one
-            const pages = await this.browser.pages();
-            this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
             if (mode === 'full_auto') {
                 await this.handleFullAuto();
             } else if (mode === 'semi_auto') {
@@ -87,6 +82,9 @@ class BattleHandler {
         if (turn > 0) {
             logger.info(`[Turn ${turn}]`);
         } else {
+            // Check URL before saying Initializing - we might be on result screen
+            const url = this.controller.page.url();
+            if (url.includes('#result') || url.includes('#quest/index')) return;
             logger.info('[Battle] Initializing...');
         }
 
@@ -96,6 +94,18 @@ class BattleHandler {
         if (found) {
             await this.controller.clickSafe(this.selectors.fullAutoButton);
             logger.info('[FA] Full Auto enabled');
+
+            // Skill Kill Protection: If button vanishes but no result screen, refresh
+            await sleep(1000);
+            const stillExists = await this.controller.elementExists(this.selectors.fullAutoButton, 500);
+            if (!stillExists) {
+                const url = this.controller.page.url();
+                if (!url.includes('#result') && !url.includes('#quest/index')) {
+                    logger.warn('[Wait] Auto button vanished without result. Refreshing state...');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await this.checkStateAndResume('full_auto');
+                }
+            }
         } else {
             logger.warn('[Wait] Auto button timeout. Refreshing page...');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
@@ -116,6 +126,18 @@ class BattleHandler {
                 await sleep(randomDelay(500, 1000));
                 await this.controller.clickSafe(this.selectors.autoButton);
                 logger.info('Auto mode enabled');
+
+                // Skill Kill Protection
+                await sleep(1000);
+                const stillExists = await this.controller.elementExists(this.selectors.autoButton, 500);
+                if (!stillExists) {
+                    const url = this.controller.page.url();
+                    if (!url.includes('#result') && !url.includes('#quest/index')) {
+                        logger.warn('[Wait] Auto button vanished without result. Refreshing state...');
+                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                        await this.checkStateAndResume('semi_auto');
+                    }
+                }
             } else {
                 logger.warn('[Wait] Auto button timeout. Refreshing page...');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
@@ -160,7 +182,6 @@ class BattleHandler {
             // 1. Result URL (Most reliable)
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#result')) {
-                logger.info('[Cleared] Victory!');
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
@@ -245,7 +266,7 @@ class BattleHandler {
         const url = this.controller.page.url();
 
         // 1. Check URL first (Most reliable)
-        if (url.includes('#result')) {
+        if (url.includes('#result') || url.includes('#quest/index')) {
             return true;
         }
 
@@ -257,7 +278,7 @@ class BattleHandler {
         }
 
         // 3. Still in battle? Wait for UI components to appear
-        const found = await this.controller.waitForElement('.btn-attack-start', 8000);
+        const found = await this.controller.waitForElement('.btn-attack-start', 2000);
         if (found && !this.stopped) {
             if (mode === 'full_auto') {
                 // Re-attempt FA
@@ -265,15 +286,42 @@ class BattleHandler {
                 if (faFound) {
                     await this.controller.clickSafe(this.selectors.fullAutoButton);
                     logger.info('[FA] Full Auto enabled (after refresh)');
+
+                    // Verification check
+                    await sleep(1000);
+                    if (!await this.controller.elementExists(this.selectors.fullAutoButton, 500)) {
+                        const url = this.controller.page.url();
+                        if (!url.includes('#result') && !url.includes('#quest/index')) {
+                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                            return await this.checkStateAndResume(mode);
+                        }
+                    }
                 }
             } else if (mode === 'semi_auto') {
                 const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
                 if (autoFound) {
                     await this.controller.clickSafe(this.selectors.autoButton);
                     logger.info('[FA] Auto mode enabled (after refresh)');
+
+                    // Verification check
+                    await sleep(1000);
+                    if (!await this.controller.elementExists(this.selectors.autoButton, 500)) {
+                        const url = this.controller.page.url();
+                        if (!url.includes('#result') && !url.includes('#quest/index')) {
+                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                            return await this.checkStateAndResume(mode);
+                        }
+                    }
                 }
             }
         }
+
+        // 4. Final safety check after timeout
+        const finalUrl = this.controller.page.url();
+        if (finalUrl.includes('#result') || finalUrl.includes('#quest/index')) {
+            return true;
+        }
+
         return false;
     }
 

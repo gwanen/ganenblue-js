@@ -49,7 +49,7 @@ class PageController {
             return true;
         } catch (error) {
             const currentUrl = this.page.url();
-            logger.error(`Element not found: ${selector} (URL: ${currentUrl})`);
+            logger.debug(`Element not found: ${selector} (URL: ${currentUrl})`);
             return false;
         }
     }
