@@ -6,32 +6,35 @@ A high-performance, stealth-focused Granblue Fantasy automation bot built with *
 
 ### Core Automation
 - **Stealth Automation**: Uses `puppeteer-extra-plugin-stealth` and custom evasion techniques to mimic human behavior
+- **Multi-Browser Support**: Supports both **Chromium** and **Microsoft Edge**
 - **Multi-Mode Support**: Quest Farming and Raid Backup modes
 - **Smart Battle Logic**: Automatic battle handling with Full Auto & Semi Auto support
+- **Robust Turn Counting**: Accurate turn tracking for both Quests and Raids
 - **Battle Timer**: Track individual battle times and average completion time
 - **Error Recovery**: Handles rematch fails, character death, and error popups automatically
 
 ### GUI Dashboard
 - **Electron-based Interface**: Easy-to-use desktop application
 - **Bot Mode Selection**: Switch between Quest and Raid modes
+- **Integrated Logging**: Real-time log stream with standardized prefixes (`[Wait]`, `[Bot]`, `[Raid]`, etc.)
 - **Real-time Statistics**: Live battle times, completion counts, and averages
 - **Control Buttons**:
   - Launch Browser / Start Farming / Stop
   - Reset Stats: Clear battle timers and statistics
   - Reload App: Restart app to load code changes
-- **Dynamic UI**: Shows/hides relevant fields based on bot mode
 
 ### Battle Features
 - **Optimal Resolution**: Automatically sets viewport to 1000x1799 for farming
-- **Animation Skipping**: Refreshes during attack animations for faster battles
+- **Animation Skipping**: Refreshes during attack animations for faster battles (optimized 1.2s delay)
+- **Snappier Flow**: Reduced activation delays (400ms) for Skill Kill protection and FA enabling
 - **Auto-Recovery**: Handles stuck states and missing UI elements
 - **Death Detection**: Automatically skips to next raid when character dies
 - **Result Detection**: Multiple methods to detect battle completion
 
 ### Configuration
 - **YAML-based Config**: Easy customization via `config/default.yaml` and `config/selectors.yaml`
+- **Standardized Logging**: Project-wide consistent logging format for better readability
 - **Environment Variables**: Override settings with `.env` file
-- **Robust Logging**: Winston-based logging with rotation
 
 ## 🛠️ Installation
 
@@ -58,9 +61,10 @@ npm start
 
 **Configuration:**
 1. **Bot Mode**: Select "Quest Farming" or "Raid Backup"
-2. **Quest URL** (Quest mode only): Enter the quest URL to farm
-3. **Max Runs**: Set the number of runs (0 for unlimited)
-4. **Battle Mode**: Choose "Full Auto" or "Semi Auto"
+2. **Browser Type**: Choose between "Chromium" (default) or "Microsoft Edge"
+3. **Quest URL** (Quest mode only): Enter the quest URL to farm
+4. **Max Runs**: Set the number of runs (0 for unlimited)
+5. **Battle Mode**: Choose "Full Auto" or "Semi Auto"
 
 **Controls:**
 - **Open Browser**: Launch the controlled browser window
@@ -113,6 +117,7 @@ npm run cli -- raid --mode full_auto
 max_quests: 0        # 0 = unlimited
 max_raids: 0         # 0 = unlimited
 headless: false      # Show browser window
+browser_type: "edge" # "chromium" or "edge"
 ```
 
 ### Browser Resolution
@@ -206,7 +211,10 @@ This tool is for **educational purposes only**. Use responsibly:
 Click "Reload App" in the GUI to restart and load code changes without closing the terminal.
 
 ### Logging
-Logs are stored in `logs/` directory with automatic rotation. Check `combined.log` for all events and `error.log` for errors only.
+Logs use standardized prefixes (e.g., `[Wait]`, `[Bot]`, `[Quest]`) and are stored in the `logs/` directory with automatic rotation. 
+- `combined.log`: All events
+- `error.log`: Errors only
+- **GUI Console**: Real-time display of logs within the desktop app dashboard.
 
 ## 📝 License
 
