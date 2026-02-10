@@ -26,10 +26,10 @@ class RaidBot {
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
-        logger.info('Set viewport to 1000x1799');
+        logger.info('[Core] Set viewport to 1000x1799');
 
         logger.info('[Bot] Bot started. Good luck!');
-        logger.info(`Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
+        logger.info(`[Bot] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
 
         try {
             while (this.isRunning) {
@@ -40,7 +40,7 @@ class RaidBot {
 
                 // Check raid limit
                 if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
-                    logger.info(`Raid limit reached: ${this.raidsCompleted}/${this.maxRaids}`);
+                    logger.info(`[Bot] Raid limit reached: ${this.raidsCompleted}/${this.maxRaids}`);
                     break;
                 }
 
@@ -53,7 +53,7 @@ class RaidBot {
                 await sleep(randomDelay(500, 1000));
             }
         } catch (error) {
-            logger.error('Raid bot error:', error);
+            logger.error('[Error] [Bot] Raid bot error:', error);
             throw error;
         } finally {
             this.isRunning = false;
@@ -67,7 +67,7 @@ class RaidBot {
         const joined = await this.findAndJoinRaid();
 
         if (!joined) {
-            logger.warn('Failed to join raid, will retry');
+            logger.warn('[Raid] Failed to join raid, will retry');
             return;
         }
 
@@ -76,7 +76,7 @@ class RaidBot {
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
-            logger.info('Bot stopped before battle execution');
+            logger.info('[Bot] Stopped before battle execution');
             return;
         }
 
@@ -108,7 +108,7 @@ class RaidBot {
 
             // Check for error popup first
             if (await this.handleErrorPopup()) {
-                logger.info('Error popup detected, refreshing page...');
+                logger.info('[Wait] Error popup detected, refreshing page...');
                 await this.controller.page.reload();
                 await sleep(randomDelay(1500, 2500));
                 continue;
@@ -118,7 +118,7 @@ class RaidBot {
             const raidSelector = '.btn-multi-raid.lis-raid.search';
 
             if (await this.controller.elementExists(raidSelector, 2000)) {
-                logger.info('Found raid entry, clicking...');
+                logger.info('[Raid] Found raid entry, clicking...');
 
                 try {
                     await this.controller.clickSafe(raidSelector);
@@ -130,41 +130,41 @@ class RaidBot {
                     const inBattle = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
                     if (onSummonScreen || inBattle) {
-                        logger.info('Successfully joined raid');
+                        logger.info('[Raid] Successfully joined raid');
                         return true;
                     }
 
                     // Check for error popup after clicking
                     if (await this.handleErrorPopup()) {
-                        logger.warn('Raid was full or unavailable, refreshing...');
+                        logger.warn('[Wait] Raid was full or unavailable, refreshing...');
                         await this.controller.page.reload();
                         await sleep(randomDelay(1500, 2500));
                         continue;
                     }
 
                     // Unknown state, refresh and retry
-                    logger.warn('Unknown state after clicking raid, refreshing...');
+                    logger.warn('[Wait] Unknown state after clicking raid, refreshing...');
                     await this.controller.page.reload();
                     await sleep(randomDelay(1500, 2500));
 
                 } catch (error) {
-                    logger.error('Error clicking raid entry:', error);
+                    logger.error('[Error] [Raid] Error clicking raid entry:', error);
                     await this.controller.page.reload();
                     await sleep(randomDelay(1500, 2500));
                 }
 
             } else {
                 // No raids available, wait and refresh
-                logger.info('No raids available, waiting 5 seconds...');
+                logger.info('[Raid] No raids available, waiting 5 seconds...');
                 await sleep(5000);
 
-                logger.info('Refreshing page...');
+                logger.info('[Raid] Refreshing page...');
                 await this.controller.page.reload();
                 await sleep(randomDelay(1500, 2500));
             }
         }
 
-        logger.warn(`Failed to join raid after ${attempts} attempts`);
+        logger.warn(`[Wait] [Raid] Failed to join raid after ${attempts} attempts`);
         return false;
     }
 
@@ -173,12 +173,12 @@ class RaidBot {
         const errorPopupSelector = '.prt-popup-footer .btn-usual-ok';
 
         if (await this.controller.elementExists(errorPopupSelector, 1000)) {
-            logger.info('Error popup detected, clicking OK...');
+            logger.info('[Wait] Error popup detected, clicking OK...');
             try {
-                await this.controller.clickSafe(errorPopupSelector);
+                await closeButton.click();
                 await sleep(1000);
             } catch (error) {
-                logger.warn('Failed to click error popup OK button:', error);
+                logger.warn('[Wait] Failed to click error popup OK button:', error);
             }
             return true;
         }
@@ -187,7 +187,7 @@ class RaidBot {
     }
 
     async selectSummon() {
-        logger.info('Selecting summon...');
+        logger.info('[Summon] Selecting supporter...');
 
         // Wait for summon screen
         let retryCount = 0;
@@ -195,21 +195,21 @@ class RaidBot {
             if (await this.controller.elementExists('.prt-supporter-list', 5000)) {
                 break;
             }
-            logger.warn('Summon screen not found, retrying...');
+            logger.warn('[Wait] [Summon] screen not found, retrying...');
             retryCount++;
             await sleep(1000);
         }
 
         // Check for confirmation popup
         if (await this.controller.elementExists('.btn-usual-ok')) {
-            logger.info('Found confirmation popup, clicking OK...');
+            logger.info('[Wait] Found confirmation popup, clicking OK...');
             await this.controller.clickSafe('.btn-usual-ok');
             await sleep(1500);
 
             // Check if we moved to battle
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                logger.info('Moved to battle screen, skipping summon selection.');
+                logger.info('[Bot] Moved to battle screen, skipping summon selection.');
                 return;
             }
         }
@@ -217,14 +217,14 @@ class RaidBot {
         // Try to select first available summon
         const summonSelector = '.prt-supporter-detail';
         if (await this.controller.elementExists(summonSelector)) {
-            logger.info('Found summon, clicking...');
+            logger.info('[Summon] Found supporter, clicking...');
             await this.controller.clickSafe(summonSelector);
             // EST: Reduced delay for speed (0.2-0.5s)
             await sleep(randomDelay(200, 500));
 
             // Check for start confirmation popup
             if (await this.controller.elementExists('.btn-usual-ok')) {
-                logger.info('Found start confirmation popup, clicking OK...');
+                logger.info('[Wait] Found start confirmation popup, clicking OK...');
                 await this.controller.clickSafe('.btn-usual-ok');
             }
 
@@ -242,7 +242,7 @@ class RaidBot {
         for (const selector of summonSelectors) {
             if (await this.controller.elementExists(selector, 1000)) {
                 await this.controller.clickSafe(selector);
-                logger.info('Summon selected (fallback)');
+                logger.info('[Summon] Supporter selected (fallback)');
                 await sleep(randomDelay(500, 1000));
 
                 if (await this.controller.elementExists('.btn-usual-ok')) {
@@ -252,17 +252,17 @@ class RaidBot {
             }
         }
 
-        logger.warn('No summons available, proceeding anyway');
+        logger.warn('[Wait] [Summon] No supporters available, proceeding anyway');
     }
 
     pause() {
         this.isPaused = true;
-        logger.info('Raid Bot paused');
+        logger.info('[Bot] Raid Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        logger.info('Raid Bot resumed');
+        logger.info('[Bot] Raid Bot resumed');
     }
 
     stop() {
@@ -270,7 +270,7 @@ class RaidBot {
         if (this.battle) {
             this.battle.stop();
         }
-        logger.info('Raid Bot stop requested');
+        logger.info('[Bot] Raid Bot stop requested');
     }
 
     updateDetailStats(result) {

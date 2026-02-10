@@ -116,12 +116,12 @@ app.on('window-all-closed', async () => {
 ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceSettings = {}) => {
     // Prevent multiple browser instances
     if (browserManager) {
-        logger.info('Browser already open, reusing...');
+        logger.info('[Gui] Browser already open, reusing...');
         return { success: true, message: 'Browser already open' };
     }
 
     try {
-        logger.info(`Launching ${browserType} browser for manual login...`);
+        logger.info(`[Gui] Launching ${browserType} browser for manual login...`);
 
         // Override browser type in config
         const browserConfig = {
@@ -138,7 +138,7 @@ ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceS
 
         return { success: true };
     } catch (error) {
-        logger.error('Failed to launch browser:', error);
+        logger.error('[Error] Failed to launch browser:', error);
         return { success: false, message: error.message };
     }
 });
@@ -153,7 +153,7 @@ ipcMain.handle('bot:start', async (event, settings) => {
     }
 
     try {
-        logger.info(`Starting automation in ${settings.botMode} mode...`);
+        logger.info(`[Bot] Starting automation in ${settings.botMode} mode...`);
 
         const botMode = settings.botMode || 'quest';
 
@@ -197,7 +197,7 @@ ipcMain.handle('bot:start', async (event, settings) => {
                 true
             );
         }).catch(err => {
-            logger.error('Bot execution error:', err);
+            logger.error('[Error] [Bot] Execution error:', err);
             mainWindow.webContents.send('bot:status', 'Error');
 
             // Show error notification
@@ -210,7 +210,7 @@ ipcMain.handle('bot:start', async (event, settings) => {
 
         return { success: true };
     } catch (error) {
-        logger.error('Failed to start bot:', error);
+        logger.error('[Error] [Bot] Failed to start:', error);
         return { success: false, message: error.message };
     }
 });
@@ -221,7 +221,7 @@ ipcMain.handle('bot:stop', async () => {
         botInstance = null;
     }
     // Do NOT close browserManager here
-    logger.info('Bot stopped from GUI (Browser kept open)');
+    logger.info('[Gui] Bot stopped (Browser kept open)');
     return { success: true };
 });
 
@@ -239,7 +239,7 @@ ipcMain.handle('bot:reset-stats', () => {
         botInstance.battleTimes = [];
         botInstance.questsCompleted = 0;
         botInstance.raidsCompleted = 0;
-        logger.info('Stats reset from GUI');
+        logger.info('[Gui] Stats reset');
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
@@ -257,10 +257,10 @@ ipcMain.handle('credentials:save', async (event, credentials) => {
         };
 
         writeFileSync(credPath, yaml.dump(credData), 'utf8');
-        logger.info('Credentials saved successfully');
+        logger.info('[Gui] Credentials saved successfully');
         return { success: true };
     } catch (error) {
-        logger.error('Failed to save credentials:', error.message);
+        logger.error('[Error] [Gui] Failed to save credentials:', error.message);
         return { success: false, message: error.message };
     }
 });
@@ -281,13 +281,13 @@ ipcMain.handle('credentials:load', async () => {
             credentials: data && data.mobage ? data.mobage : null
         };
     } catch (error) {
-        logger.error('Failed to load credentials:', error.message);
+        logger.error('[Error] [Gui] Failed to load credentials:', error.message);
         return { success: false, message: error.message };
     }
 });
 
 ipcMain.handle('app:restart', async () => {
-    logger.info('Restarting application...');
+    logger.info('[Gui] Restarting application...');
     app.relaunch();
     app.exit(0);
 });

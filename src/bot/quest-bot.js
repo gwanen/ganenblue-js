@@ -26,10 +26,10 @@ class QuestBot {
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
-        logger.info('Set viewport to 1000x1799');
+        logger.info('[Core] Set viewport to 1000x1799');
 
         logger.info('[Bot] Bot started. Good luck!');
-        logger.info(`Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
+        logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
 
         try {
             while (this.isRunning) {
@@ -40,7 +40,7 @@ class QuestBot {
 
                 // Check quest limit
                 if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    logger.info(`Quest limit reached: ${this.questsCompleted}/${this.maxQuests}`);
+                    logger.info(`[Bot] Quest limit reached: ${this.questsCompleted}/${this.maxQuests}`);
                     break;
                 }
 
@@ -53,7 +53,7 @@ class QuestBot {
                 await sleep(randomDelay(500, 1000));
             }
         } catch (error) {
-            logger.error('Quest bot error:', error);
+            logger.error('[Error] [Bot] Quest bot error:', error);
             throw error;
         } finally {
             this.isRunning = false;
@@ -74,11 +74,11 @@ class QuestBot {
         const isBattle = isRaidUrl || await this.controller.elementExists('.btn-auto', 2000);
 
         if (isBattle) {
-            logger.info('Detected battle state after navigation. Resuming...');
+            logger.info('[Wait] Detected battle state after navigation. Resuming...');
 
             // Check if bot was stopped before starting battle
             if (!this.isRunning) {
-                logger.info('Bot stopped before battle execution');
+                logger.info('[Bot] Stopped before battle execution');
                 return;
             }
 
@@ -99,7 +99,7 @@ class QuestBot {
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
-            logger.info('Bot stopped before battle execution');
+            logger.info('[Bot] Stopped before battle execution');
             return;
         }
 
@@ -119,7 +119,7 @@ class QuestBot {
     }
 
     async selectSummon() {
-        logger.info('Selecting summon...');
+        logger.info('[Summon] Selecting supporter...');
 
         // Wait for summon screen (retry a few times)
         let retryCount = 0;
@@ -127,7 +127,7 @@ class QuestBot {
             if (await this.controller.elementExists('.prt-supporter-list', 5000)) {
                 break;
             }
-            logger.warn('Summon screen not found, retrying...');
+            logger.warn('[Wait] [Summon] screen not found, retrying...');
             retryCount++;
             await sleep(1000);
         }
@@ -141,7 +141,7 @@ class QuestBot {
             // Check if we moved to battle
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                logger.info('Moved to battle screen, skipping summon selection.');
+                logger.info('[Bot] Moved to battle screen, skipping summon selection.');
                 return;
             }
         }
@@ -157,7 +157,7 @@ class QuestBot {
 
             // Double check URL before interaction
             if (this.controller.page.url().includes('#raid') || this.controller.page.url().includes('_raid')) {
-                logger.info('Moved to battle screen (pre-click check), skipping summon selection.');
+                logger.info('[Bot] Moved to battle screen (pre-click check), skipping summon selection.');
                 return;
             }
 
@@ -167,7 +167,7 @@ class QuestBot {
                 // If click fails, check if we entered battle (race condition)
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.info('Moved to battle screen (during click), ignoring error.');
+                    logger.info('[Bot] Moved to battle screen (during click), ignoring error.');
                     // Wait for battle to complete
                     const result = await this.battle.waitForBattleEnd();
 
@@ -186,7 +186,7 @@ class QuestBot {
 
             // Check for another confirmation popup after clicking summon (Start Quest)
             if (await this.controller.elementExists('.btn-usual-ok')) {
-                logger.info('Found start confirmation popup, clicking OK...');
+                logger.info('[Wait] Found start confirmation popup, clicking OK...');
                 await this.controller.clickSafe('.btn-usual-ok');
             }
 
@@ -203,7 +203,7 @@ class QuestBot {
         for (const selector of summonSelectors) {
             if (await this.controller.elementExists(selector, 1000)) {
                 await this.controller.clickSafe(selector);
-                logger.info('Summon selected (fallback)');
+                logger.info('[Summon] Supporter selected (fallback)');
                 await sleep(randomDelay(500, 1000));
 
                 // Check confirmation again
@@ -217,18 +217,18 @@ class QuestBot {
         // Check if no summons found after trying fallbacks
         // Instead of throwing error, we'll log warning and try to proceed to battle check
         // This handles cases where summon selection was skipped or handled externally
-        logger.warn('No summon selected (from known lists), attempting to proceed to battle...');
+        logger.warn('[Wait] [Summon] No supporter selected, attempting to proceed...');
         return;
     }
 
     pause() {
         this.isPaused = true;
-        logger.info('Bot paused');
+        logger.info('[Bot] Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        logger.info('Bot resumed');
+        logger.info('[Bot] Bot resumed');
     }
 
     stop() {
@@ -236,7 +236,7 @@ class QuestBot {
         if (this.battle) {
             this.battle.stop();
         }
-        logger.info('Bot stop requested');
+        logger.info('[Bot] Bot stop requested');
     }
 
     updateDetailStats(result) {

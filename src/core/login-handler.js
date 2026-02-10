@@ -30,7 +30,7 @@ class LoginHandler {
             logger.info('[Login] ✓ Automated login completed successfully!');
             return true;
         } catch (error) {
-            logger.error('Login automation failed:', error.message);
+            logger.error('[Error] [Login] Automation failed:', error.message);
             return false;
         }
     }
@@ -49,7 +49,7 @@ class LoginHandler {
 
             await sleep(1000);
             await this.page.click(this.selectors.loginButton);
-            logger.info('✓ Clicked login button');
+            logger.info('[Login] ✓ Clicked login button');
 
             await sleep(2000);
         } catch (error) {
@@ -87,7 +87,7 @@ class LoginHandler {
                 this.page = pages[pages.length - 1];
                 logger.info('[Login] ✓ Switched to Mobage login tab');
             } else {
-                logger.info('Login page opened in same tab');
+                logger.info('[Login] Page opened in same tab');
             }
         } catch (error) {
             throw new Error('Mobage login option not found');
@@ -165,7 +165,7 @@ class LoginHandler {
 
             logger.info('[Login] ✓ Returned to GBF page');
         } catch (error) {
-            logger.warn('Close button not found - login may have completed already');
+            logger.warn('[Wait] [Login] Close button not found - login may have completed already');
         }
     }
 }

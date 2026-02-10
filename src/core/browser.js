@@ -4,6 +4,8 @@ import UserAgent from 'user-agents';
 import { existsSync, readFileSync } from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import logger from '../utils/logger.js';
+import { fileURLToPath } from 'url';
 import { fileURLToPath } from 'url';
 import LoginHandler from './login-handler.js';
 
@@ -51,9 +53,9 @@ class BrowserManager {
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 900;
-            console.log(`Using custom window size: ${windowWidth}x${windowHeight}`);
+            logger.info(`[Core] Using custom window size: ${windowWidth}x${windowHeight}`);
         } else {
-            console.log('Using default desktop mode');
+            logger.info('[Core] Using default desktop mode');
         }
 
         // Prepare launch options
@@ -83,9 +85,9 @@ class BrowserManager {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
-                console.log('Using Microsoft Edge:', edgePath);
+                logger.info(`[Core] Using Microsoft Edge: ${edgePath}`);
             } else {
-                console.warn('Edge not found, falling back to Chromium');
+                logger.warn('[Wait] Edge not found, falling back to Chromium');
             }
         }
 
@@ -154,7 +156,7 @@ class BrowserManager {
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            console.warn('Auto-login skipped:', error.message);
+            logger.warn(`[Wait] Auto-login skipped: ${error.message}`);
         }
     }
 
@@ -172,7 +174,7 @@ class BrowserManager {
             const fileContents = readFileSync(credPath, 'utf8');
             return yaml.load(fileContents);
         } catch (error) {
-            console.error('Failed to load credentials:', error.message);
+            logger.error(`[Error] [Core] Failed to load credentials: ${error.message}`);
             return null;
         }
     }

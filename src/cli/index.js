@@ -27,7 +27,7 @@ program.command('start')
     .option('--headless', 'Run in headless mode')
     .action(async (options) => {
         try {
-            logger.info('Starting bot via CLI...');
+            logger.info('[Cli] Starting bot...');
 
             // Override config with CLI options
             if (options.url) config.set('bot.quest_url', options.url);
@@ -38,7 +38,7 @@ program.command('start')
             // Validate required config
             const questUrl = config.get('bot.quest_url');
             if (!questUrl) {
-                logger.error('Error: Quest URL is required. Set it in config/default.yaml or pass --url option.');
+                logger.error('[Error] [Cli] Quest URL is required. Set it in config/default.yaml or pass --url option.');
                 process.exit(1);
             }
 
@@ -55,7 +55,7 @@ program.command('start')
 
             // Handle graceful shutdown
             process.on('SIGINT', async () => {
-                logger.info('Stopping bot...');
+                logger.info('[Wait] Stopping bot...');
                 bot.stop();
                 await browserManager.close();
                 process.exit(0);
@@ -65,10 +65,10 @@ program.command('start')
             await bot.start();
 
             await browserManager.close();
-            logger.info('Bot finished successfully.');
+            logger.info('[Cli] Finished successfully.');
 
         } catch (error) {
-            logger.error('Fatal error:', error);
+            logger.error('[Error] [Cli] Fatal error:', error);
             process.exit(1);
         }
     });
@@ -80,7 +80,7 @@ program.command('raid')
     .option('--headless', 'Run in headless mode')
     .action(async (options) => {
         try {
-            logger.info('Starting raid bot via CLI...');
+            logger.info('[Cli] Starting raid bot...');
 
             // Override config with CLI options
             if (options.max) config.set('bot.max_raids', parseInt(options.max));
@@ -102,7 +102,7 @@ program.command('raid')
 
             // Handle graceful shutdown
             process.on('SIGINT', async () => {
-                logger.info('Stopping bot...');
+                logger.info('[Wait] Stopping bot...');
                 bot.stop();
                 await browserManager.close();
                 process.exit(0);
@@ -112,10 +112,10 @@ program.command('raid')
             await bot.start();
 
             await browserManager.close();
-            logger.info('Bot finished successfully.');
+            logger.info('[Cli] Finished successfully.');
 
         } catch (error) {
-            logger.error('Fatal error:', error);
+            logger.error('[Error] [Cli] Fatal error:', error);
             process.exit(1);
         }
     });

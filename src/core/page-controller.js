@@ -28,7 +28,7 @@ class PageController {
             } catch (error) {
                 if (this.isNetworkError(error) && i < maxRetries - 1) {
                     const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-                    logger.warn(`Network error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
                     await sleep(waitTime);
                     continue;
                 }
@@ -49,7 +49,7 @@ class PageController {
             return true;
         } catch (error) {
             const currentUrl = this.page.url();
-            logger.debug(`Element not found: ${selector} (URL: ${currentUrl})`);
+            logger.debug(`[Debug] Element not found: ${selector} (URL: ${currentUrl})`);
             return false;
         }
     }
@@ -77,7 +77,7 @@ class PageController {
 
                 // Click
                 await this.page.click(selector);
-                logger.debug(`Clicked: ${selector}`);
+                logger.debug(`[Debug] Clicked: ${selector}`);
 
                 // Wait after click
                 if (waitAfter) {
@@ -86,7 +86,7 @@ class PageController {
 
                 return true;
             } catch (error) {
-                logger.warn(`Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
                 if (attempt === maxRetries) {
                     throw error;
                 }
@@ -119,7 +119,7 @@ class PageController {
      */
     async goto(url, options = {}) {
         return this.retryOnNetworkError(async () => {
-            logger.info(`Navigated to: ${url}`);
+            logger.info(`[Core] Navigating to: ${url}`);
             return await this.page.goto(url, {
                 waitUntil: 'domcontentloaded',
                 timeout: 60000, // 60s timeout
