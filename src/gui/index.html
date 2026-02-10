@@ -730,7 +730,29 @@
         <div class="panel controls-panel">
             <h3>Configuration</h3>
 
-            <div class="button-section">
+            <!-- Credentials Section (collapsible) -->
+            <div class="collapsible-header" onclick="toggleSection('credentials')">
+                <span class="collapsible-title">🔐 Auto-Login Credentials</span>
+                <span class="collapsible-chevron" id="credentials-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="credentials-content">
+                <div class="form-group">
+                    <label for="mobage-email">Mobage Email</label>
+                    <input type="email" id="mobage-email" placeholder="your.email@example.com" value="">
+                </div>
+
+                <div class="form-group">
+                    <label for="mobage-password">Mobage Password</label>
+                    <input type="password" id="mobage-password" placeholder="Your password" value="">
+                </div>
+
+                <button id="btn-save-credentials"
+                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
+                    Save Credentials
+                </button>
+            </div>
+
+            <div class="button-section" style="margin-top: 15px;">
                 <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
                 </h4>
                 <button id="btn-launch" class="btn-launch">Open Browser</button>
@@ -784,28 +806,6 @@
                 </select>
             </div>
 
-            <!-- Credentials Section (collapsible) -->
-            <div class="collapsible-header" onclick="toggleSection('credentials')">
-                <span class="collapsible-title">🔐 Auto-Login Credentials</span>
-                <span class="collapsible-chevron" id="credentials-chevron">▼</span>
-            </div>
-            <div class="collapsible-content" id="credentials-content">
-                <div class="form-group">
-                    <label for="mobage-email">Mobage Email</label>
-                    <input type="email" id="mobage-email" placeholder="your.email@example.com" value="">
-                </div>
-
-                <div class="form-group">
-                    <label for="mobage-password">Mobage Password</label>
-                    <input type="password" id="mobage-password" placeholder="Your password" value="">
-                </div>
-
-                <button id="btn-save-credentials"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
-                    Save Credentials
-                </button>
-            </div>
-
             <!-- Device Emulation Section (collapsible) -->
             <div class="collapsible-header" onclick="toggleSection('device')">
                 <span class="collapsible-title">📱 Device & Window Size</span>
@@ -834,7 +834,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
 
         <!-- Logs & Stats -->
