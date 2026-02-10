@@ -181,7 +181,7 @@ btnLaunch.addEventListener('click', async () => {
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
         btnLaunch.disabled = false;
-        btnLaunch.textContent = '1. Open Browser';
+        btnLaunch.textContent = 'Launch Browser';
     }
 });
 
@@ -364,4 +364,5 @@ setInterval(async () => {
                 battleTimesContainer.innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
             }
         }
-    }, 1000);
+    }
+}, 1000);
