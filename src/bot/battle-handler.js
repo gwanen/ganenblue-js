@@ -167,17 +167,11 @@ class BattleHandler {
                 return { duration, turns: turnCount };
             }
 
-            // Check turn number (safely)
-            try {
-                const currentTurn = await this.getTurnNumber();
-                if (currentTurn > lastTurn) {
-                    lastTurn = currentTurn;
-                    turnCount = currentTurn;
-                    logger.info(`[Turn ${currentTurn}]`);
-                }
-            } catch (e) {
-                // Ignore
-            }
+            // 1. Check turn number (safely)
+            const context = { lastTurn, turnCount };
+            await this.updateTurnCount(context);
+            lastTurn = context.lastTurn;
+            turnCount = context.turnCount;
 
             const currentUrl = this.controller.page.url();
 
@@ -210,6 +204,12 @@ class BattleHandler {
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                     await sleep(1200); // Reduced from 3000ms for snappier response
 
+                    // Proactively check turn after reload but before FA enable
+                    const reloadContext = { lastTurn, turnCount };
+                    await this.updateTurnCount(reloadContext);
+                    lastTurn = reloadContext.lastTurn;
+                    turnCount = reloadContext.turnCount;
+
                     if (await this.checkStateAndResume(mode)) {
                         return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                     }
@@ -234,6 +234,12 @@ class BattleHandler {
                         logger.warn('[Wait] UI missing (stuck). Refreshing...');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                         await sleep(1200);
+
+                        // Proactively check turn after reload but before FA enable
+                        const stuckContext = { lastTurn, turnCount };
+                        await this.updateTurnCount(stuckContext);
+                        lastTurn = stuckContext.lastTurn;
+                        turnCount = stuckContext.turnCount;
 
                         if (await this.checkStateAndResume(mode)) {
                             return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
@@ -325,6 +331,25 @@ class BattleHandler {
             return true;
         }
 
+        return false;
+    }
+
+    /**
+     * Helper to update and log turn number.
+     * Takes a context object { lastTurn, turnCount } to update by reference.
+     */
+    async updateTurnCount(context) {
+        try {
+            const currentTurn = await this.getTurnNumber();
+            if (currentTurn > context.lastTurn) {
+                context.lastTurn = currentTurn;
+                context.turnCount = currentTurn;
+                logger.info(`[Turn ${currentTurn}]`);
+                return true;
+            }
+        } catch (e) {
+            // Ignore
+        }
         return false;
     }
 
