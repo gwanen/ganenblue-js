@@ -439,7 +439,7 @@ btnStart.addEventListener('click', async () => {
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
         battleMode: selectBattleMode.value,
-        honorTarget: cleanHonorsValue(inputHonorTarget.value)
+        honorTarget: parseInt(cleanHonorsValue(inputHonorTarget.value), 10) || 0
     };
 
     // Validate quest mode requires URL

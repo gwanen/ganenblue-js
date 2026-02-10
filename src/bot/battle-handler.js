@@ -125,7 +125,7 @@ class BattleHandler {
     }
 
     async waitForBattleEnd(mode) {
-        const honorTarget = this.options?.honorTarget || 0;
+        const honorTarget = parseInt(this.options?.honorTarget, 10) || 0;
         const maxWaitMinutes = config.get('bot.max_battle_time') || 15;
         const maxWaitMs = maxWaitMinutes * 60 * 1000;
         const startTime = Date.now();
@@ -156,19 +156,12 @@ class BattleHandler {
 
             // 1. Check turn number (safely)
             const context = { lastTurn, turnCount };
-            const turnChanged = await this.updateTurnCount(context);
+            const turnChanged = await this.updateTurnCount(context, honorTarget);
             lastTurn = context.lastTurn;
             turnCount = context.turnCount;
 
-            if (turnChanged && honorTarget > 0) {
-                // Wait a bit for honor points to update in DOM after turn change
-                await sleep(500);
-                const currentHonors = await this.getHonors();
-                if (currentHonors >= honorTarget) {
-                    logger.info(`[Target] Honor goal reached: ${currentHonors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                    // Return early
-                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
-                }
+            if (turnChanged && turnChanged.honorReached) {
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
             }
 
             const currentUrl = this.controller.page.url();
@@ -212,12 +205,16 @@ class BattleHandler {
 
                     // Proactively check turn after reload but before FA enable
                     const reloadContext = { lastTurn, turnCount };
-                    await this.updateTurnCount(reloadContext);
+                    const reloadResult = await this.updateTurnCount(reloadContext, honorTarget);
                     lastTurn = reloadContext.lastTurn;
                     turnCount = reloadContext.turnCount;
 
+                    if (reloadResult?.honorReached) {
+                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                    }
+
                     if (await this.checkStateAndResume(mode)) {
-                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: reloadResult?.honorReached || false };
                     }
                     continue;
                 }
@@ -243,12 +240,16 @@ class BattleHandler {
 
                         // Proactively check turn after reload but before FA enable
                         const stuckContext = { lastTurn, turnCount };
-                        await this.updateTurnCount(stuckContext);
+                        const stuckResult = await this.updateTurnCount(stuckContext, honorTarget);
                         lastTurn = stuckContext.lastTurn;
                         turnCount = stuckContext.turnCount;
 
+                        if (stuckResult?.honorReached) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                        }
+
                         if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: stuckResult?.honorReached || false };
                         }
                         missingUiCount = 0;
                     }
@@ -336,20 +337,29 @@ class BattleHandler {
      * Helper to update and log turn number.
      * Takes a context object { lastTurn, turnCount } to update by reference.
      */
-    async updateTurnCount(context) {
+    async updateTurnCount(context, honorTarget = 0) {
         try {
             const currentTurn = await this.getTurnNumber();
             if (currentTurn > context.lastTurn) {
                 context.lastTurn = currentTurn;
                 context.turnCount = currentTurn;
+
+                // Wait exactly for DOM to update
+                await sleep(400);
                 const honors = await this.getHonors();
                 logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
-                return true;
+
+                const honorReached = honorTarget > 0 && honors >= honorTarget;
+                if (honorReached) {
+                    logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                }
+
+                return { turnChanged: true, honorReached, honors };
             }
         } catch (e) {
             // Ignore
         }
-        return false;
+        return { turnChanged: false, honorReached: false };
     }
 
     async getHonors() {
