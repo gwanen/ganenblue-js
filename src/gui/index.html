@@ -834,12 +834,9 @@
             </div>
         </div>
 
-        <!-- Logs -->
+        <!-- Logs & Stats -->
         <div class="panel">
-            <h3>Logs</h3>
-            <div id="log-container"></div>
-
-            <h3 style="margin-top: 10px; font-size: 13px;">Performance</h3>
+            <h3 style="font-size: 13px;">Performance</h3>
 
             <!-- Stats Grid -->
             <div class="stats-grid" id="stats-grid">
@@ -870,7 +867,7 @@
             </div>
 
             <!-- Progress Bar (hidden by default) -->
-            <div class="progress-section" id="progress-section" style="display: none;">
+            <div class="progress-section" id="progress-section" style="display: none; margin-bottom: 12px;">
                 <div class="progress-info">
                     <span class="progress-label">Progress</span>
                     <span class="progress-percent" id="progress-percent">0%</span>
@@ -885,6 +882,9 @@
                     <span id="progress-remaining">-- remaining</span>
                 </div>
             </div>
+
+            <h3 style="margin-top: 5px;">Logs</h3>
+            <div id="log-container" style="height: 380px;"></div>
 
             <h3 style="margin-top: 15px; font-size: 13px;">Battle History</h3>
             <div id="battle-times-display"
