@@ -23,10 +23,9 @@ class BattleHandler {
         this.stopped = true;
     }
 
-    /**
-     * Handle full battle flow
-     */
-    async executeBattle(mode = 'full_auto') {
+    async executeBattle(mode = 'full_auto', options = {}) {
+        this.stopped = false;
+        this.options = options; // Store options like honorTarget
         // Start timing
         this.battleStartTime = Date.now();
         logger.info(`[Battle] Engaging encounter (${mode})`);
@@ -141,11 +140,9 @@ class BattleHandler {
         }
     }
 
-    /**
-     * Wait for battle to finish
-     */
-    async waitForBattleEnd(mode, maxWaitMinutes = 10) {
-        this.stopped = false; // Reset stop flag
+    async waitForBattleEnd(mode) {
+        const honorTarget = this.options?.honorTarget || 0;
+        const maxWaitMinutes = config.get('bot.max_battle_time') || 15;
         const maxWaitMs = maxWaitMinutes * 60 * 1000;
         const startTime = Date.now();
         const checkInterval = 1000;
@@ -157,7 +154,13 @@ class BattleHandler {
 
         logger.info('[Wait] Resolving turn...');
         if (turnCount > 0) {
-            logger.info(`[Turn ${turnCount}]`);
+            const honors = await this.getHonors();
+            logger.info(`[Turn ${turnCount}] (${honors.toLocaleString()} honor)`);
+
+            if (honorTarget > 0 && honors >= honorTarget) {
+                logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+            }
         }
 
         while (Date.now() - startTime < maxWaitMs) {
@@ -169,9 +172,18 @@ class BattleHandler {
 
             // 1. Check turn number (safely)
             const context = { lastTurn, turnCount };
-            await this.updateTurnCount(context);
+            const turnChanged = await this.updateTurnCount(context);
             lastTurn = context.lastTurn;
             turnCount = context.turnCount;
+
+            if (turnChanged && honorTarget > 0) {
+                const currentHonors = await this.getHonors();
+                if (currentHonors >= honorTarget) {
+                    logger.info(`[Target] Honor goal reached: ${currentHonors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                    // Return early
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                }
+            }
 
             const currentUrl = this.controller.page.url();
 
@@ -344,13 +356,29 @@ class BattleHandler {
             if (currentTurn > context.lastTurn) {
                 context.lastTurn = currentTurn;
                 context.turnCount = currentTurn;
-                logger.info(`[Turn ${currentTurn}]`);
+                const honors = await this.getHonors();
+                logger.info(`[Turn ${currentTurn}] (${honors.toLocaleString()} honor)`);
                 return true;
             }
         } catch (e) {
             // Ignore
         }
         return false;
+    }
+
+    async getHonors() {
+        try {
+            return await this.controller.page.evaluate(() => {
+                const userRow = document.querySelector('.lis-user.guild-member');
+                if (!userRow) return 0;
+                const pointEl = userRow.querySelector('.txt-point');
+                if (!pointEl) return 0;
+                const honorsStr = pointEl.textContent.replace(/,/g, '').replace('pt', '').trim();
+                return parseInt(honorsStr, 10) || 0;
+            });
+        } catch (e) {
+            return 0;
+        }
     }
 
     async getTurnNumber() {

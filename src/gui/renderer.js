@@ -16,6 +16,8 @@ const checkboxEnableCustom = document.getElementById('enable-custom-size');
 const inputWindowWidth = document.getElementById('window-width');
 const inputWindowHeight = document.getElementById('window-height');
 const customSizeContainer = document.getElementById('custom-size-inputs');
+const inputHonorTarget = document.getElementById('honor-target');
+const honorTargetGroup = document.getElementById('honor-target-group');
 
 // === Toast Notifications ===
 function showToast(message, type = 'info', duration = 3000) {
@@ -109,7 +111,8 @@ function saveSettings() {
         battleMode: selectBattleMode.value,
         customSize: checkboxEnableCustom.checked,
         windowWidth: inputWindowWidth.value,
-        windowHeight: inputWindowHeight.value
+        windowHeight: inputWindowHeight.value,
+        honorTarget: inputHonorTarget.value
     };
     localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
@@ -127,6 +130,7 @@ function loadSettings() {
             checkboxEnableCustom.checked = settings.customSize || false;
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
+            inputHonorTarget.value = settings.honorTarget || 0;
 
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
@@ -154,9 +158,11 @@ function updateUIForBotMode() {
     if (mode === 'quest') {
         questUrlGroup.style.display = 'flex';
         maxRunsLabel.textContent = 'Max Quests';
+        honorTargetGroup.style.display = 'none';
     } else if (mode === 'raid') {
         questUrlGroup.style.display = 'none';
         maxRunsLabel.textContent = 'Max Raids';
+        honorTargetGroup.style.display = 'block';
     }
 }
 
@@ -189,6 +195,7 @@ inputMaxRuns.addEventListener('input', debouncedSave);
 checkboxEnableCustom.addEventListener('change', debouncedSave);
 inputWindowWidth.addEventListener('input', debouncedSave);
 inputWindowHeight.addEventListener('input', debouncedSave);
+inputHonorTarget.addEventListener('input', debouncedSave);
 
 // Custom Size Toggle Handler
 checkboxEnableCustom.addEventListener('change', () => {
@@ -409,7 +416,8 @@ btnStart.addEventListener('click', async () => {
         botMode: botMode,
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
-        battleMode: selectBattleMode.value
+        battleMode: selectBattleMode.value,
+        honorTarget: inputHonorTarget.value
     };
 
     // Validate quest mode requires URL

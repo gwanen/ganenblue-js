@@ -11,6 +11,7 @@ class RaidBot {
         this.raidBackupUrl = 'https://game.granbluefantasy.jp/#quest/assist';
         this.maxRaids = options.maxRaids || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
+        this.honorTarget = options.honorTarget || 0;
         this.selectors = config.selectors.raid;
 
         this.raidsCompleted = 0;
@@ -83,7 +84,7 @@ class RaidBot {
         }
 
         // Handle battle
-        const result = await this.battle.executeBattle(this.battleMode);
+        const result = await this.battle.executeBattle(this.battleMode, { honorTarget: this.honorTarget });
         this.updateDetailStats(result);
 
         // Store battle time and turns

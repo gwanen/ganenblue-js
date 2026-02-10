@@ -175,7 +175,8 @@ ipcMain.handle('bot:start', async (event, settings) => {
 
             botInstance = new RaidBot(browserManager.page, {
                 maxRaids: config.get('bot.max_raids'),
-                battleMode: config.get('bot.battle_mode')
+                battleMode: config.get('bot.battle_mode'),
+                honorTarget: parseInt(settings.honorTarget) || 0
             });
         } else {
             return { success: false, message: `Unknown bot mode: ${botMode}` };
