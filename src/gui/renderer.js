@@ -16,6 +16,8 @@ const checkboxEnableCustom = document.getElementById('enable-custom-size');
 const inputWindowWidth = document.getElementById('window-width');
 const inputWindowHeight = document.getElementById('window-height');
 const customSizeContainer = document.getElementById('custom-size-inputs');
+const inputHonorTarget = document.getElementById('honor-target');
+const honorTargetGroup = document.getElementById('honor-target-group');
 
 // === Toast Notifications ===
 function showToast(message, type = 'info', duration = 3000) {
@@ -109,7 +111,8 @@ function saveSettings() {
         battleMode: selectBattleMode.value,
         customSize: checkboxEnableCustom.checked,
         windowWidth: inputWindowWidth.value,
-        windowHeight: inputWindowHeight.value
+        windowHeight: inputWindowHeight.value,
+        honorTarget: cleanHonorsValue(inputHonorTarget.value)
     };
     localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
@@ -127,9 +130,7 @@ function loadSettings() {
             checkboxEnableCustom.checked = settings.customSize || false;
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
-
-            inputWindowWidth.value = settings.windowWidth || 500;
-            inputWindowHeight.value = settings.windowHeight || 850;
+            inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
 
             // Trigger UI updates
             updateUIForBotMode();
@@ -152,11 +153,13 @@ function loadSettings() {
 function updateUIForBotMode() {
     const mode = selectBotMode.value;
     if (mode === 'quest') {
-        questUrlGroup.style.display = 'flex';
+        questUrlGroup.style.display = 'block';
         maxRunsLabel.textContent = 'Max Quests';
+        honorTargetGroup.style.display = 'none';
     } else if (mode === 'raid') {
         questUrlGroup.style.display = 'none';
         maxRunsLabel.textContent = 'Max Raids';
+        honorTargetGroup.style.display = 'block';
     }
 }
 
@@ -189,10 +192,34 @@ inputMaxRuns.addEventListener('input', debouncedSave);
 checkboxEnableCustom.addEventListener('change', debouncedSave);
 inputWindowWidth.addEventListener('input', debouncedSave);
 inputWindowHeight.addEventListener('input', debouncedSave);
+inputHonorTarget.addEventListener('input', debouncedSave);
 
 // Custom Size Toggle Handler
 checkboxEnableCustom.addEventListener('change', () => {
     updateUIForCustomSize();
+});
+
+// Honor Target Formatting
+function formatHonorsInput(value) {
+    const numeric = value.toString().replace(/\D/g, '');
+    if (!numeric) return '0';
+    return parseInt(numeric, 10).toLocaleString('de-DE'); // Use de-DE or similar for dot separator
+}
+
+function cleanHonorsValue(value) {
+    return value.toString().replace(/\D/g, '') || '0';
+}
+
+inputHonorTarget.addEventListener('input', (e) => {
+    const cursor = e.target.selectionStart;
+    const oldVal = e.target.value;
+    const newVal = formatHonorsInput(e.target.value);
+    e.target.value = newVal;
+
+    // Adjust cursor position if dots were added/removed
+    const diff = newVal.length - oldVal.length;
+    e.target.setSelectionRange(cursor + diff, cursor + diff);
+    debouncedSave();
 });
 
 // Bot Mode Change Handler
@@ -390,9 +417,11 @@ btnLaunch.addEventListener('click', async () => {
         btnStart.disabled = false;
 
         // Hide credentials section after browser launches
-        const credSection = document.getElementById('credentials-section');
-        if (credSection) {
-            credSection.style.display = 'none';
+        const credContent = document.getElementById('credentials-content');
+        if (credContent) {
+            credContent.classList.remove('open');
+            const credChevron = document.getElementById('credentials-chevron');
+            if (credChevron) credChevron.textContent = '▼';
         }
     } else {
         addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
@@ -409,7 +438,8 @@ btnStart.addEventListener('click', async () => {
         botMode: botMode,
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
-        battleMode: selectBattleMode.value
+        battleMode: selectBattleMode.value,
+        honorTarget: parseInt(cleanHonorsValue(inputHonorTarget.value), 10) || 0
     };
 
     // Validate quest mode requires URL
@@ -558,10 +588,21 @@ function setRunningState(isRunning) {
     statusBadge.textContent = isRunning ? 'Running' : 'Stopped';
 
     // Disable inputs while running
-    selectBotMode.disabled = isRunning;
-    inputQuestUrl.disabled = isRunning;
-    inputMaxRuns.disabled = isRunning;
-    selectBattleMode.disabled = isRunning;
+    const inputs = [
+        selectBotMode,
+        inputQuestUrl,
+        inputMaxRuns,
+        selectBrowserType,
+        selectBattleMode,
+        inputHonorTarget,
+        checkboxEnableCustom,
+        inputWindowWidth,
+        inputWindowHeight
+    ];
+
+    inputs.forEach(input => {
+        if (input) input.disabled = isRunning;
+    });
 }
 
 // Poll for stats every second if running

@@ -10,6 +10,7 @@ class BattleHandler {
         this.stopped = false;
         this.battleStartTime = null;
         this.lastBattleDuration = 0;
+        this.lastHonors = 0;
     }
 
     formatTime(milliseconds) {
@@ -23,10 +24,10 @@ class BattleHandler {
         this.stopped = true;
     }
 
-    /**
-     * Handle full battle flow
-     */
-    async executeBattle(mode = 'full_auto') {
+    async executeBattle(mode = 'full_auto', options = {}) {
+        this.stopped = false;
+        this.options = options; // Store options like honorTarget
+        this.lastHonors = 0; // Reset honor for new battle
         // Start timing
         this.battleStartTime = Date.now();
         logger.info(`[Battle] Engaging encounter (${mode})`);
@@ -115,37 +116,17 @@ class BattleHandler {
             await this.controller.clickSafe(this.selectors.attackButton);
             logger.info('[SA] Attack initiated');
 
-            // Enable Auto (not Full Auto) with 5s timeout
-            const found = await this.controller.waitForElement(this.selectors.autoButton, 5000);
-            if (found) {
-                await sleep(400); // Reduced from randomDelay(500, 1000)
-                await this.controller.clickSafe(this.selectors.autoButton);
-                logger.info('[SA] Auto mode enabled');
-
-                // Skill Kill Protection
-                await sleep(400);
-                const stillExists = await this.controller.elementExists(this.selectors.autoButton, 300);
-                if (!stillExists) {
-                    const url = this.controller.page.url();
-                    if (!url.includes('#result') && !url.includes('#quest/index')) {
-                        logger.warn('[Wait] Auto button vanished without result. Refreshing state...');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await this.checkStateAndResume('semi_auto');
-                    }
-                }
-            } else {
-                logger.warn('[Wait] Auto button timeout. Refreshing page...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await this.checkStateAndResume('semi_auto');
-            }
+            // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
+        } else {
+            logger.warn('[Wait] Attack button timeout. Refreshing page...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await this.checkStateAndResume('semi_auto');
         }
     }
 
-    /**
-     * Wait for battle to finish
-     */
-    async waitForBattleEnd(mode, maxWaitMinutes = 10) {
-        this.stopped = false; // Reset stop flag
+    async waitForBattleEnd(mode) {
+        const honorTarget = parseInt(this.options?.honorTarget, 10) || 0;
+        const maxWaitMinutes = config.get('bot.max_battle_time') || 15;
         const maxWaitMs = maxWaitMinutes * 60 * 1000;
         const startTime = Date.now();
         const checkInterval = 1000;
@@ -157,7 +138,13 @@ class BattleHandler {
 
         logger.info('[Wait] Resolving turn...');
         if (turnCount > 0) {
-            logger.info(`[Turn ${turnCount}]`);
+            const honors = await this.getHonors();
+            logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
+
+            if (honorTarget > 0 && honors >= honorTarget) {
+                logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+            }
         }
 
         while (Date.now() - startTime < maxWaitMs) {
@@ -169,14 +156,23 @@ class BattleHandler {
 
             // 1. Check turn number (safely)
             const context = { lastTurn, turnCount };
-            await this.updateTurnCount(context);
+            const turnChanged = await this.updateTurnCount(context, honorTarget);
             lastTurn = context.lastTurn;
             turnCount = context.turnCount;
 
+            if (turnChanged && turnChanged.honorReached) {
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+            }
+
             const currentUrl = this.controller.page.url();
 
-            // 1. Definite End: Result URL
+            // 1. Definite End: Result URL or Empty Result Notice
             if (currentUrl.includes('#result')) {
+                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+            }
+
+            if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                logger.info('[Wait] Empty result screen detected.');
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
@@ -196,7 +192,15 @@ class BattleHandler {
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
             }
 
-            // 4. Raid Logic (while on raid page)
+            // 4. Raid Ended popup (Join phase race condition)
+            if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
+                logger.info('[Raid] Battle already ended.');
+                await this.controller.clickSafe(this.selectors.raidEndedOkButton);
+                await sleep(1000);
+                return { duration: 0, turns: 0, raidEnded: true };
+            }
+
+            // 5. Raid Logic (while on raid page)
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                 // Animation Skipping (Immediate Reload)
                 if (await this.controller.elementExists('.btn-attack-start.display-off', 150)) {
@@ -206,12 +210,16 @@ class BattleHandler {
 
                     // Proactively check turn after reload but before FA enable
                     const reloadContext = { lastTurn, turnCount };
-                    await this.updateTurnCount(reloadContext);
+                    const reloadResult = await this.updateTurnCount(reloadContext, honorTarget);
                     lastTurn = reloadContext.lastTurn;
                     turnCount = reloadContext.turnCount;
 
+                    if (reloadResult?.honorReached) {
+                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                    }
+
                     if (await this.checkStateAndResume(mode)) {
-                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: reloadResult?.honorReached || false };
                     }
                     continue;
                 }
@@ -237,12 +245,16 @@ class BattleHandler {
 
                         // Proactively check turn after reload but before FA enable
                         const stuckContext = { lastTurn, turnCount };
-                        await this.updateTurnCount(stuckContext);
+                        const stuckResult = await this.updateTurnCount(stuckContext, honorTarget);
                         lastTurn = stuckContext.lastTurn;
                         turnCount = stuckContext.turnCount;
 
+                        if (stuckResult?.honorReached) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                        }
+
                         if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: stuckResult?.honorReached || false };
                         }
                         missingUiCount = 0;
                     }
@@ -251,7 +263,8 @@ class BattleHandler {
                 // Note: We deliberately do NOT check for OK button here to avoid premature exit on popups.
             } else {
                 // 5. Backup for non-raid URLs (Event quests, etc)
-                if (await this.controller.elementExists(this.selectors.okButton, 300)) {
+                if (await this.controller.elementExists(this.selectors.okButton, 300) ||
+                    await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
             }
@@ -279,9 +292,10 @@ class BattleHandler {
             return true;
         }
 
-        // 2. Check for OK button (completion modal)
-        if (await this.controller.elementExists(this.selectors.okButton, 2000)) {
-            logger.info('[Cleared] Battle finished during reload');
+        // 2. Check for OK button (completion modal) or Empty Result Notice
+        if (await this.controller.elementExists(this.selectors.okButton, 2000) ||
+            await this.controller.elementExists(this.selectors.emptyResultNotice, 500)) {
+            logger.info('[Cleared] Battle finished');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             return true;
         }
@@ -307,21 +321,13 @@ class BattleHandler {
                     }
                 }
             } else if (mode === 'semi_auto') {
-                const autoFound = await this.controller.waitForElement(this.selectors.autoButton, 3000);
-                if (autoFound) {
-                    await this.controller.clickSafe(this.selectors.autoButton);
-                    logger.info('[SA] Auto mode enabled (after refresh)');
-
-                    // Verification check
-                    await sleep(1000);
-                    if (!await this.controller.elementExists(this.selectors.autoButton, 500)) {
-                        const url = this.controller.page.url();
-                        if (!url.includes('#result') && !url.includes('#quest/index')) {
-                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                            return await this.checkStateAndResume(mode);
-                        }
-                    }
+                // For Semi-Auto, click Attack if available
+                const attackFound = await this.controller.elementExists(this.selectors.attackButton, 500);
+                if (attackFound) {
+                    await this.controller.clickSafe(this.selectors.attackButton);
+                    logger.info('[SA] Attack initiated (after refresh)');
                 }
+                // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
             }
         }
 
@@ -338,19 +344,64 @@ class BattleHandler {
      * Helper to update and log turn number.
      * Takes a context object { lastTurn, turnCount } to update by reference.
      */
-    async updateTurnCount(context) {
+    async updateTurnCount(context, honorTarget = 0) {
         try {
             const currentTurn = await this.getTurnNumber();
             if (currentTurn > context.lastTurn) {
                 context.lastTurn = currentTurn;
                 context.turnCount = currentTurn;
-                logger.info(`[Turn ${currentTurn}]`);
-                return true;
+
+                // Wait exactly for DOM to update
+                await sleep(400);
+                const honors = await this.getHonors();
+                logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
+
+                const honorReached = honorTarget > 0 && honors >= honorTarget;
+                if (honorReached) {
+                    logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                }
+
+                return { turnChanged: true, honorReached, honors };
             }
         } catch (e) {
             // Ignore
         }
-        return false;
+        return { turnChanged: false, honorReached: false };
+    }
+
+    async getHonors() {
+        let retries = 3;
+        while (retries > 0) {
+            try {
+                const honors = await this.controller.page.evaluate(() => {
+                    const userRow = document.querySelector('.lis-user.guild-member');
+                    if (!userRow) return null; // Distinguish between "not found" and "0"
+                    const pointEl = userRow.querySelector('.txt-point');
+                    if (!pointEl) return null;
+                    const honorsStr = pointEl.textContent.replace(/,/g, '').replace('pt', '').trim();
+                    return parseInt(honorsStr, 10) || 0;
+                });
+
+                // If we found a value (even 0), check if it makes sense
+                if (honors !== null) {
+                    // Regression protection: If it's 0 but we previously had honors, 
+                    // it might be a transient loading state.
+                    if (honors === 0 && this.lastHonors > 0 && retries > 1) {
+                        await sleep(500);
+                        retries--;
+                        continue;
+                    }
+                    this.lastHonors = honors;
+                    return honors;
+                }
+            } catch (e) {
+                // Ignore
+            }
+
+            await sleep(500);
+            retries--;
+        }
+        return this.lastHonors; // Fallback to last known honors
     }
 
     async getTurnNumber() {

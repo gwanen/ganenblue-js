@@ -752,7 +752,55 @@
     <div class="container">
         <!-- Controls -->
         <div class="panel controls-panel">
-            <h3>Configuration</h3>
+            <h3>Farming Setup</h3>
+
+            <div class="form-group">
+                <label for="bot-mode">Bot Mode</label>
+                <select id="bot-mode">
+                    <option value="quest">Quest Farming</option>
+                    <option value="raid">Raid Backup</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="quest-url-group">
+                <label for="quest-url">Quest URL</label>
+                <input type="text" id="quest-url" placeholder="http://game.granbluefantasy.jp/..." value="">
+                <div class="error-message" id="quest-url-error">Please enter a valid GBF quest URL</div>
+            </div>
+
+            <div class="form-group" id="honor-target-group" style="display: none;">
+                <label for="honor-target">Honor Target (0 = Full Raid)</label>
+                <input type="text" id="honor-target" value="0" placeholder="e.g. 1.000.000">
+            </div>
+
+            <div class="form-group" id="max-runs-group">
+                <label for="max-runs"><span id="max-runs-label">Max Quests</span> (0 = Unlimited)</label>
+                <input type="number" id="max-runs" value="0" min="0">
+            </div>
+
+            <div class="form-group">
+                <label for="battle-mode">Battle Mode</label>
+                <select id="battle-mode">
+                    <option value="full_auto">Full Auto</option>
+                    <option value="semi_auto">Semi Auto</option>
+                </select>
+            </div>
+
+            <hr>
+
+            <div class="button-section">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
+                    Actions</h4>
+                <div class="btn-group">
+                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
+                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
+                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
+                </div>
+                <button id="btn-launch" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
+            </div>
+
+            <hr>
 
             <!-- Credentials Section (collapsible) -->
             <div class="collapsible-header" onclick="toggleSection('credentials')">
@@ -776,66 +824,22 @@
                 </button>
             </div>
 
-            <div class="button-section" style="margin-top: 15px;">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Browser
-                </h4>
-                <button id="btn-launch" class="btn-launch">Open Browser</button>
-            </div>
-
-            <div class="button-section">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
-                    Actions</h4>
-                <div class="btn-group">
-                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
-                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
-                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
-                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
-                </div>
-            </div>
-
             <hr>
 
-            <div class="form-group">
-                <label for="bot-mode">Bot Mode</label>
-                <select id="bot-mode">
-                    <option value="quest">Quest Farming</option>
-                    <option value="raid">Raid Backup</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="quest-url-group">
-                <label for="quest-url">Quest URL</label>
-                <input type="text" id="quest-url" placeholder="http://game.granbluefantasy.jp/..." value="">
-                <div class="error-message" id="quest-url-error">Please enter a valid GBF quest URL</div>
-            </div>
-
-            <div class="form-group" id="max-runs-group">
-                <label for="max-runs"><span id="max-runs-label">Max Quests</span> (0 = Unlimited)</label>
-                <input type="number" id="max-runs" value="0" min="0">
-            </div>
-
-            <div class="form-group">
-                <label for="browser-type">Browser</label>
-                <select id="browser-type">
-                    <option value="chromium">Chromium (Default)</option>
-                    <option value="edge">Microsoft Edge</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="battle-mode">Battle Mode</label>
-                <select id="battle-mode">
-                    <option value="full_auto">Full Auto</option>
-                    <option value="semi_auto">Semi Auto</option>
-                </select>
-            </div>
-
-            <!-- Device Emulation Section (collapsible) -->
+            <!-- Browser Setup Section (collapsible) -->
             <div class="collapsible-header" onclick="toggleSection('device')">
-                <span class="collapsible-title">📱 Device & Window Size</span>
+                <span class="collapsible-title">🌐 Browser Setup & Display</span>
                 <span class="collapsible-chevron" id="device-chevron">▼</span>
             </div>
             <div class="collapsible-content" id="device-content">
+                <div class="form-group" style="margin-top: 8px;">
+                    <label for="browser-type">Browser Type</label>
+                    <select id="browser-type">
+                        <option value="chromium">Chromium (Default)</option>
+                        <option value="edge">Microsoft Edge</option>
+                    </select>
+                </div>
+
                 <div
                     style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 5px 0;">
                     <label for="enable-custom-size"

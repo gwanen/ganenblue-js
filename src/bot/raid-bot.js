@@ -11,6 +11,7 @@ class RaidBot {
         this.raidBackupUrl = 'https://game.granbluefantasy.jp/#quest/assist';
         this.maxRaids = options.maxRaids || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
+        this.honorTarget = options.honorTarget || 0;
         this.selectors = config.selectors.raid;
 
         this.raidsCompleted = 0;
@@ -46,8 +47,10 @@ class RaidBot {
                     break;
                 }
 
-                await this.runSingleRaid();
-                this.raidsCompleted++;
+                const success = await this.runSingleRaid();
+                if (success) {
+                    this.raidsCompleted++;
+                }
 
 
                 // Random delay between raids
@@ -74,7 +77,11 @@ class RaidBot {
         }
 
         // Select summon
-        await this.selectSummon();
+        const summonStatus = await this.selectSummon();
+
+        if (summonStatus === 'ended') {
+            return false;
+        }
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
@@ -83,7 +90,17 @@ class RaidBot {
         }
 
         // Handle battle
-        const result = await this.battle.executeBattle(this.battleMode);
+        const result = await this.battle.executeBattle(this.battleMode, { honorTarget: this.honorTarget });
+
+        if (result?.raidEnded) {
+            return false;
+        }
+
+        const honorReached = result?.honorReached || false;
+        if (honorReached) {
+            logger.info(`[Target] Honor goal exceeded: ${this.honorTarget.toLocaleString()}. Withdrawing...`);
+        }
+
         this.updateDetailStats(result);
 
         // Store battle time and turns
@@ -92,7 +109,15 @@ class RaidBot {
             this.battleTurns.push(result.turns || 0);
         }
 
-        logger.info('[Cleared] Victory!');
+        if (honorReached) {
+            logger.info('[Cleared] Goal reached!');
+            // Immediate navigation back to raid list to ensure we move on
+            await this.controller.goto(this.raidBackupUrl);
+            await sleep(1000);
+        } else {
+            logger.info('[Cleared] Victory!');
+        }
+
         return true;
     }
 
@@ -150,6 +175,11 @@ class RaidBot {
                     // Check for error popup after clicking
                     const clickError = await this.handleErrorPopup();
                     if (clickError.detected) {
+                        if (clickError.text === 'max_raids_limit') {
+                            logger.warn('[Raid] Concurrent limit reached. Restarting cycle...');
+                            return false;
+                        }
+
                         if (clickError.text.includes('pending battles')) {
                             logger.info('[Wait] Pending battles detected after click. Clearing...');
                             await this.clearPendingBattles();
@@ -203,6 +233,15 @@ class RaidBot {
             }, bodySelector);
 
             logger.info(`[Wait] Error popup detected: ${errorText.trim()}`);
+
+            if (errorText.toLowerCase().includes('three raid battles')) {
+                logger.warn('[Wait] Concurrent raid limit reached (max 3). Waiting 10 seconds...');
+                try {
+                    await this.controller.clickSafe(errorPopupSelector);
+                } catch (e) { }
+                await sleep(10000);
+                return { detected: true, text: 'max_raids_limit' };
+            }
 
             try {
                 await this.controller.clickSafe(errorPopupSelector);
@@ -277,17 +316,30 @@ class RaidBot {
             await sleep(1000);
         }
 
-        // Check for confirmation popup
+        // Check for confirmation popup (General or Raid Ended)
         if (await this.controller.elementExists('.btn-usual-ok')) {
+            // Specific check for ended raid popup body
+            const popupText = await this.controller.page.evaluate(() => {
+                const body = document.querySelector('.txt-popup-body');
+                return body ? body.innerText : '';
+            });
+
+            if (popupText.includes('already ended')) {
+                logger.info('[Raid] Battle already ended (during summon selection).');
+                await this.controller.clickSafe('.btn-usual-ok');
+                await sleep(1000);
+                return 'ended';
+            }
+
             logger.info('[Wait] Found confirmation popup, clicking OK...');
             await this.controller.clickSafe('.btn-usual-ok');
             await sleep(1500);
 
-            // Check if we moved to battle
+            // Check if we moved to battle (exclude supporter screen false positives)
             const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+            if (currentUrl.includes('#raid') && !currentUrl.includes('supporter')) {
                 logger.info('[Bot] Moved to battle screen, skipping summon selection.');
-                return;
+                return 'success';
             }
         }
 
