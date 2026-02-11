@@ -1,4 +1,4 @@
-import { sleep, randomDelay, getRandomInRange } from '../utils/random.js';
+import { sleep, randomDelay, getRandomInRange, getNormalRandom } from '../utils/random.js';
 import logger from '../utils/logger.js';
 
 class PageController {
@@ -82,16 +82,26 @@ class PageController {
                 const box = await element.boundingBox();
                 if (!box) throw new Error(`Bounding box not found for: ${selector}`);
 
-                // Calculate random point within box (with 10% padding from edges)
-                const paddingX = box.width * 0.1;
-                const paddingY = box.height * 0.1;
+                // Calculate normal (Gaussian) distribution around center
+                // Sigma (std dev) is 1/6th of width/height to keep ~99% of clicks inside
+                const centerX = box.x + box.width / 2;
+                const centerY = box.y + box.height / 2;
 
-                const randomX = getRandomInRange(box.x + paddingX, box.x + box.width - paddingX);
-                const randomY = getRandomInRange(box.y + paddingY, box.y + box.height - paddingY);
+                const sigmaX = box.width / 6;
+                const sigmaY = box.height / 6;
+
+                let randomX = getNormalRandom(centerX, sigmaX);
+                let randomY = getNormalRandom(centerY, sigmaY);
+
+                // Clamp to box boundaries (with 5% safety padding)
+                const marginX = box.width * 0.05;
+                const marginY = box.height * 0.05;
+                randomX = Math.max(box.x + marginX, Math.min(box.x + box.width - marginX, randomX));
+                randomY = Math.max(box.y + marginY, Math.min(box.y + box.height - marginY, randomY));
 
                 // Perform randomized click
                 await this.page.mouse.click(randomX, randomY);
-                logger.debug(`[Debug] Randomized Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
+                logger.debug(`[Debug] Centralized Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
                 // Wait after click
                 if (waitAfter) {

@@ -271,6 +271,29 @@ window.toggleSection = toggleSection;
 // Legacy support for toggleCredentials (if called directly)
 window.toggleCredentials = () => toggleSection('credentials');
 
+// === Log Filtering ===
+document.querySelectorAll('.btn-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Toggle active button
+        document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const filter = btn.dataset.filter;
+        const logs = document.querySelectorAll('.log-entry');
+
+        logs.forEach(log => {
+            if (filter === 'all' || log.dataset.level === filter) {
+                log.style.display = 'block';
+            } else {
+                log.style.display = 'none';
+            }
+        });
+
+        // Auto-scroll to bottom of visible logs
+        logContainer.scrollTop = logContainer.scrollHeight;
+    });
+});
+
 // === Compact Mode Toggle ===
 const btnCompact = document.getElementById('btn-compact');
 btnCompact.addEventListener('click', () => {
@@ -522,17 +545,27 @@ btnReload.addEventListener('click', async () => {
 
 // Reset Stats
 btnResetStats.addEventListener('click', async () => {
+    // Add reset animation class
+    const statsGrid = document.getElementById('stats-grid');
+    statsGrid.style.opacity = '0';
+    statsGrid.style.transform = 'scale(0.98)';
+
     const result = await window.electronAPI.resetStats();
-    if (result.success) {
-        addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
-        showToast('Stats reset successfully', 'success');
-        document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
-        document.getElementById('completed-runs').textContent = '0';
-        document.getElementById('avg-battle').textContent = '--:--';
-        document.getElementById('avg-turns').textContent = '0.0'; // Reset avg-turns
-        document.getElementById('runs-per-hour').textContent = '0.0';
-        farmingStartTime = null;
-    }
+
+    setTimeout(() => {
+        if (result.success) {
+            addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
+            showToast('Stats reset successfully', 'success');
+            document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
+            document.getElementById('completed-runs').textContent = '0';
+            document.getElementById('avg-battle').textContent = '--:--';
+            document.getElementById('avg-turns').textContent = '0.0'; // Reset avg-turns
+            document.getElementById('runs-per-hour').textContent = '0.0';
+            farmingStartTime = null;
+        }
+        statsGrid.style.opacity = '1';
+        statsGrid.style.transform = 'scale(1)';
+    }, 300);
 });
 
 // Log Updates
@@ -544,10 +577,11 @@ if (window.electronAPI && window.electronAPI.onLogUpdate) {
 
 function addLog(log) {
     const entry = document.createElement('div');
-    entry.className = 'log-entry';
+    const level = log.level || 'info';
+    entry.className = `log-entry log-level-${level}`;
+    entry.dataset.level = level; // Store for filtering
 
     const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
-    const levelClass = `log-level-${log.level}`;
 
     let message = log.message;
 
@@ -572,9 +606,14 @@ function addLog(log) {
 
     entry.innerHTML = `
         <span class="log-time">${time}</span>
-        <span class="${levelClass}"></span>
         ${message}
     `;
+
+    // Apply current filter
+    const activeFilter = document.querySelector('.btn-filter.active').dataset.filter;
+    if (activeFilter !== 'all' && activeFilter !== level) {
+        entry.style.display = 'none';
+    }
 
     logContainer.appendChild(entry);
     logContainer.scrollTop = logContainer.scrollHeight;

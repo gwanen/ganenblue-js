@@ -49,3 +49,11 @@ export async function typeHuman(page, selector, text) {
 export function getRandomInRange(min, max) {
   return Math.random() * (max - min) + min;
 }
+// Normal (Gaussian) distribution around a mean with standard deviation
+export function getNormalRandom(mean, sigma) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return z * sigma + mean;
+}

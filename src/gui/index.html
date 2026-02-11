@@ -9,19 +9,19 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --bg-primary: #0f0f1e;
-            --bg-secondary: #1a1b2e;
-            --bg-tertiary: #242538;
-            --text-primary: #e2e8f0;
+            --bg-primary: #0a0b14;
+            --bg-secondary: rgba(26, 27, 46, 0.7);
+            --bg-tertiary: rgba(36, 37, 56, 0.6);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --accent-blue: #3b82f6;
-            --accent-green: #059669;
-            /* Muted Green */
-            --accent-red: #b91c1c;
-            /* Muted Red */
-            --accent-yellow: #d97706;
-            --border: #2d3550;
-            --glow-blue: rgba(59, 130, 246, 0.3);
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --border: rgba(255, 255, 255, 0.08);
+            --glow-blue: rgba(59, 130, 246, 0.4);
+            --glass-blur: blur(12px);
         }
 
         * {
@@ -124,9 +124,12 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             overflow-y: auto;
             overflow-x: hidden;
+            transition: transform 0.2s ease;
         }
 
         .panel h3 {
@@ -354,7 +357,11 @@
         }
 
         .button-section {
-            margin-bottom: 16px;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: var(--bg-glass);
+            border-radius: 8px;
+            border: 1px solid var(--border);
         }
 
         .button-section h4 {
@@ -464,12 +471,12 @@
         }
 
         .stat-card {
-            background: var(--bg-tertiary);
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 8px 4px;
+            border-radius: 8px;
+            padding: 10px 4px;
             text-align: center;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .stat-card:hover {
@@ -678,15 +685,14 @@
         }
 
         /* Compact Mode */
-        body.compact-mode .container {
-            grid-template-columns: 1fr;
-            /* Single column */
-            gap: 10px;
-        }
-
         body.compact-mode .controls-panel {
             display: none;
-            /* Hide controls in compact mode */
+        }
+
+        body.compact-mode .container {
+            grid-template-columns: 1fr;
+            height: calc(100vh - 80px);
+            /* Fill space */
         }
 
 
@@ -731,6 +737,37 @@
         .btn-icon:hover {
             border-color: var(--accent-blue);
             color: var(--accent-blue);
+        }
+
+        /* Log Filter Buttons */
+        .log-filters {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .btn-filter {
+            width: auto;
+            min-width: 45px;
+            padding: 3px 6px;
+            font-size: 9px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            margin: 0;
+            opacity: 0.8;
+        }
+
+        .btn-filter.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+            opacity: 1;
+        }
+
+        .btn-filter:hover {
+            opacity: 1;
+            border-color: var(--accent-blue);
         }
     </style>
 </head>
@@ -866,6 +903,23 @@
 
         <!-- Logs & Stats -->
         <div class="panel">
+            <!-- Progress Section (Prominent at top) -->
+            <div class="progress-section" id="progress-section" style="display: none; margin-bottom: 16px;">
+                <div class="progress-info" style="margin-bottom: 6px;">
+                    <span class="progress-label" style="font-size: 11px;">SESSION GOAL</span>
+                    <span class="progress-percent" id="progress-percent" style="font-size: 11px;">0%</span>
+                </div>
+                <div class="progress-bar" style="height: 6px;">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%">
+                        <div class="progress-shine"></div>
+                    </div>
+                </div>
+                <div class="progress-meta" style="margin-top: 4px; font-size: 10px;">
+                    <span id="progress-eta">Est: --:--</span>
+                    <span id="progress-remaining">-- remaining</span>
+                </div>
+            </div>
+
             <h3 style="font-size: 13px;">Performance</h3>
 
             <!-- Stats Grid -->
@@ -896,24 +950,17 @@
                 </div>
             </div>
 
-            <!-- Progress Bar (hidden by default) -->
-            <div class="progress-section" id="progress-section" style="display: none; margin-bottom: 12px;">
-                <div class="progress-info">
-                    <span class="progress-label">Progress</span>
-                    <span class="progress-percent" id="progress-percent">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%">
-                        <div class="progress-shine"></div>
-                    </div>
-                </div>
-                <div class="progress-meta">
-                    <span id="progress-eta">Est: calculating...</span>
-                    <span id="progress-remaining">-- remaining</span>
+
+            <div
+                style="display: flex; align-items: center; justify-content: space-between; margin-top: 5px; margin-bottom: 8px;">
+                <h3 style="margin: 0; border: none; padding: 0;">Logs</h3>
+                <div class="log-filters">
+                    <button class="btn-filter active" data-filter="all">All</button>
+                    <button class="btn-filter" data-filter="info">Info</button>
+                    <button class="btn-filter" data-filter="warn">Warn</button>
+                    <button class="btn-filter" data-filter="error">Error</button>
                 </div>
             </div>
-
-            <h3 style="margin-top: 5px;">Logs</h3>
             <div id="log-container" style="height: 300px;"></div>
 
             <h3 style="margin-top: 15px; font-size: 13px;">Battle History</h3>
