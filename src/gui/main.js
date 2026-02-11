@@ -307,6 +307,15 @@ class GuiTransport extends winston.Transport {
     log(info, callback) {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('log:update', info);
+
+            // High-priority notification for Captcha/Safety issues
+            if (info.level === 'error' && (info.message.includes('Captcha') || info.message.includes('[Safety]'))) {
+                showNotification(
+                    '⚠️ CAPTCHA DETECTED ⚠️',
+                    'The bot has stopped for safety. Please solve the verification manually.',
+                    true
+                );
+            }
         }
         callback();
     }

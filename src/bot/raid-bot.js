@@ -93,6 +93,11 @@ class RaidBot {
         } else {
             const summonStatus = await this.selectSummon();
 
+            // Safety: Check for captcha after summon selection
+            if (await this.checkCaptcha()) {
+                return false;
+            }
+
             if (summonStatus === 'ended') {
                 return false;
             }
@@ -441,6 +446,19 @@ class RaidBot {
         }
 
         logger.warn('[Wait] [Summon] No supporters available, proceeding anyway');
+    }
+
+    async checkCaptcha() {
+        const selectors = config.selectors.battle;
+        if (await this.controller.elementExists(selectors.captchaPopup, 1000, true)) {
+            const headerText = await this.controller.getText(selectors.captchaHeader);
+            if (headerText.includes('Access Verification')) {
+                logger.error('[Safety] Captcha detected! Human intervention required.');
+                this.stop();
+                return true;
+            }
+        }
+        return false;
     }
 
     pause() {

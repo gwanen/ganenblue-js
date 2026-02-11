@@ -83,26 +83,38 @@ class BattleHandler {
 
         logger.info('[Battle] Initializing...');
 
-        // FA Speed Optimization: Use very short timeout for FA button since it was already detected
-        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 500);
+        // 1. Wait for "Ready" phase to end (Busy button display-off)
+        // This ensures the game is actually ready to receive the Auto click
+        let busyWaitRetry = 0;
+        while (busyWaitRetry < 30) { // Max 3s wait
+            const busy = await this.controller.page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                return el && el.classList.contains('display-on');
+            }, this.selectors.attackCancel);
 
+            if (!busy) break;
+            await sleep(100);
+            busyWaitRetry++;
+        }
+
+        // 2. Check if Auto is already active (via CSS class)
+        const isActive = await this.controller.page.evaluate((sel) => {
+            const el = document.querySelector(sel);
+            return el && el.classList.contains('active');
+        }, this.selectors.fullAutoButton);
+
+        if (isActive) {
+            logger.info('[FA] Full Auto is already active');
+            return;
+        }
+
+        // 3. Click Auto
+        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 500);
         if (found) {
             await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
             logger.info('[FA] Full Auto enabled');
-
-            // Skill Kill Protection: If button vanishes but no result screen, refresh
-            await sleep(300); // Reduced for snappiness
-            const stillExists = await this.controller.elementExists(this.selectors.fullAutoButton, 200);
-            if (!stillExists) {
-                const url = this.controller.page.url();
-                if (!url.includes('#result') && !url.includes('#quest/index')) {
-                    logger.warn('[Wait] Auto button vanished without result. Refreshing state...');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await this.checkStateAndResume('full_auto');
-                }
-            }
         } else {
-            logger.warn('[Wait] Auto button timeout. Refreshing page...');
+            logger.warn('[Wait] Auto button missing. Refreshing...');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             await this.checkStateAndResume('full_auto');
         }
@@ -134,6 +146,7 @@ class BattleHandler {
         // Initial turn detection to avoid duplicate logging
         let turnCount = await this.getTurnNumber();
         let lastTurn = turnCount;
+        let lastTurnChangeTime = Date.now();
 
         logger.info('[Wait] Resolving turn...');
         if (turnCount > 0) {
@@ -159,8 +172,28 @@ class BattleHandler {
             lastTurn = context.lastTurn;
             turnCount = context.turnCount;
 
-            if (turnChanged && turnChanged.honorReached) {
-                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+            if (turnChanged) {
+                lastTurnChangeTime = Date.now();
+                if (turnChanged.honorReached) {
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                }
+            }
+
+            // Watchdog: If no turn change for 10s and on raid page, check FA
+            if (Date.now() - lastTurnChangeTime > 10000) {
+                const currentRelUrl = this.controller.page.url();
+                if (currentRelUrl.includes('#raid') || currentRelUrl.includes('_raid')) {
+                    const isActive = await this.controller.page.evaluate((sel) => {
+                        const el = document.querySelector(sel);
+                        return el && el.classList.contains('active');
+                    }, this.selectors.fullAutoButton);
+
+                    if (!isActive) {
+                        logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating...');
+                        await this.handleFullAuto();
+                    }
+                }
+                lastTurnChangeTime = Date.now(); // Reset watchdog to avoid spam
             }
 
             const currentUrl = this.controller.page.url();

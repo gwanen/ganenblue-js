@@ -110,6 +110,11 @@ class QuestBot {
         // Select summon
         await this.selectSummon();
 
+        // Safety: Check for captcha after summon selection
+        if (await this.checkCaptcha()) {
+            return;
+        }
+
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
             logger.info('[Bot] Stopped before battle execution');
@@ -229,6 +234,19 @@ class QuestBot {
         // This handles cases where summon selection was skipped or handled externally
         logger.warn('[Wait] [Summon] No supporter selected, attempting to proceed...');
         return;
+    }
+
+    async checkCaptcha() {
+        const selectors = config.selectors.battle;
+        if (await this.controller.elementExists(selectors.captchaPopup, 1000, true)) {
+            const headerText = await this.controller.getText(selectors.captchaHeader);
+            if (headerText.includes('Access Verification')) {
+                logger.error('[Safety] Captcha detected! Human intervention required.');
+                this.stop();
+                return true;
+            }
+        }
+        return false;
     }
 
     pause() {
