@@ -73,10 +73,20 @@ class QuestBot {
         // Check for existing battle state (Redirected or Resume)
         const currentUrl = this.controller.page.url();
         const isRaidUrl = currentUrl.includes('#raid') || currentUrl.includes('_raid');
-        const isBattle = isRaidUrl || await this.controller.elementExists('.btn-auto', 2000);
+        const isResult = currentUrl.includes('#result');
+        // Check for OK button but EXCLUDE the one from the deck/supporter selection popup
+        const okButton = await this.controller.page.evaluate(() => {
+            const btn = document.querySelector('.btn-usual-ok');
+            if (!btn) return false;
+            // If the button is inside a deck selection popup, it's not a "battle end" state
+            const isDeckPopup = !!btn.closest('.pop-deck');
+            const isVisible = btn.offsetWidth > 0 && btn.offsetHeight > 0;
+            return isVisible && !isDeckPopup;
+        });
+        const isBattle = isRaidUrl || isResult || okButton || await this.controller.elementExists('.btn-auto', 200);
 
         if (isBattle) {
-            logger.info('[Wait] Detected battle state after navigation. Resuming...');
+            logger.info('[Wait] Detected battle or result state after navigation. Resuming...');
 
             // Check if bot was stopped before starting battle
             if (!this.isRunning) {
@@ -137,12 +147,14 @@ class QuestBot {
         }
 
         // Check for 'btn-usual-ok' (Confirmation popup that might block view)
-        if (await this.controller.elementExists('.btn-usual-ok')) {
+        // Use visible: true to avoid clicking phantom popups
+        if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
             logger.info('[Bot] Found confirmation popup, clicking OK...');
-            await this.controller.clickSafe('.btn-usual-ok');
-            await sleep(1500); // Reduced from 3000ms for snappier response
+            // Use fast timeout and no retries
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 });
+            await sleep(1000);
 
-            // Check if we moved to battle
+            // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                 logger.info('[Bot] Moved to battle screen, skipping summon selection.');
@@ -156,42 +168,29 @@ class QuestBot {
 
         // Try to click the first available summon button/panel
         const summonSelector = '.prt-supporter-detail';
-        if (await this.controller.elementExists(summonSelector)) {
+        if (await this.controller.elementExists(summonSelector, 2000, true)) {
             logger.info('[Summon] Selecting Supporter...');
 
-            // Double check URL before interaction
-            if (this.controller.page.url().includes('#raid') || this.controller.page.url().includes('_raid')) {
-                logger.info('[Bot] Moved to battle screen (pre-click check), skipping summon selection.');
-                return;
-            }
-
             try {
-                await this.controller.clickSafe(summonSelector);
+                // Use visibility check and silent mode for Quest mode as requested
+                await this.controller.clickSafe(summonSelector, { timeout: 3000, maxRetries: 1, silent: true });
             } catch (error) {
-                // If click fails, check if we entered battle (race condition)
+                // If click fails, check if we entered battle
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     logger.info('[Bot] Moved to battle screen (during click), ignoring error.');
-                    // Wait for battle to complete
-                    const result = await this.battle.waitForBattleEnd();
-
-                    // Track stats
-                    this.updateDetailStats(result);
-
-                    // Wait a bit before next action
-                    await sleep(randomDelay(500, 1000));
                     return;
                 }
                 throw error;
             }
 
-            // EST: Reduced delay for speed (0.2-0.5s)
+            // EST: Reduced delay for speed
             await sleep(randomDelay(200, 500));
 
             // Check for another confirmation popup after clicking summon (Start Quest)
-            if (await this.controller.elementExists('.btn-usual-ok')) {
+            if (await this.controller.elementExists('.btn-usual-ok', 2000, true)) {
                 logger.info('[Wait] Found start confirmation popup, clicking OK...');
-                await this.controller.clickSafe('.btn-usual-ok');
+                await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 });
             }
 
             return;

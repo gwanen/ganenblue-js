@@ -77,16 +77,31 @@ class RaidBot {
         }
 
         // Select summon
-        const summonStatus = await this.selectSummon();
+        const currentUrl = this.controller.page.url();
+        const isResult = currentUrl.includes('#result');
+        // Check for OK button but EXCLUDE the one from the deck/supporter selection popup
+        const okButton = await this.controller.page.evaluate(() => {
+            const btn = document.querySelector('.btn-usual-ok');
+            if (!btn) return false;
+            const isDeckPopup = !!btn.closest('.pop-deck');
+            const isVisible = btn.offsetWidth > 0 && btn.offsetHeight > 0;
+            return isVisible && !isDeckPopup;
+        });
 
-        if (summonStatus === 'ended') {
-            return false;
-        }
+        if (isResult || okButton) {
+            logger.info('[Wait] Detected result state, proceeding to battle handler...');
+        } else {
+            const summonStatus = await this.selectSummon();
 
-        if (summonStatus === 'pending') {
-            logger.info('[Bot] Pending battles detected during summon selection, clearing...');
-            await this.clearPendingBattles();
-            return false; // Restart cycle
+            if (summonStatus === 'ended') {
+                return false;
+            }
+
+            if (summonStatus === 'pending') {
+                logger.info('[Bot] Pending battles detected during summon selection, clearing...');
+                await this.clearPendingBattles();
+                return false; // Restart cycle
+            }
         }
 
         // Check if bot was stopped before starting battle
@@ -170,7 +185,7 @@ class RaidBot {
 
                     // Check if we successfully joined (moved to summon screen or battle)
                     const currentUrl = this.controller.page.url();
-                    const onSummonScreen = await this.controller.elementExists('.prt-supporter-list', 3000);
+                    const onSummonScreen = await this.controller.elementExists('.prt-supporter-list', 500);
                     const inBattle = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
                     if (onSummonScreen || inBattle) {
@@ -228,32 +243,36 @@ class RaidBot {
 
     async handleErrorPopup() {
         // Check for error popup with class "prt-popup-footer" containing "btn-usual-ok"
+        // Use visible: true to avoid clicking phantom/closing popups
         const errorPopupSelector = '.prt-popup-footer .btn-usual-ok';
         const bodySelector = '.txt-popup-body';
 
-        if (await this.controller.elementExists(errorPopupSelector, 1000)) {
+        if (await this.controller.elementExists(errorPopupSelector, 1000, true)) {
             // Get error text
             const errorText = await this.controller.page.evaluate((sel) => {
                 const el = document.querySelector(sel);
-                return el ? el.innerText : '';
+                return el && (el.offsetWidth > 0 || el.offsetHeight > 0) ? el.innerText : '';
             }, bodySelector);
+
+            if (!errorText) return { detected: false, text: '' };
 
             logger.info(`[Wait] Error popup detected: ${errorText.trim()}`);
 
             if (errorText.toLowerCase().includes('three raid battles')) {
                 logger.warn('[Wait] Concurrent raid limit reached (max 3). Waiting 10 seconds...');
                 try {
-                    await this.controller.clickSafe(errorPopupSelector);
+                    await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
                 } catch (e) { }
                 await sleep(10000);
                 return { detected: true, text: 'max_raids_limit' };
             }
 
             try {
-                await this.controller.clickSafe(errorPopupSelector);
-                await sleep(1000);
+                // Use fast timeout and no retries for error cleanup
+                await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
+                await sleep(500);
             } catch (error) {
-                logger.warn('[Wait] Failed to click error popup OK button:', error);
+                logger.warn('[Wait] Failed to click error popup OK button (might have closed):', error.message);
             }
             return { detected: true, text: errorText.toLowerCase() };
         }
@@ -338,8 +357,15 @@ class RaidBot {
             }
 
             logger.info('[Wait] Found confirmation popup, clicking OK...');
-            await this.controller.clickSafe('.btn-usual-ok');
-            await sleep(1500);
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 3000, maxRetries: 1 });
+            await sleep(1000);
+
+            // Double check if we moved to battle before handling error popups
+            const urlAfterClick = this.controller.page.url();
+            if (urlAfterClick.includes('#raid') && !urlAfterClick.includes('supporter')) {
+                logger.info('[Bot] Moved to battle screen, skipping error handling.');
+                return 'success';
+            }
 
             // Check for error popup after clicking OK
             const error = await this.handleErrorPopup();

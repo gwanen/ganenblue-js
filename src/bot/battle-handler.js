@@ -52,8 +52,7 @@ class BattleHandler {
                 }
             }
 
-            // EST: Reduced delay for speed
-            await sleep(randomDelay(500, 1000));
+            // FA Speed Optimization: Removed the 500-1000ms delay here
 
             if (mode === 'full_auto') {
                 await this.handleFullAuto();
@@ -84,16 +83,16 @@ class BattleHandler {
 
         logger.info('[Battle] Initializing...');
 
-        // Wait for Full Auto button with 5s timeout
-        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+        // FA Speed Optimization: Use very short timeout for FA button since it was already detected
+        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 500);
 
         if (found) {
-            await this.controller.clickSafe(this.selectors.fullAutoButton);
+            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
             logger.info('[FA] Full Auto enabled');
 
             // Skill Kill Protection: If button vanishes but no result screen, refresh
-            await sleep(400); // Reduced from 1000ms for snappiness
-            const stillExists = await this.controller.elementExists(this.selectors.fullAutoButton, 300);
+            await sleep(300); // Reduced for snappiness
+            const stillExists = await this.controller.elementExists(this.selectors.fullAutoButton, 200);
             if (!stillExists) {
                 const url = this.controller.page.url();
                 if (!url.includes('#result') && !url.includes('#quest/index')) {
@@ -296,7 +295,6 @@ class BattleHandler {
         if (await this.controller.elementExists(this.selectors.okButton, 2000) ||
             await this.controller.elementExists(this.selectors.emptyResultNotice, 500)) {
             logger.info('[Cleared] Battle finished');
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             return true;
         }
 
@@ -353,15 +351,21 @@ class BattleHandler {
 
                 // Wait exactly for DOM to update
                 await sleep(400);
-                const honors = await this.getHonors();
-                logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
+                const isRaid = this.controller.page.url().includes('raid');
 
-                const honorReached = honorTarget > 0 && honors >= honorTarget;
-                if (honorReached) {
-                    logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                if (isRaid) {
+                    const honors = await this.getHonors();
+                    logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
+
+                    const honorReached = honorTarget > 0 && honors >= honorTarget;
+                    if (honorReached) {
+                        logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                    }
+                    return { turnChanged: true, honorReached, honors };
+                } else {
+                    logger.info(`[Turn ${currentTurn}]`);
+                    return { turnChanged: true, honorReached: false, honors: 0 };
                 }
-
-                return { turnChanged: true, honorReached, honors };
             }
         } catch (e) {
             // Ignore

@@ -61,13 +61,15 @@ class PageController {
         const {
             waitAfter = true,
             delay = randomDelay(100, 300),
-            maxRetries = 3
+            maxRetries = 3,
+            timeout = 5000,
+            silent = false
         } = options;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 // Wait for element
-                const found = await this.waitForElement(selector, 5000);
+                const found = await this.waitForElement(selector, timeout);
                 if (!found) {
                     throw new Error(`Element not found: ${selector}`);
                 }
@@ -110,7 +112,9 @@ class PageController {
 
                 return true;
             } catch (error) {
-                logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                if (!silent) {
+                    logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                }
                 if (attempt === maxRetries) {
                     throw error;
                 }
@@ -122,9 +126,9 @@ class PageController {
     /**
      * Check if element exists (no throw)
      */
-    async elementExists(selector, timeout = 2000) {
+    async elementExists(selector, timeout = 2000, visible = false) {
         try {
-            await this.page.waitForSelector(selector, { timeout });
+            await this.page.waitForSelector(selector, { timeout, visible });
             return true;
         } catch {
             return false;
