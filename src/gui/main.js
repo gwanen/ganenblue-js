@@ -127,6 +127,7 @@ ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceS
         const browserConfig = {
             ...config.get('browser'),
             browser_type: browserType,
+            disable_sandbox: !!deviceSettings.disable_sandbox,
             emulation: deviceSettings // Pass full settings object
         };
 

@@ -58,23 +58,29 @@ class BrowserManager {
         }
 
         // Prepare launch options
+        const launchArgs = [
+            '--disable-blink-features=AutomationControlled',
+            '--disable-dev-shm-usage',
+            `--window-size=${windowWidth},${windowHeight}`,
+            // Disable password and security popups
+            '--password-store=basic',
+            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
+            '--no-default-browser-check',
+            '--disable-infobars',
+            '--disable-notifications',
+            '--disable-save-password-bubble', // Disable password manager popup
+            '--mute-audio', // Save CPU by silencing browser
+        ];
+
+        // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
+        if (this.config.disable_sandbox) {
+            launchArgs.push('--no-sandbox');
+            launchArgs.push('--disable-setuid-sandbox');
+        }
+
         const launchOptions = {
             headless: this.config.headless ? 'new' : false,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-dev-shm-usage',
-                `--window-size=${windowWidth},${windowHeight}`,
-                // Disable password and security popups
-                '--password-store=basic',
-                '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
-                '--no-default-browser-check',
-                '--disable-infobars',
-                '--disable-notifications',
-                '--disable-save-password-bubble', // Disable password manager popup
-                '--mute-audio', // Save CPU by silencing browser
-            ],
+            args: launchArgs,
             defaultViewport: null, // Dynamic viewport that matches window size
             ignoreDefaultArgs: ['--enable-automation'],
         };

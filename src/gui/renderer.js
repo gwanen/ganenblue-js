@@ -18,6 +18,7 @@ const inputWindowHeight = document.getElementById('window-height');
 const customSizeContainer = document.getElementById('custom-size-inputs');
 const inputHonorTarget = document.getElementById('honor-target');
 const honorTargetGroup = document.getElementById('honor-target-group');
+const checkboxDisableSandbox = document.getElementById('disable-sandbox');
 
 // === Toast Notifications ===
 function showToast(message, type = 'info', duration = 3000) {
@@ -110,6 +111,7 @@ function saveSettings() {
         browserType: selectBrowserType.value,
         battleMode: selectBattleMode.value,
         customSize: checkboxEnableCustom.checked,
+        disableSandbox: checkboxDisableSandbox.checked,
         windowWidth: inputWindowWidth.value,
         windowHeight: inputWindowHeight.value,
         honorTarget: cleanHonorsValue(inputHonorTarget.value)
@@ -131,6 +133,7 @@ function loadSettings() {
             inputWindowWidth.value = settings.windowWidth || 500;
             inputWindowHeight.value = settings.windowHeight || 850;
             inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
+            checkboxDisableSandbox.checked = settings.disableSandbox || false;
 
             // Trigger UI updates
             updateUIForBotMode();
@@ -193,6 +196,7 @@ checkboxEnableCustom.addEventListener('change', debouncedSave);
 inputWindowWidth.addEventListener('input', debouncedSave);
 inputWindowHeight.addEventListener('input', debouncedSave);
 inputHonorTarget.addEventListener('input', debouncedSave);
+checkboxDisableSandbox.addEventListener('change', debouncedSave);
 
 // Custom Size Toggle Handler
 checkboxEnableCustom.addEventListener('change', () => {
@@ -426,7 +430,8 @@ btnLaunch.addEventListener('click', async () => {
     const deviceSettings = {
         mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
         width: parseInt(inputWindowWidth.value),
-        height: parseInt(inputWindowHeight.value)
+        height: parseInt(inputWindowHeight.value),
+        disable_sandbox: checkboxDisableSandbox.checked
     };
 
     const result = await window.electronAPI.launchBrowser(browserType, deviceSettings);

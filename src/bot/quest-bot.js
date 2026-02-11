@@ -173,9 +173,16 @@ class QuestBot {
 
             try {
                 // Use visibility check and silent mode for Quest mode as requested
-                await this.controller.clickSafe(summonSelector, { timeout: 3000, maxRetries: 1, silent: true });
+                // Reduced timeout to 1000ms as elementExists already confirmed it
+                await this.controller.clickSafe(summonSelector, { timeout: 1000, maxRetries: 1, silent: true });
             } catch (error) {
-                // If click fails, check if we entered battle
+                // Check if it's a "not found" error which is expected in race conditions
+                if (error.message.includes('Element not found')) {
+                    logger.warn('[Summon] Supporter detail disappeared, assuming battle start.');
+                    return;
+                }
+
+                // If click fails for other reasons, check if we entered battle
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     logger.info('[Bot] Moved to battle screen (during click), ignoring error.');

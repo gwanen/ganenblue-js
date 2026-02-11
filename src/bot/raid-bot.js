@@ -383,9 +383,17 @@ class RaidBot {
 
         // Try to select first available summon
         const summonSelector = '.prt-supporter-detail';
-        if (await this.controller.elementExists(summonSelector)) {
+        if (await this.controller.elementExists(summonSelector, 2000, true)) {
             logger.info('[Summon] Found supporter, clicking...');
-            await this.controller.clickSafe(summonSelector);
+            try {
+                await this.controller.clickSafe(summonSelector, { timeout: 1000, maxRetries: 1, silent: true });
+            } catch (error) {
+                if (error.message.includes('Element not found')) {
+                    logger.warn('[Summon] Supporter detail disappeared, assuming battle start.');
+                    return;
+                }
+                throw error;
+            }
             // EST: Reduced delay for speed (0.2-0.5s)
             await sleep(randomDelay(200, 500));
 
