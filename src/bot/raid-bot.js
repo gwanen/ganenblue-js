@@ -83,6 +83,12 @@ class RaidBot {
             return false;
         }
 
+        if (summonStatus === 'pending') {
+            logger.info('[Bot] Pending battles detected during summon selection, clearing...');
+            await this.clearPendingBattles();
+            return false; // Restart cycle
+        }
+
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
             logger.info('[Bot] Stopped before battle execution');
@@ -335,6 +341,12 @@ class RaidBot {
             await this.controller.clickSafe('.btn-usual-ok');
             await sleep(1500);
 
+            // Check for error popup after clicking OK
+            const error = await this.handleErrorPopup();
+            if (error.detected && error.text.includes('pending battles')) {
+                return 'pending';
+            }
+
             // Check if we moved to battle (exclude supporter screen false positives)
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') && !currentUrl.includes('supporter')) {
@@ -351,10 +363,16 @@ class RaidBot {
             // EST: Reduced delay for speed (0.2-0.5s)
             await sleep(randomDelay(200, 500));
 
-            // Check for start confirmation popup
             if (await this.controller.elementExists('.btn-usual-ok')) {
                 logger.info('[Wait] Found start confirmation popup, clicking OK...');
                 await this.controller.clickSafe('.btn-usual-ok');
+                await sleep(1000);
+
+                // Check for error popup after clicking OK
+                const error = await this.handleErrorPopup();
+                if (error.detected && error.text.includes('pending battles')) {
+                    return 'pending';
+                }
             }
 
             return;
@@ -376,6 +394,13 @@ class RaidBot {
 
                 if (await this.controller.elementExists('.btn-usual-ok')) {
                     await this.controller.clickSafe('.btn-usual-ok');
+                    await sleep(1000);
+
+                    // Check for error popup after clicking OK
+                    const error = await this.handleErrorPopup();
+                    if (error.detected && error.text.includes('pending battles')) {
+                        return 'pending';
+                    }
                 }
                 return;
             }
