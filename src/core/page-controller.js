@@ -1,4 +1,4 @@
-import { sleep, randomDelay } from '../utils/random.js';
+import { sleep, randomDelay, getRandomInRange } from '../utils/random.js';
 import logger from '../utils/logger.js';
 
 class PageController {
@@ -75,9 +75,23 @@ class PageController {
                 // Random delay before click
                 await sleep(randomDelay(200, 500));
 
-                // Click
-                await this.page.click(selector);
-                logger.debug(`[Debug] Clicked: ${selector}`);
+                // Get element and bounding box for randomized click
+                const element = await this.page.$(selector);
+                if (!element) throw new Error(`Element handle not found: ${selector}`);
+
+                const box = await element.boundingBox();
+                if (!box) throw new Error(`Bounding box not found for: ${selector}`);
+
+                // Calculate random point within box (with 10% padding from edges)
+                const paddingX = box.width * 0.1;
+                const paddingY = box.height * 0.1;
+
+                const randomX = getRandomInRange(box.x + paddingX, box.x + box.width - paddingX);
+                const randomY = getRandomInRange(box.y + paddingY, box.y + box.height - paddingY);
+
+                // Perform randomized click
+                await this.page.mouse.click(randomX, randomY);
+                logger.debug(`[Debug] Randomized Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
                 // Wait after click
                 if (waitAfter) {

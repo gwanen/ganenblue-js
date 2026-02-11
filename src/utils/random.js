@@ -24,14 +24,14 @@ export function generateBezierCurve(start, end, steps = 20) {
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const x = Math.pow(1-t, 3) * start.x +
-              3 * Math.pow(1-t, 2) * t * cp1x +
-              3 * (1-t) * Math.pow(t, 2) * cp2x +
-              Math.pow(t, 3) * end.x;
-    const y = Math.pow(1-t, 3) * start.y +
-              3 * Math.pow(1-t, 2) * t * cp1y +
-              3 * (1-t) * Math.pow(t, 2) * cp2y +
-              Math.pow(t, 3) * end.y;
+    const x = Math.pow(1 - t, 3) * start.x +
+      3 * Math.pow(1 - t, 2) * t * cp1x +
+      3 * (1 - t) * Math.pow(t, 2) * cp2x +
+      Math.pow(t, 3) * end.x;
+    const y = Math.pow(1 - t, 3) * start.y +
+      3 * Math.pow(1 - t, 2) * t * cp1y +
+      3 * (1 - t) * Math.pow(t, 2) * cp2y +
+      Math.pow(t, 3) * end.y;
     points.push({ x: Math.round(x), y: Math.round(y) });
   }
   return points;
@@ -44,4 +44,8 @@ export async function typeHuman(page, selector, text) {
     await page.keyboard.type(char);
     await sleep(randomDelay(50, 150));
   }
+}
+// Random number within range
+export function getRandomInRange(min, max) {
+  return Math.random() * (max - min) + min;
 }
