@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onLogUpdate: (callback) => ipcRenderer.on('log:update', (_event, value) => callback(value)),
     onStatusUpdate: (callback) => ipcRenderer.on('bot:status', (_event, value) => callback(value)),
     onPlaySound: (callback) => ipcRenderer.on('play-sound', (_event, value) => callback(value)),
+    resizeWindow: (width, height) => ipcRenderer.invoke('app:resize-window', width, height),
 });

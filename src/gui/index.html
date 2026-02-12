@@ -44,11 +44,13 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 16px;
+            padding: 6px 10px;
+            /* Reduced from 10px 16px */
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            /* Reduced margin */
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
 
@@ -716,14 +718,17 @@
             background: transparent;
             border: 1px solid var(--border);
             color: var(--text-secondary);
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             padding: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 6px;
             margin-top: 0;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
         .btn-icon:hover {
@@ -790,227 +795,512 @@
             color: var(--text-primary);
         }
 
+        /* Compact Layout Adjustments */
+        :root {
+            --input-height: 24px;
+            --font-xs: 10px;
+            --font-sm: 11px;
+            --font-md: 12px;
+        }
+
+        .panel {
+            padding: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 4px;
+        }
+
+        input,
+        select {
+            padding: 2px 4px;
+            font-size: 11px;
+            height: 24px;
+        }
+
+        label {
+            font-size: 10px;
+            margin-bottom: 1px;
+        }
+
+        h3 {
+            font-size: 12px;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+        }
+
+        .profile-header h2 {
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .profile-header {
+            margin-bottom: 4px;
+            padding: 0 4px;
+        }
+
+        .profile-name-input {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 2px 4px;
+            width: 120px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .profile-name-input:hover,
+        .profile-name-input:focus {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            outline: none;
+        }
+
+        .log-controls {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-launch {
+            padding: 4px;
+            font-size: 11px;
+            margin-top: 4px;
+            height: 26px;
+        }
+
+        .btn-group {
+            margin-top: 4px;
+        }
+
+        .btn-square {
+            width: 26px !important;
+            height: 26px !important;
+            font-size: 14px !important;
+        }
+
+        /* Collapsible Compact */
+        /* Collapsible Compact */
+        .collapsible-header {
+            padding: 3px 0;
+            margin: 4px 0 2px 0;
+        }
+
+        .collapsible-title {
+            font-size: 11px;
+        }
+
         .tab-button.active {
             background: var(--accent-blue);
             color: white;
             border-color: var(--accent-blue);
             box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
+
+        /* Split View Layout */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 24px);
+            /* Full height minus body padding */
+        }
+
+        .split-view {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            flex: 1;
+            min-height: 0;
+            /* Important for scrolling */
+        }
+
+        .profile-column {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            overflow-y: auto;
+        }
+
+        .profile-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 4px;
+        }
+
+        .profile-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .stats-summary {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            color: var(--text-secondary);
+        }
+
+        .stat-val {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .stat-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Shared Logs Panel */
+        .logs-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 350px;
+            background: var(--bg-primary);
+            border-top: 1px solid var(--border);
+            z-index: 100;
+            padding: 12px;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .logs-panel.hidden {
+            transform: translateY(110%);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .btn-header {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-header:hover {
+            color: var(--text-primary);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-primary-small {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            font-size: 11px;
+            margin-top: 6px;
+            cursor: pointer;
+        }
+
+        /* Compact Mode adjustments for Split View */
+        /* body.compact-mode .profile-column {} */
     </style>
 </head>
 
 <body>
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toast-container"></div>
-    <div class="header">
-        <div class="header-left">
-            <div class="logo">G</div>
-            <h1>GANENBLUE</h1>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">GB</div>
+                <h1>Ganenblue</h1>
+            </div>
+            <div class="header-right">
+                <button id="btn-show-logs" class="btn-icon" title="Show Logs">📜</button>
+                <button id="btn-toggle-p2" class="btn-icon" title="Hide Profile 2">👁️</button>
+            </div>
         </div>
-        <div class="header-right">
-            <button id="btn-compact" class="btn-icon" title="Toggle Compact Mode">👁️</button>
-            <div id="status-badge" class="status-badge status-Stopped">Stopped</div>
-        </div>
-    </div>
 
-    <!-- Profile Tabs -->
-    <div class="profile-tabs">
-        <div class="tab-button active" data-tab="profile1">Profile 1</div>
-        <div class="tab-button" data-tab="profile2">Profile 2</div>
-    </div>
-
-    <div class="container">
-        <!-- Controls -->
-        <div class="panel controls-panel">
-            <h3>Farming Setup</h3>
-
-            <div class="form-group">
-                <label for="bot-mode">Bot Mode</label>
-                <select id="bot-mode">
-                    <option value="quest">Quest Farming</option>
-                    <option value="raid">Raid Backup</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="quest-url-group">
-                <label for="quest-url">Quest URL</label>
-                <input type="text" id="quest-url" placeholder="http://game.granbluefantasy.jp/..." value="">
-                <div class="error-message" id="quest-url-error">Please enter a valid GBF quest URL</div>
-            </div>
-
-            <div class="form-group" id="honor-target-group" style="display: none;">
-                <label for="honor-target">Honor Target (0 = Full Raid)</label>
-                <input type="text" id="honor-target" value="0" placeholder="e.g. 1.000.000">
-            </div>
-
-            <div class="form-group" id="max-runs-group">
-                <label for="max-runs"><span id="max-runs-label">Max Quests</span> (0 = Unlimited)</label>
-                <input type="number" id="max-runs" value="0" min="0">
-            </div>
-
-            <div class="form-group">
-                <label for="battle-mode">Battle Mode</label>
-                <select id="battle-mode">
-                    <option value="full_auto">Full Auto</option>
-                    <option value="semi_auto">Semi Auto</option>
-                </select>
-            </div>
-
-            <hr>
-
-            <div class="button-section">
-                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500;">Bot
-                    Actions</h4>
-                <div class="btn-group">
-                    <button id="btn-start" class="btn-square btn-start" title="Start Farming" disabled>▶️</button>
-                    <button id="btn-stop" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
-                    <button id="btn-reset-stats" class="btn-square btn-reset" title="Reset Stats">🔄</button>
-                    <button id="btn-reload" class="btn-square btn-reload" title="Reload App">⚡</button>
-                </div>
-                <button id="btn-launch" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
-            </div>
-
-            <hr>
-
-            <!-- Credentials Section (collapsible) -->
-            <div class="collapsible-header" onclick="toggleSection('credentials')">
-                <span class="collapsible-title">🔐 Auto-Login Credentials</span>
-                <span class="collapsible-chevron" id="credentials-chevron">▼</span>
-            </div>
-            <div class="collapsible-content" id="credentials-content">
-                <div class="form-group">
-                    <label for="mobage-email">Mobage Email</label>
-                    <input type="email" id="mobage-email" placeholder="your.email@example.com" value="">
+        <!-- Split View Container -->
+        <div class="split-view">
+            <!-- Profile 1 Column -->
+            <div class="profile-column" id="col-p1">
+                <div class="profile-header">
+                    <input type="text" id="profile-name-p1" class="profile-name-input" value="Profile 1" />
+                    <div id="status-badge-p1" class="status-badge status-Stopped">Stopped</div>
                 </div>
 
-                <div class="form-group">
-                    <label for="mobage-password">Mobage Password</label>
-                    <input type="password" id="mobage-password" placeholder="Your password" value="">
-                </div>
+                <div class="panel controls-panel">
+                    <h3>Farming Setup</h3>
 
-                <button id="btn-save-credentials"
-                    style="background: linear-gradient(135deg, var(--accent-yellow), #d97706); color: white; width: 100%; margin-top: 8px;">💾
-                    Save Credentials
-                </button>
-            </div>
+                    <div class="form-group">
+                        <label for="bot-mode-p1">Bot Mode</label>
+                        <select id="bot-mode-p1">
+                            <option value="quest">Quest Farming</option>
+                            <option value="raid">Raid Backup</option>
+                        </select>
+                    </div>
 
-            <hr>
+                    <div class="form-group" id="quest-url-group-p1">
+                        <label for="quest-url-p1">Quest URL</label>
+                        <input type="text" id="quest-url-p1" placeholder="http://game.granbluefantasy.jp/..." value="">
+                        <div class="error-message" id="quest-url-error-p1">Please enter a valid GBF quest URL</div>
+                    </div>
 
-            <!-- Browser Setup Section (collapsible) -->
-            <div class="collapsible-header" onclick="toggleSection('device')">
-                <span class="collapsible-title">🌐 Browser Setup & Display</span>
-                <span class="collapsible-chevron" id="device-chevron">▼</span>
-            </div>
-            <div class="collapsible-content" id="device-content">
-                <div class="form-group" style="margin-top: 8px;">
-                    <label for="browser-type">Browser Type</label>
-                    <select id="browser-type">
-                        <option value="chromium">Chromium (Default)</option>
-                        <option value="edge">Microsoft Edge</option>
-                    </select>
-                </div>
+                    <div class="form-group" id="honor-target-group-p1" style="display: none;">
+                        <label for="honor-target-p1">Honor Target (0 = Full Raid)</label>
+                        <input type="text" id="honor-target-p1" value="0" placeholder="e.g. 1.000.000">
+                    </div>
 
-                <div
-                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 5px 0;">
-                    <label for="disable-sandbox"
-                        style="margin: 0; cursor: pointer; color: var(--text-primary); font-size: 13px;">Disable
-                        Chromium Sandbox</label>
-                    <input type="checkbox" id="disable-sandbox" style="width: auto; margin: 0; cursor: pointer;">
-                </div>
+                    <div class="form-group" id="max-runs-group-p1">
+                        <label for="max-runs-p1"><span id="max-runs-label-p1">Max Quests</span> (0 = Unlimited)</label>
+                        <input type="number" id="max-runs-p1" value="0" min="0">
+                    </div>
 
-                <div
-                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 5px 0;">
-                    <label for="enable-custom-size"
-                        style="margin: 0; cursor: pointer; color: var(--text-primary); font-size: 13px;">Enable Custom
-                        Window Size</label>
-                    <input type="checkbox" id="enable-custom-size" style="width: auto; margin: 0; cursor: pointer;">
-                </div>
+                    <div class="form-group">
+                        <label for="battle-mode-p1">Battle Mode</label>
+                        <select id="battle-mode-p1">
+                            <option value="full_auto">Full Auto</option>
+                            <option value="semi_auto">Semi Auto</option>
+                        </select>
+                    </div>
 
-                <div id="custom-size-inputs"
-                    style="display: none; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label for="window-width" style="font-size: 11px;">Width (px)</label>
-                            <input type="number" id="window-width" value="500" min="300" max="2560">
+                    <hr>
+
+                    <div class="button-section">
+                        <h4>Bot Actions</h4>
+                        <div class="btn-group">
+                            <button id="btn-start-p1" class="btn-square btn-start" title="Start Farming"
+                                disabled>▶️</button>
+                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                            <button id="btn-reset-stats-p1" class="btn-square btn-reset" title="Reset Stats">🔄</button>
                         </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label for="window-height" style="font-size: 11px;">Height (px)</label>
-                            <input type="number" id="window-height" value="850" min="300" max="1440">
+                        <button id="btn-launch-p1" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
+                    </div>
+
+                    <hr>
+
+                    <!-- Stats Summary (Mini) -->
+                    <div class="stats-summary">
+                        <div class="stat-row">
+                            <span>Time:</span>
+                            <span id="run-timer-p1" class="stat-val">00:00:00</span>
                         </div>
+                        <div class="stat-row">
+                            <span>Completed:</span>
+                            <span id="completed-runs-p1" class="stat-val">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Avg Battle:</span>
+                            <span id="avg-battle-p1" class="stat-val">--:--</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Avg Turns:</span>
+                            <span id="avg-turns-p1" class="stat-val">-.-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Rate:</span>
+                            <span id="run-rate-p1" class="stat-val">0.0/h</span>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Browser/Device Section -->
+                    <div class="collapsible-header" onclick="toggleSection('device-p1')">
+                        <span class="collapsible-title">🌐 Browser</span>
+                        <span class="collapsible-chevron" id="device-p1-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="device-p1-content">
+                        <div class="form-group">
+                            <label for="browser-type-p1">Type</label>
+                            <select id="browser-type-p1">
+                                <option value="chromium">Chromium</option>
+                                <option value="edge">Edge</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
+                            <label for="disable-sandbox-p1" style="margin:0; cursor:pointer;">No Sandbox</label>
+                            <input type="checkbox" id="disable-sandbox-p1" style="width:auto; margin:0;">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Credentials Section -->
+                    <div class="collapsible-header" onclick="toggleSection('credentials-p1')">
+                        <span class="collapsible-title">🔐 Credentials</span>
+                        <span class="collapsible-chevron" id="credentials-p1-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="credentials-p1-content">
+                        <div class="form-group">
+                            <label for="mobage-email-p1">Email</label>
+                            <input type="email" id="mobage-email-p1" placeholder="email@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="mobage-password-p1">Password</label>
+                            <input type="password" id="mobage-password-p1" placeholder="Password">
+                        </div>
+                        <button id="btn-save-credentials-p1" class="btn-primary-small">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile 2 Column -->
+            <div class="profile-column" id="col-p2">
+                <div class="profile-header">
+                    <input type="text" id="profile-name-p2" class="profile-name-input" value="Profile 2" />
+                    <div id="status-badge-p2" class="status-badge status-Stopped">Stopped</div>
+                </div>
+
+                <div class="panel controls-panel">
+                    <h3>Farming Setup</h3>
+
+                    <div class="form-group">
+                        <label for="bot-mode-p2">Bot Mode</label>
+                        <select id="bot-mode-p2">
+                            <option value="quest">Quest Farming</option>
+                            <option value="raid">Raid Backup</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="quest-url-group-p2">
+                        <label for="quest-url-p2">Quest URL</label>
+                        <input type="text" id="quest-url-p2" placeholder="http://game.granbluefantasy.jp/..." value="">
+                        <div class="error-message" id="quest-url-error-p2">Please enter a valid GBF quest URL</div>
+                    </div>
+
+                    <div class="form-group" id="honor-target-group-p2" style="display: none;">
+                        <label for="honor-target-p2">Honor Target (0 = Full Raid)</label>
+                        <input type="text" id="honor-target-p2" value="0" placeholder="e.g. 1.000.000">
+                    </div>
+
+                    <div class="form-group" id="max-runs-group-p2">
+                        <label for="max-runs-p2"><span id="max-runs-label-p2">Max Quests</span> (0 = Unlimited)</label>
+                        <input type="number" id="max-runs-p2" value="0" min="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="battle-mode-p2">Battle Mode</label>
+                        <select id="battle-mode-p2">
+                            <option value="full_auto">Full Auto</option>
+                            <option value="semi_auto">Semi Auto</option>
+                        </select>
+                    </div>
+
+                    <hr>
+
+                    <div class="button-section">
+                        <h4>Bot Actions</h4>
+                        <div class="btn-group">
+                            <button id="btn-start-p2" class="btn-square btn-start" title="Start Farming"
+                                disabled>▶️</button>
+                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                            <button id="btn-reset-stats-p2" class="btn-square btn-reset" title="Reset Stats">🔄</button>
+                        </div>
+                        <button id="btn-launch-p2" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
+                    </div>
+
+                    <hr>
+
+                    <div class="stats-summary">
+                        <div class="stat-row">
+                            <span>Time:</span>
+                            <span id="run-timer-p2" class="stat-val">00:00:00</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Completed:</span>
+                            <span id="completed-runs-p2" class="stat-val">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Avg Battle:</span>
+                            <span id="avg-battle-p2" class="stat-val">--:--</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Avg Turns:</span>
+                            <span id="avg-turns-p2" class="stat-val">-.-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Rate:</span>
+                            <span id="run-rate-p2" class="stat-val">0.0/h</span>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Browser/Device Section -->
+                    <div class="collapsible-header" onclick="toggleSection('device-p2')">
+                        <span class="collapsible-title">🌐 Browser</span>
+                        <span class="collapsible-chevron" id="device-p2-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="device-p2-content">
+                        <div class="form-group">
+                            <label for="browser-type-p2">Type</label>
+                            <select id="browser-type-p2">
+                                <option value="chromium">Chromium</option>
+                                <option value="edge">Edge</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
+                            <label for="disable-sandbox-p2" style="margin:0; cursor:pointer;">No Sandbox</label>
+                            <input type="checkbox" id="disable-sandbox-p2" style="width:auto; margin:0;">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Credentials Section -->
+                    <div class="collapsible-header" onclick="toggleSection('credentials-p2')">
+                        <span class="collapsible-title">🔐 Credentials</span>
+                        <span class="collapsible-chevron" id="credentials-p2-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="credentials-p2-content">
+                        <div class="form-group">
+                            <label for="mobage-email-p2">Email</label>
+                            <input type="email" id="mobage-email-p2" placeholder="email@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="mobage-password-p2">Password</label>
+                            <input type="password" id="mobage-password-p2" placeholder="Password">
+                        </div>
+                        <button id="btn-save-credentials-p2" class="btn-primary-small">Save</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Logs & Stats -->
-        <div class="panel">
-            <!-- Progress Section (Prominent at top) -->
-            <div class="progress-section" id="progress-section" style="display: none; margin-bottom: 16px;">
-                <div class="progress-info" style="margin-bottom: 6px;">
-                    <span class="progress-label" style="font-size: 11px;">SESSION GOAL</span>
-                    <span class="progress-percent" id="progress-percent" style="font-size: 11px;">0%</span>
-                </div>
-                <div class="progress-bar" style="height: 6px;">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%">
-                        <div class="progress-shine"></div>
-                    </div>
-                </div>
-                <div class="progress-meta" style="margin-top: 4px; font-size: 10px;">
-                    <span id="progress-eta">Est: --:--</span>
-                    <span id="progress-remaining">-- remaining</span>
+        <!-- Shared Logs Section (Collapsible/Modal) -->
+        <div id="logs-panel" class="panel logs-panel hidden">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Activity Logs</h3>
+                <div class="log-controls">
+                    <button id="btn-clear-logs" class="btn-header" title="Clear Logs">🗑️</button>
+                    <button id="btn-close-logs" class="btn-header">Close</button>
                 </div>
             </div>
-
-            <h3 style="font-size: 13px;">Performance</h3>
-
-            <!-- Stats Grid -->
-            <div class="stats-grid" id="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="elapsed-time">00:00:00</div>
-                    <div class="stat-label">Elapsed</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-value" id="avg-battle">--:--</div>
-                    <div class="stat-label">Avg Battle</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-value" id="avg-turns">0.0</div>
-                    <div class="stat-label">Avg Turns</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-value" id="completed-runs">0</div>
-                    <div class="stat-label" id="completed-label">Completed</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-value" id="runs-per-hour">0.0</div>
-                    <div class="stat-label">Per Hour</div>
-                </div>
-            </div>
-
-
-            <div
-                style="display: flex; align-items: center; justify-content: space-between; margin-top: 5px; margin-bottom: 8px;">
-                <h3 style="margin: 0; border: none; padding: 0;">Logs</h3>
-                <div class="log-filters">
-                    <button class="btn-filter active" data-filter="all">All</button>
-                    <button class="btn-filter" data-filter="info">Info</button>
-                    <button class="btn-filter" data-filter="warn">Warn</button>
-                    <button class="btn-filter" data-filter="error">Error</button>
-                </div>
-            </div>
-            <div id="log-container" style="height: 300px;"></div>
-
-            <h3 style="margin-top: 15px; font-size: 13px;">Battle History</h3>
-            <div id="battle-times-display"
-                style="height: 170px; overflow-y: auto; font-size: 0.85em; background-color: var(--bg-tertiary); padding: 8px; border-radius: 6px; border: 1px solid var(--border);">
-                <div style="color: var(--text-secondary); text-align: center; padding-top: 20px;">No battles yet</div>
-            </div>
+            <div id="log-container"></div>
         </div>
-    </div>
     </div>
 
     <script src="renderer.js"></script>

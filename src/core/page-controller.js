@@ -1,5 +1,7 @@
 import { sleep, randomDelay, getRandomInRange, getNormalRandom } from '../utils/random.js';
 import logger from '../utils/logger.js';
+import fs from 'fs';
+import path from 'path';
 
 class PageController {
     constructor(page) {
@@ -164,6 +166,25 @@ class PageController {
             waitUntil: 'networkidle2',
             timeout
         });
+    }
+
+    /**
+     * Take a screenshot for debugging
+     */
+    async takeScreenshot(namePrefix = 'screenshot') {
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const dir = path.resolve('screenshots');
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            const filename = path.join(dir, `${namePrefix}_${timestamp}.png`);
+
+            await this.page.screenshot({ path: filename, fullPage: true });
+            logger.info(`[Debug] Screenshot saved: ${filename}`);
+        } catch (error) {
+            logger.error(`[Error] Failed to take screenshot: ${error.message}`);
+        }
     }
 }
 

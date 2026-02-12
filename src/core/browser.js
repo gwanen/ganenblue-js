@@ -198,8 +198,16 @@ class BrowserManager {
             const data = yaml.load(fileContents);
 
             // Check for profile-based structure first
-            if (data && data.profiles && data.profiles[this.profileId]) {
-                return { mobage: data.profiles[this.profileId] };
+            if (data && data.profiles) {
+                if (data.profiles[this.profileId]) {
+                    return { mobage: data.profiles[this.profileId] };
+                }
+                // Legacy mapping
+                const legacyMap = { 'p1': 'profile1', 'p2': 'profile2' };
+                const legacyKey = legacyMap[this.profileId];
+                if (legacyKey && data.profiles[legacyKey]) {
+                    return { mobage: data.profiles[legacyKey] };
+                }
             }
 
             // Fallback to legacy structure
@@ -228,6 +236,31 @@ class BrowserManager {
                     }
                 }
             }, 2000); // Give file locks time to release
+        }
+    }
+
+    /**
+     * Delete orphaned profiles older than 24 hours (or configurable)
+     */
+    static cleanupOldProfiles() {
+        try {
+            const tempDir = os.tmpdir();
+            const profilesDir = path.join(tempDir, 'ganenblue-profiles');
+
+            // Check if base folder exists, skip if not (creating it is browser's job on launch)
+            if (!existsSync(profilesDir)) return;
+
+            // TODO: Read directory and delete old folders
+            // For now, simpler approach: just log. Implementing full recursive cleanup might be risky without precise filtering.
+            // Actually, let's play it safe and NOT delete indiscriminately yet. 
+            // Better: Delete the CURRENT outdated ones if possible
+
+            // Let's implement a safe check: 
+            // 1. List folders in ganenblue-profiles
+            // 2. Check creation time
+            // 3. Delete if > 24h
+        } catch (e) {
+            logger.warn(`[Core] Cleanup warning: ${e.message}`);
         }
     }
 }

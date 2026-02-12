@@ -71,6 +71,7 @@ class BattleHandler {
             return result;
         } catch (error) {
             logger.error('[Error] Battle execution failed:', error);
+            await this.controller.takeScreenshot('error_battle');
             // Return empty result to avoid breaking stats update loop
             return { duration: 0, turns: 0 };
         }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
@@ -13,7 +13,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
-let tray = null;
 
 // Store instances per profile: 'p1', 'p2'
 // Structure: { [profileId]: { browser: BrowserManager, bot: Bot, stats: Object } }
@@ -37,65 +36,20 @@ function getInstance(profileId) {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 850,
-        height: 850,
+        width: 450,
+        height: 700,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
         },
+        // skipTaskbar: true, // Removed to show in taskbar
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
     // Open DevTools in development
     // mainWindow.webContents.openDevTools();
-
-    // Create system tray
-    createTray();
-}
-
-function createTray() {
-    // Use simple emoji/text as icon for now (can replace with actual icon file later)
-    const iconPath = nativeImage.createFromDataURL(
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3Njape.org5vuPBoAAAEMSURBVDiNpdIxSwNBEAbgL2dIYWFhYaGFhYWFhf+gf8DCwsJCCwsLCwstLCwsLCwsLLSwsLBQsLCw0MLCwsJCCwsLC/+AhYWFhYWGhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFT7C8d3u7m5nJ7mbv9nY3M5Pd3d3MzOz+wP/AzOwPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w98jj/wOf7A5/gDn+MPfI4/8Dn+wOf4A5/jD3yOP/A5/sDn+AOf4w/8H/gAOqY4TZiV8XYAAAAASUVORK5CYII='
-    );
-
-    tray = new Tray(iconPath);
-
-    const contextMenu = Menu.buildFromTemplate([
-        {
-            label: 'Show/Hide',
-            click: () => {
-                if (mainWindow.isVisible()) {
-                    mainWindow.hide();
-                } else {
-                    mainWindow.show();
-                    mainWindow.focus();
-                }
-            }
-        },
-        { type: 'separator' },
-        {
-            label: 'Quit',
-            click: () => {
-                app.quit();
-            }
-        }
-    ]);
-
-    tray.setToolTip('Ganenblue Bot');
-    tray.setContextMenu(contextMenu);
-
-    // Double-click to show window
-    tray.on('click', () => {
-        if (mainWindow.isVisible()) {
-            mainWindow.hide();
-        } else {
-            mainWindow.show();
-            mainWindow.focus();
-        }
-    });
 }
 
 function showNotification(title, body, playSound = false) {
@@ -122,10 +76,73 @@ app.whenReady().then(() => {
     });
 });
 
+// --- Stats Updater Loop ---
+let statsInterval = null;
+
+function startStatsUpdater() {
+    if (statsInterval) return;
+    statsInterval = setInterval(() => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+
+        for (const [profileId, instance] of instances) {
+            if (instance.bot && instance.bot.isRunning) {
+                const stats = instance.bot.getStats();
+
+                // Calculate duration and rate
+                let duration = '00:00:00';
+                let rate = '0.0/h';
+
+                if (instance.stats.startTime) {
+                    const diff = Date.now() - instance.stats.startTime;
+                    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+                    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+                    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+                    duration = `${hours}:${minutes}:${seconds}`;
+
+                    // Calculate Rate (Completed / Hours)
+                    const completed = stats.completedQuests || stats.raidsCompleted || 0;
+                    if (diff > 0) {
+                        const hoursFloat = diff / 3600000;
+                        if (hoursFloat > 0.01) { // Avoid spike at start
+                            rate = (completed / hoursFloat).toFixed(1) + '/h';
+                        }
+                    }
+                }
+
+                mainWindow.webContents.send('bot:status', {
+                    profileId,
+                    status: instance.bot.isPaused ? 'Paused' : 'Running',
+                    stats: {
+                        ...stats,
+                        duration,
+                        rate
+                    }
+                });
+            }
+        }
+    }, 1000);
+}
+
+function stopStatsUpdater() {
+    if (statsInterval) {
+        clearInterval(statsInterval);
+        statsInterval = null;
+    }
+}
+
+app.on('before-quit', stopStatsUpdater);
+
 app.on('window-all-closed', async () => {
     if (process.platform !== 'darwin') {
-        if (botInstance) botInstance.stop();
-        if (browserManager) await browserManager.close();
+        // Close all instances
+        for (const [id, instance] of instances) {
+            if (instance.bot) {
+                try { instance.bot.stop(); } catch (e) { console.error(`Failed to stop bot ${id}`, e); }
+            }
+            if (instance.browser) {
+                try { await instance.browser.close(); } catch (e) { console.error(`Failed to close browser ${id}`, e); }
+            }
+        }
         app.quit();
     }
 });
@@ -224,8 +241,12 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
         }
 
         // Start bot loop (non-blocking)
-        instance.bot.start().then(() => {
-            const stats = instance.bot.getStats();
+        const currentBot = instance.bot;
+        instance.stats.startTime = Date.now(); // Track start time
+        startStatsUpdater(); // Ensure updater is running
+
+        currentBot.start().then(() => {
+            const stats = currentBot.getStats();
             const quests = stats.completedQuests || 0;
             const raids = stats.raidsCompleted || 0;
 
@@ -285,12 +306,22 @@ ipcMain.handle('bot:reset-stats', (event, profileId) => {
         instance.bot.questsCompleted = 0;
         instance.bot.raidsCompleted = 0;
         if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
+        if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
         if (typeof instance.bot.totalTurns !== 'undefined') instance.bot.totalTurns = 0;
+        instance.stats.startTime = null; // Reset timer
 
         logger.info(`[Gui] [${profileId}] Stats reset`);
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
+});
+
+ipcMain.handle('app:resize-window', async (event, width, height) => {
+    if (mainWindow) {
+        mainWindow.setSize(width, height);
+        return { success: true };
+    }
+    return { success: false };
 });
 
 ipcMain.handle('credentials:save', async (event, profileId, credentials) => {
@@ -331,8 +362,17 @@ ipcMain.handle('credentials:load', async (event, profileId) => {
         const fileContents = readFileSync(credPath, 'utf8');
         const data = yaml.load(fileContents);
 
-        if (data && data.profiles && data.profiles[profileId]) {
-            return { success: true, credentials: data.profiles[profileId] };
+        if (data && data.profiles) {
+            // Direct match
+            if (data.profiles[profileId]) {
+                return { success: true, credentials: data.profiles[profileId] };
+            }
+            // Legacy mapping: p1 -> profile1, p2 -> profile2
+            const legacyMap = { 'p1': 'profile1', 'p2': 'profile2' };
+            const legacyKey = legacyMap[profileId];
+            if (legacyKey && data.profiles[legacyKey]) {
+                return { success: true, credentials: data.profiles[legacyKey] };
+            }
         }
 
         return { success: true, credentials: null };

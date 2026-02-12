@@ -26,6 +26,7 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
+        this.startTime = Date.now();
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
@@ -59,6 +60,7 @@ class RaidBot {
             }
         } catch (error) {
             logger.error('[Error] [Bot] Raid bot error:', error);
+            await this.controller.takeScreenshot('error_raid');
             throw error;
         } finally {
             this.isRunning = false;
@@ -133,6 +135,10 @@ class RaidBot {
         if (this.battle.lastBattleDuration > 0) {
             this.battleTimes.push(this.battle.lastBattleDuration);
             this.battleTurns.push(result.turns || 0);
+
+            // Memory Optimization: keep only last 50 entries
+            if (this.battleTimes.length > 50) this.battleTimes.shift();
+            if (this.battleTurns.length > 50) this.battleTurns.shift();
         }
 
         if (honorReached) {
