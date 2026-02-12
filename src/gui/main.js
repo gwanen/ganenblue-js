@@ -14,8 +14,26 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow;
 let tray = null;
-let botInstance = null;
-let browserManager = null;
+
+// Store instances per profile: 'p1', 'p2'
+// Structure: { [profileId]: { browser: BrowserManager, bot: Bot, stats: Object } }
+const instances = new Map();
+
+function getInstance(profileId) {
+    if (!instances.has(profileId)) {
+        instances.set(profileId, {
+            browser: null,
+            bot: null,
+            stats: {
+                startTime: null,
+                completedQuests: 0,
+                raidsCompleted: 0,
+                battleCount: 0
+            }
+        });
+    }
+    return instances.get(profileId);
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -113,15 +131,17 @@ app.on('window-all-closed', async () => {
 });
 
 // --- IPC Handlers ---
-ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceSettings = {}) => {
-    // Prevent multiple browser instances
-    if (browserManager) {
-        logger.info('[Gui] Browser already open, reusing...');
+ipcMain.handle('browser:launch', async (event, profileId, browserType = 'chromium', deviceSettings = {}) => {
+    const instance = getInstance(profileId);
+
+    // Prevent multiple browser instances for the same profile
+    if (instance.browser) {
+        logger.info(`[Gui] [${profileId}] Browser already open, reusing...`);
         return { success: true, message: 'Browser already open' };
     }
 
     try {
-        logger.info(`[Gui] Launching ${browserType} browser for manual login...`);
+        logger.info(`[Gui] [${profileId}] Launching ${browserType} browser...`);
 
         // Override browser type in config
         const browserConfig = {
@@ -131,30 +151,50 @@ ipcMain.handle('browser:launch', async (event, browserType = 'chromium', deviceS
             emulation: deviceSettings // Pass full settings object
         };
 
-        browserManager = new BrowserManager(browserConfig);
-        const page = await browserManager.launch();
+        // Create new browser manager for this profile
+        instance.browser = new BrowserManager(browserConfig, profileId);
+        await instance.browser.launch();
 
         // Navigate to GBF and perform auto-login
-        await browserManager.navigateAndLogin('http://game.granbluefantasy.jp/');
+        await instance.browser.navigateAndLogin('http://game.granbluefantasy.jp/');
 
         return { success: true };
     } catch (error) {
-        logger.error('[Error] Failed to launch browser:', error);
+        logger.error(`[Error] [${profileId}] Failed to launch browser:`, error);
         return { success: false, message: error.message };
     }
 });
 
-ipcMain.handle('bot:start', async (event, settings) => {
-    if (botInstance && botInstance.isRunning) {
+ipcMain.handle('browser:close', async (event, profileId) => {
+    const instance = getInstance(profileId);
+    if (instance.browser) {
+        try {
+            logger.info(`[Gui] [${profileId}] Closing browser...`);
+            await instance.browser.close();
+            instance.browser = null;
+            instance.bot = null; // Also clear bot instance if browser closes
+            return { success: true };
+        } catch (error) {
+            logger.error(`[Error] [${profileId}] Failed to close browser:`, error);
+            return { success: false, message: error.message };
+        }
+    }
+    return { success: true }; // Already closed
+});
+
+ipcMain.handle('bot:start', async (event, profileId, settings) => {
+    const instance = getInstance(profileId);
+
+    if (instance.bot && instance.bot.isRunning) {
         return { success: false, message: 'Bot is already running' };
     }
 
-    if (!browserManager || !browserManager.page) {
+    if (!instance.browser || !instance.browser.page) {
         return { success: false, message: 'Browser not initialized. Click "Open Browser" first.' };
     }
 
     try {
-        logger.info(`[Bot] Starting automation in ${settings.botMode} mode...`);
+        logger.info(`[Bot] [${profileId}] Starting automation in ${settings.botMode} mode...`);
 
         const botMode = settings.botMode || 'quest';
 
@@ -164,7 +204,7 @@ ipcMain.handle('bot:start', async (event, settings) => {
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns));
 
-            botInstance = new QuestBot(browserManager.page, {
+            instance.bot = new QuestBot(instance.browser.page, {
                 questUrl: config.get('bot.quest_url'),
                 maxQuests: config.get('bot.max_quests'),
                 battleMode: config.get('bot.battle_mode')
@@ -174,7 +214,7 @@ ipcMain.handle('bot:start', async (event, settings) => {
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_raids', parseInt(settings.maxRuns));
 
-            botInstance = new RaidBot(browserManager.page, {
+            instance.bot = new RaidBot(instance.browser.page, {
                 maxRaids: config.get('bot.max_raids'),
                 battleMode: config.get('bot.battle_mode'),
                 honorTarget: parseInt(settings.honorTarget) || 0
@@ -184,95 +224,103 @@ ipcMain.handle('bot:start', async (event, settings) => {
         }
 
         // Start bot loop (non-blocking)
-        botInstance.start().then(() => {
-            const stats = botInstance.getStats();
+        instance.bot.start().then(() => {
+            const stats = instance.bot.getStats();
             const quests = stats.completedQuests || 0;
             const raids = stats.raidsCompleted || 0;
 
-            logger.info(`[Bot] Finished: Quest ${quests} | Raid ${raids}`);
-            mainWindow.webContents.send('bot:status', 'Stopped');
+            logger.info(`[Bot] [${profileId}] Finished: Quest ${quests} | Raid ${raids}`);
+            mainWindow.webContents.send('bot:status', { profileId, status: 'Stopped' });
 
             // Show completion notification
             showNotification(
                 'Farming Complete! 🎉',
-                `Quest ${quests} | Raid ${raids}`,
+                `[${profileId}] Quest ${quests} | Raid ${raids}`,
                 true
             );
         }).catch(err => {
-            logger.error('[Error] [Bot] Execution error:', err);
-            mainWindow.webContents.send('bot:status', 'Error');
+            logger.error(`[Error] [Bot] [${profileId}] Execution error:`, err);
+            mainWindow.webContents.send('bot:status', { profileId, status: 'Error' });
 
             // Show error notification
             showNotification(
                 'Bot Error',
-                'An error occurred during farming',
+                `[${profileId}] An error occurred during farming`,
                 true
             );
         });
 
         return { success: true };
     } catch (error) {
-        logger.error('[Error] [Bot] Failed to start:', error);
+        logger.error(`[Error] [Bot] [${profileId}] Failed to start:`, error);
         return { success: false, message: error.message };
     }
 });
 
-ipcMain.handle('bot:stop', async () => {
-    if (botInstance) {
-        botInstance.stop();
-        botInstance = null;
+ipcMain.handle('bot:stop', async (event, profileId) => {
+    const instance = getInstance(profileId);
+    if (instance.bot) {
+        instance.bot.stop();
+        instance.bot = null;
     }
-    // Do NOT close browserManager here
-    logger.info('[Gui] Bot stopped (Browser kept open)');
+    logger.info(`[Gui] [${profileId}] Bot stopped (Browser kept open)`);
     return { success: true };
 });
 
-ipcMain.handle('bot:get-status', () => {
-    if (!botInstance) return { status: 'Stopped' };
-    const stats = botInstance.getStats();
+ipcMain.handle('bot:get-status', (event, profileId) => {
+    const instance = getInstance(profileId);
+    if (!instance.bot) return { status: 'Stopped' };
+    const stats = instance.bot.getStats();
     return {
         status: stats.isRunning ? (stats.isPaused ? 'Paused' : 'Running') : 'Stopped',
         stats
     };
 });
 
-ipcMain.handle('bot:reset-stats', () => {
-    if (botInstance) {
-        if (botInstance.battleTimes) botInstance.battleTimes = [];
-        if (botInstance.battleTurns) botInstance.battleTurns = [];
-        botInstance.questsCompleted = 0;
-        botInstance.raidsCompleted = 0;
-        // Also reset battleCount if it exists
-        if (typeof botInstance.battleCount !== 'undefined') botInstance.battleCount = 0;
-        if (typeof botInstance.totalTurns !== 'undefined') botInstance.totalTurns = 0;
+ipcMain.handle('bot:reset-stats', (event, profileId) => {
+    const instance = getInstance(profileId);
+    if (instance.bot) {
+        if (instance.bot.battleTimes) instance.bot.battleTimes = [];
+        if (instance.bot.battleTurns) instance.bot.battleTurns = [];
+        instance.bot.questsCompleted = 0;
+        instance.bot.raidsCompleted = 0;
+        if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
+        if (typeof instance.bot.totalTurns !== 'undefined') instance.bot.totalTurns = 0;
 
-        logger.info('[Gui] Stats reset');
+        logger.info(`[Gui] [${profileId}] Stats reset`);
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
 });
 
-ipcMain.handle('credentials:save', async (event, credentials) => {
+ipcMain.handle('credentials:save', async (event, profileId, credentials) => {
     try {
         const credPath = path.join(__dirname, '../../config/credentials.yaml');
+        let data = {};
 
-        const credData = {
-            mobage: {
-                email: credentials.email || '',
-                password: credentials.password || ''
-            }
+        if (existsSync(credPath)) {
+            try {
+                data = yaml.load(readFileSync(credPath, 'utf8')) || {};
+            } catch (e) { /* ignore */ }
+        }
+
+        if (!data.profiles) data.profiles = {};
+
+        data.profiles[profileId] = {
+            email: credentials.email || '',
+            password: credentials.password || ''
         };
 
-        writeFileSync(credPath, yaml.dump(credData), 'utf8');
-        logger.info('[Gui] Credentials saved successfully');
+        writeFileSync(credPath, yaml.dump(data), 'utf8');
+        logger.info(`[Gui] [${profileId}] Credentials saved successfully`);
         return { success: true };
     } catch (error) {
-        logger.error('[Error] [Gui] Failed to save credentials:', error.message);
+        logger.error(`[Error] [Gui] Failed to save credentials for ${profileId}:`, error.message);
         return { success: false, message: error.message };
     }
 });
 
-ipcMain.handle('credentials:load', async () => {
+ipcMain.handle('credentials:load', async (event, profileId) => {
     try {
         const credPath = path.join(__dirname, '../../config/credentials.yaml');
 
@@ -283,12 +331,13 @@ ipcMain.handle('credentials:load', async () => {
         const fileContents = readFileSync(credPath, 'utf8');
         const data = yaml.load(fileContents);
 
-        return {
-            success: true,
-            credentials: data && data.mobage ? data.mobage : null
-        };
+        if (data && data.profiles && data.profiles[profileId]) {
+            return { success: true, credentials: data.profiles[profileId] };
+        }
+
+        return { success: true, credentials: null };
     } catch (error) {
-        logger.error('[Error] [Gui] Failed to load credentials:', error.message);
+        logger.error(`[Error] [Gui] Failed to load credentials for ${profileId}:`, error.message);
         return { success: false, message: error.message };
     }
 });

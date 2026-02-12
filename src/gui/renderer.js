@@ -19,6 +19,45 @@ const customSizeContainer = document.getElementById('custom-size-inputs');
 const inputHonorTarget = document.getElementById('honor-target');
 const honorTargetGroup = document.getElementById('honor-target-group');
 const checkboxDisableSandbox = document.getElementById('disable-sandbox');
+const tabButtons = document.querySelectorAll('.tab-button');
+
+// === Multi-Profile State ===
+let currentProfile = 'profile1';
+
+const profileState = {
+    profile1: {
+        isRunning: false,
+        isBrowserOpen: false,
+        startTime: null,
+        logs: [], // Array of log objects
+        stats: {
+            completedQuests: 0,
+            raidsCompleted: 0,
+            battleCount: 0,
+            avgBattleTime: 0,
+            avgTurns: 0,
+            battleTimes: [],
+            battleTurns: []
+        },
+        settings: {} // Cache settings per profile
+    },
+    profile2: {
+        isRunning: false,
+        isBrowserOpen: false,
+        startTime: null,
+        logs: [],
+        stats: {
+            completedQuests: 0,
+            raidsCompleted: 0,
+            battleCount: 0,
+            avgBattleTime: 0,
+            avgTurns: 0,
+            battleTimes: [],
+            battleTurns: []
+        },
+        settings: {}
+    }
+};
 
 // === Toast Notifications ===
 function showToast(message, type = 'info', duration = 3000) {
@@ -102,9 +141,40 @@ function updateProgressBar(current, max) {
     }
 }
 
-// === Persistent Settings ===
-function saveSettings() {
-    const settings = {
+// === Profile Switching Logic ===
+function switchProfile(newProfileId) {
+    if (newProfileId === currentProfile) return;
+
+    // 1. Save current UI settings to state
+    saveUiToState(currentProfile);
+
+    // 2. Update active tab
+    tabButtons.forEach(btn => {
+        if (btn.dataset.tab === newProfileId) btn.classList.add('active');
+        else btn.classList.remove('active');
+    });
+
+    // 3. Switch context
+    currentProfile = newProfileId;
+
+    // 4. Load settings from state (or defaults) to UI
+    loadUiFromState(newProfileId);
+
+    // 5. Update Status Badge & Buttons
+    updateStatusDisplay();
+
+    // 6. Refresh Logs
+    refreshLogDisplay();
+
+    // 7. Refresh Stats
+    refreshStatsDisplay();
+
+    // 8. Update Credentials UI
+    loadCredentialsForProfile(newProfileId);
+}
+
+function saveUiToState(profileId) {
+    profileState[profileId].settings = {
         botMode: selectBotMode.value,
         questUrl: inputQuestUrl.value,
         maxRuns: inputMaxRuns.value,
@@ -116,41 +186,155 @@ function saveSettings() {
         windowHeight: inputWindowHeight.value,
         honorTarget: cleanHonorsValue(inputHonorTarget.value)
     };
-    localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
 }
 
+function loadUiFromState(profileId) {
+    const settings = profileState[profileId].settings || {};
+
+    // Load defaults if empty (first run per profile)
+    selectBotMode.value = settings.botMode || 'quest';
+    inputQuestUrl.value = settings.questUrl || '';
+    inputMaxRuns.value = settings.maxRuns || 0;
+    selectBrowserType.value = settings.browserType || 'chromium';
+    selectBattleMode.value = settings.battleMode || 'full_auto';
+    checkboxEnableCustom.checked = settings.customSize || false;
+    inputWindowWidth.value = settings.windowWidth || 500;
+    inputWindowHeight.value = settings.windowHeight || 850;
+    inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
+    checkboxDisableSandbox.checked = settings.disableSandbox || false;
+
+    updateUIForBotMode();
+    updateUIForCustomSize();
+}
+
+function updateStatusDisplay() {
+    const state = profileState[currentProfile];
+    const isRunning = state.isRunning;
+
+    statusBadge.className = `status-badge status-${isRunning ? 'Running' : 'Stopped'}`;
+    statusBadge.textContent = isRunning ? 'Running' : 'Stopped';
+
+    // Update buttons
+    if (state.isBrowserOpen) {
+        btnLaunch.textContent = 'Close Browser';
+        btnLaunch.disabled = false; // Always allow closing
+        btnLaunch.classList.add('btn-secondary'); // Optional styling
+    } else {
+        btnLaunch.textContent = 'Launch Browser';
+        btnLaunch.disabled = false;
+        btnLaunch.classList.remove('btn-secondary');
+    }
+
+    btnStart.disabled = isRunning || !state.isBrowserOpen;
+    btnStop.disabled = !isRunning;
+
+    // Disable inputs if running
+    const inputs = [
+        selectBotMode, inputQuestUrl, inputMaxRuns, selectBrowserType,
+        selectBattleMode, inputHonorTarget, checkboxEnableCustom,
+        inputWindowWidth, inputWindowHeight
+    ];
+    inputs.forEach(input => input.disabled = isRunning);
+}
+
+function refreshLogDisplay() {
+    logContainer.innerHTML = ''; // Clear current
+    const logs = profileState[currentProfile].logs || [];
+    // Re-render last 100 logs or so to avoid lag
+    logs.slice(-100).forEach(log => appendLogToDom(log));
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function refreshStatsDisplay() {
+    const stats = profileState[currentProfile].stats;
+    // Update stats UI elements using stats object
+    // (Reusing existing logic but pulling from state)
+    const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+    const max = parseInt(profileState[currentProfile].settings.maxRuns) || 0; // estimate
+
+    document.getElementById('completed-runs').textContent = completed;
+    document.getElementById('avg-turns').textContent = stats.avgTurns || '0.0';
+
+    // Recalculate time display
+    let avgTimeDisplay = '--:--';
+    if (stats.avgBattleTime > 0) {
+        const avgMs = stats.avgBattleTime;
+        const totalSeconds = Math.floor(avgMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    document.getElementById('avg-battle').textContent = avgTimeDisplay;
+
+    // Update battle times list
+    const battleTimesContainer = document.getElementById('battle-times-display');
+    if (stats.battleTimes && stats.battleTimes.length > 0) {
+        let html = ''; // ... build html similar to before
+        // Ideally we abstract the stats HTML building into a helper
+        battleTimesContainer.innerHTML = buildBattleTimesHtml(stats);
+    } else {
+        battleTimesContainer.innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
+    }
+}
+
+function buildBattleTimesHtml(stats) {
+    if (!stats.battleTimes || stats.battleTimes.length === 0) return '<div style="color: var(--text-secondary);">No battles yet</div>';
+
+    const formatTime = (ms) => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    const avgTime = formatTime(stats.avgBattleTime || 0);
+    let html = `<div style="margin-bottom: 10px; color: var(--accent-green); font-weight: bold;">Average: ${avgTime}</div>`;
+    html += '<div style="border-top: 1px solid var(--border); padding-top: 5px;">';
+
+    stats.battleTimes.forEach((time, index) => {
+        const formattedTime = formatTime(time);
+        const turns = stats.battleTurns ? stats.battleTurns[index] : 0;
+        html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime} (${turns} turns)</div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
+// Tab Click Listeners
+tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const newTab = btn.dataset.tab;
+        switchProfile(newTab);
+    });
+});
+
+// Update loadSettings to load *all* profiles from localStorage if possible, or just init defaults
 function loadSettings() {
     try {
-        const saved = localStorage.getItem('ganenblue_settings');
+        const saved = localStorage.getItem('ganenblue_settings_v2');
         if (saved) {
-            const settings = JSON.parse(saved);
-            selectBotMode.value = settings.botMode || 'quest';
-            inputQuestUrl.value = settings.questUrl || '';
-            inputMaxRuns.value = settings.maxRuns || 0;
-            selectBrowserType.value = settings.browserType || 'chromium';
-            selectBattleMode.value = settings.battleMode || 'full_auto';
-            checkboxEnableCustom.checked = settings.customSize || false;
-            inputWindowWidth.value = settings.windowWidth || 500;
-            inputWindowHeight.value = settings.windowHeight || 850;
-            inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
-            checkboxDisableSandbox.checked = settings.disableSandbox || false;
-
-            // Trigger UI updates
-            updateUIForBotMode();
-            updateUIForCustomSize();
-
-            // Restore Compact Mode
-            if (settings.compactMode) {
-                document.body.classList.add('compact-mode');
-                if (btnCompact) btnCompact.textContent = '🔼';
-            }
-
-            // Trigger UI updates for bot mode
-            updateUIForBotMode();
+            const parsed = JSON.parse(saved);
+            // Merge saved settings into profileState
+            if (parsed.profile1) profileState.profile1.settings = parsed.profile1;
+            if (parsed.profile2) profileState.profile2.settings = parsed.profile2;
         }
+
+        // Load initial UI
+        loadUiFromState(currentProfile);
     } catch (error) {
         console.error('Failed to load settings:', error);
     }
+}
+
+function saveSettings() {
+    // Save current UI to state first
+    saveUiToState(currentProfile);
+
+    const exportState = {
+        profile1: profileState.profile1.settings,
+        profile2: profileState.profile2.settings
+    };
+    localStorage.setItem('ganenblue_settings_v2', JSON.stringify(exportState));
 }
 
 function updateUIForBotMode() {
@@ -181,10 +365,7 @@ function debouncedSave() {
     saveTimeout = setTimeout(() => saveSettings(), 500);
 }
 
-// Load settings on startup
-window.addEventListener('DOMContentLoaded', () => {
-    loadSettings();
-});
+
 
 // Auto-save on changes
 selectBotMode.addEventListener('change', debouncedSave);
@@ -376,91 +557,169 @@ if (window.electronAPI && window.electronAPI.onPlaySound) {
     });
 }
 
+// Update Tab Name Helper
+function updateTabName(profileId, name) {
+    if (!name) return;
+    const tabBtn = document.querySelector(`.tab-button[data-tab="${profileId}"]`);
+    if (tabBtn) {
+        // Truncate if too long?
+        tabBtn.textContent = name;
+    }
+}
+
 // Save Credentials Button
 const btnSaveCredentials = document.getElementById('btn-save-credentials');
 const inputMobageEmail = document.getElementById('mobage-email');
 const inputMobagePassword = document.getElementById('mobage-password');
 
 btnSaveCredentials.addEventListener('click', async () => {
+    const profile = currentProfile;
     const email = inputMobageEmail.value.trim();
     const password = inputMobagePassword.value.trim();
 
     if (!email || !password) {
-        addLog({ level: 'warn', message: 'Please enter both email and password', timestamp: new Date().toISOString() });
+        addLogToProfile(profile, { level: 'warn', message: 'Please enter both email and password', timestamp: new Date().toISOString() });
         return;
     }
 
-    const result = await window.electronAPI.saveCredentials({ email, password });
+    const result = await window.electronAPI.saveCredentials(profile, { email, password });
 
     if (result.success) {
-        addLog({ level: 'info', message: '✓ Credentials saved successfully!', timestamp: new Date().toISOString() });
+        addLogToProfile(profile, { level: 'info', message: `[${profile}] ✓ Credentials saved successfully!`, timestamp: new Date().toISOString() });
+        // Update tab name
+        updateTabName(profile, email);
     } else {
-        addLog({ level: 'error', message: `Failed to save credentials: ${result.message}`, timestamp: new Date().toISOString() });
+        addLogToProfile(profile, { level: 'error', message: `Failed to save credentials: ${result.message}`, timestamp: new Date().toISOString() });
     }
 });
 
-// Load credentials on startup
-(async () => {
+// Load credentials helper
+async function loadCredentialsForProfile(profileId) {
     try {
-        console.log('Loading saved credentials...');
-        const result = await window.electronAPI.loadCredentials();
+        // Clear fields first
+        inputMobageEmail.value = '';
+        inputMobagePassword.value = '';
+
+        const result = await window.electronAPI.loadCredentials(profileId);
 
         if (result.success && result.credentials) {
-            // Only load email, keep password empty for security
-            inputMobageEmail.value = result.credentials.email || '';
-            // Don't log email or password
-            addLog({ level: 'info', message: `[Login] ✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
-        } else {
-            console.log('No credentials found or load failed');
-            addLog({ level: 'info', message: 'No saved credentials found', timestamp: new Date().toISOString() });
+            const email = result.credentials.email || '';
+            inputMobageEmail.value = email;
+            addLogToProfile(profileId, { level: 'info', message: `[${profileId}] ✓ Loaded saved email: ${email}`, timestamp: new Date().toISOString() });
+
+            // Update tab name if email exists
+            if (email) {
+                updateTabName(profileId, email);
+            }
         }
     } catch (error) {
         console.error('Error loading credentials:', error);
-        addLog({ level: 'error', message: `Failed to load credentials: ${error.message}`, timestamp: new Date().toISOString() });
     }
+}
+
+// Initial Load
+(async () => {
+    // Load settings from local storage
+    loadSettings();
+    // Load credentials for initial profile
+    loadCredentialsForProfile(currentProfile);
+
+    // Also try to load credentials for the OTHER profile to update its tab name?
+    // Good UX improvement:
+    Object.keys(profileState).forEach(pid => {
+        if (pid !== currentProfile) {
+            window.electronAPI.loadCredentials(pid).then(res => {
+                if (res.success && res.credentials && res.credentials.email) {
+                    updateTabName(pid, res.credentials.email);
+                }
+            });
+        }
+    });
 })();
 
-// 1. Launch Browser
+// 1. Launch / Close Browser
 btnLaunch.addEventListener('click', async () => {
-    setButtonLoading(btnLaunch, true, 'Launching...');
-    btnLaunch.disabled = true;
-    addLog({ level: 'info', message: '[Login] Launching browser...', timestamp: new Date().toISOString() });
+    const profile = currentProfile;
+    const currentState = profileState[profile].isBrowserOpen;
 
-    const browserType = selectBrowserType.value;
-    const deviceSettings = {
-        mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
-        width: parseInt(inputWindowWidth.value),
-        height: parseInt(inputWindowHeight.value),
-        disable_sandbox: checkboxDisableSandbox.checked
-    };
+    if (currentState) {
+        // CLOSE BROWSER
+        if (!confirm(`Are you sure you want to close the browser for ${profile}? This will stop any running bots.`)) return;
 
-    const result = await window.electronAPI.launchBrowser(browserType, deviceSettings);
+        setButtonLoading(btnLaunch, true, 'Closing...');
+        btnLaunch.disabled = true;
+        addLogToProfile(profile, { level: 'info', message: `[${profile}] Closing browser...`, timestamp: new Date().toISOString() });
 
-    setButtonLoading(btnLaunch, false);
+        const result = await window.electronAPI.closeBrowser(profile);
 
-    if (result.success) {
-        btnLaunch.textContent = 'Browser Open';
-        addLog({ level: 'info', message: '[Login] Browser launched. Please login manually.', timestamp: new Date().toISOString() });
-        showToast('Browser launched successfully!', 'success');
-        btnStart.disabled = false;
+        setButtonLoading(btnLaunch, false);
+        btnLaunch.disabled = false; // Re-enable
 
-        // Hide credentials section after browser launches
-        const credContent = document.getElementById('credentials-content');
-        if (credContent) {
-            credContent.classList.remove('open');
-            const credChevron = document.getElementById('credentials-chevron');
-            if (credChevron) credChevron.textContent = '▼';
+        if (result.success) {
+            profileState[profile].isBrowserOpen = false;
+            profileState[profile].isRunning = false; // Bot stops if browser closes
+
+            // Update UI
+            if (currentProfile === profile) {
+                btnLaunch.textContent = 'Launch Browser';
+                btnLaunch.classList.remove('btn-danger'); // Remove danger style if used
+                btnStart.disabled = true;
+                btnStop.disabled = true;
+                updateStatusDisplay();
+            }
+            addLogToProfile(profile, { level: 'info', message: `[${profile}] Browser closed.`, timestamp: new Date().toISOString() });
+            showToast(`[${profile}] Browser closed`, 'info');
+        } else {
+            addLogToProfile(profile, { level: 'error', message: `Failed to close: ${result.message}`, timestamp: new Date().toISOString() });
+            showToast(`Failed to close: ${result.message}`, 'error');
         }
+
     } else {
-        addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
-        showToast(`Launch failed: ${result.message}`, 'error');
-        btnLaunch.disabled = false;
-        btnLaunch.textContent = 'Launch Browser';
+        // LAUNCH BROWSER
+        setButtonLoading(btnLaunch, true, 'Launching...');
+        btnLaunch.disabled = true;
+
+        // Log directly to state
+        addLogToProfile(profile, { level: 'info', message: `[${profile}] Launching browser...`, timestamp: new Date().toISOString() });
+
+        const browserType = selectBrowserType.value;
+        const deviceSettings = {
+            mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
+            width: parseInt(inputWindowWidth.value),
+            height: parseInt(inputWindowHeight.value),
+            disable_sandbox: checkboxDisableSandbox.checked
+        };
+
+        const result = await window.electronAPI.launchBrowser(profile, browserType, deviceSettings);
+
+        setButtonLoading(btnLaunch, false);
+
+        if (result.success) {
+            profileState[profile].isBrowserOpen = true;
+
+            // Update UI only if still on same profile
+            if (currentProfile === profile) {
+                btnLaunch.textContent = 'Close Browser';
+                btnLaunch.disabled = false; // Enable "Close" button
+                showToast(`[${profile}] Browser launched!`, 'success');
+                btnStart.disabled = false;
+            }
+
+            addLogToProfile(profile, { level: 'info', message: `[${profile}] Browser launched. Please login manually.`, timestamp: new Date().toISOString() });
+        } else {
+            addLogToProfile(profile, { level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
+            showToast(`Launch failed: ${result.message}`, 'error');
+            if (currentProfile === profile) {
+                btnLaunch.disabled = false;
+                btnLaunch.textContent = 'Launch Browser';
+            }
+        }
     }
 });
 
 // 2. Start Bot
 btnStart.addEventListener('click', async () => {
+    const profile = currentProfile;
     const botMode = selectBotMode.value;
     const settings = {
         botMode: botMode,
@@ -470,126 +729,99 @@ btnStart.addEventListener('click', async () => {
         honorTarget: parseInt(cleanHonorsValue(inputHonorTarget.value), 10) || 0
     };
 
-    // Validate quest mode requires URL
     if (botMode === 'quest' && !settings.questUrl) {
-        addLog({ level: 'warn', message: 'Please enter a Quest URL', timestamp: new Date().toISOString() });
         showToast('Please enter a Quest URL', 'warning');
         return;
     }
 
-    farmingStartTime = Date.now();
-    setRunningState(true);
-    startTimer(); // Start elapsed timer
-    addLog({ level: 'info', message: 'Starting farming...', timestamp: new Date().toISOString() });
-    showToast('Bot started successfully!', 'success');
+    profileState[profile].startTime = Date.now();
+    profileState[profile].isRunning = true;
 
-    const result = await window.electronAPI.startBot(settings);
+    if (currentProfile === profile) updateStatusDisplay();
+
+    addLogToProfile(profile, { level: 'info', message: `[${profile}] Starting farming...`, timestamp: new Date().toISOString() });
+    showToast(`[${profile}] Bot started!`, 'success');
+
+    const result = await window.electronAPI.startBot(profile, settings);
 
     if (!result.success) {
-        addLog({ level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
-        showToast(`Start failed: ${result.message}`, 'error');
-        setRunningState(false);
-        stopTimer(); // Stop timer if failed
-        farmingStartTime = null;
+        addLogToProfile(profile, { level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
+        profileState[profile].isRunning = false;
+        if (currentProfile === profile) updateStatusDisplay();
     }
 });
 
 // Stop Bot
 btnStop.addEventListener('click', async () => {
-    addLog({ level: 'info', message: 'Stopping bot...', timestamp: new Date().toISOString() });
-    await window.electronAPI.stopBot();
-    setRunningState(false);
-    stopTimer(); // Stop elapsed timer
-    farmingStartTime = null;
+    const profile = currentProfile;
+    addLogToProfile(profile, { level: 'info', message: `[${profile}] Stopping bot...`, timestamp: new Date().toISOString() });
+    await window.electronAPI.stopBot(profile);
 
-    // Reset state
-    // btnLaunch.disabled = false; // Keep browser button disabled as browser is open
-    // btnStart.disabled = true;   // ERROR: This was disabling start. Remove it.
+    profileState[profile].isRunning = false;
+    if (currentProfile === profile) updateStatusDisplay();
 
-    // Ensure Start is enabled for next run
-    btnStart.disabled = false;
-    // Removed manual textContent assignment that was causing overlap glitch
-
-    addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
-    showToast('Bot stopped', 'info');
-});
-
-// Timer functionality
-let timerInterval = null;
-let startTime = null;
-
-function startTimer() {
-    startTime = Date.now();
-    timerInterval = setInterval(updateTimer, 1000);
-}
-
-function stopTimer() {
-    if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-    }
-}
-
-function updateTimer() {
-    if (!startTime) return;
-
-    const elapsed = Date.now() - startTime;
-    const hours = Math.floor(elapsed / 3600000);
-    const minutes = Math.floor((elapsed % 3600000) / 60000);
-    const seconds = Math.floor((elapsed % 60000) / 1000);
-
-    const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    document.getElementById('elapsed-time').textContent = timeString;
-}
-
-// Reload App
-btnReload.addEventListener('click', async () => {
-    addLog({ level: 'info', message: 'Restarting application...', timestamp: new Date().toISOString() });
-    await window.electronAPI.restartApp();
-});
-
-// Reset Stats
-btnResetStats.addEventListener('click', async () => {
-    // Add reset animation class
-    const statsGrid = document.getElementById('stats-grid');
-    statsGrid.style.opacity = '0';
-    statsGrid.style.transform = 'scale(0.98)';
-
-    const result = await window.electronAPI.resetStats();
-
-    setTimeout(() => {
-        if (result.success) {
-            addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
-            showToast('Stats reset successfully', 'success');
-            document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
-            document.getElementById('completed-runs').textContent = '0';
-            document.getElementById('avg-battle').textContent = '--:--';
-            document.getElementById('avg-turns').textContent = '0.0'; // Reset avg-turns
-            document.getElementById('runs-per-hour').textContent = '0.0';
-            farmingStartTime = null;
-        }
-        statsGrid.style.opacity = '1';
-        statsGrid.style.transform = 'scale(1)';
-    }, 300);
+    addLogToProfile(profile, { level: 'info', message: `[${profile}] Bot stopped`, timestamp: new Date().toISOString() });
 });
 
 // Log Updates
 if (window.electronAPI && window.electronAPI.onLogUpdate) {
     window.electronAPI.onLogUpdate((log) => {
-        addLog(log);
+        // Strict Isolation Logic
+        // We expect logs to be tagged with [profileId] or we infer from context if possible.
+        // If the log message contains [profile1], it goes to profile1.
+        // If it contains [profile2], it goes to profile2.
+        // If it contains neither, we might ignore it or add to both (system logs).
+        // User requested strict isolation: "log for profile 1 is only appear on profile 1"
+
+        let targetProfile = null;
+
+        if (log.message && typeof log.message === 'string') {
+            if (log.message.includes('[profile1]')) {
+                targetProfile = 'profile1';
+                // Clean up the tag to avoid clutter? Optional.
+            } else if (log.message.includes('[profile2]')) {
+                targetProfile = 'profile2';
+            }
+        }
+
+        if (targetProfile) {
+            addLogToProfile(targetProfile, log);
+        } else {
+            // System log (no profile tag) - maybe show on active? or both?
+            // Let's add to both for visibility of critical system errors
+            addLogToProfile('profile1', log);
+            addLogToProfile('profile2', log);
+        }
     });
 }
 
-function addLog(log) {
+function addLogToProfile(profileId, log) {
+    if (!profileState[profileId]) return;
+
+    // Add to state
+    profileState[profileId].logs.push(log);
+
+    // Cap logs size
+    if (profileState[profileId].logs.length > 500) {
+        profileState[profileId].logs.shift();
+    }
+
+    // Only render if this is the CURRENTLY VIEWED profile
+    if (currentProfile === profileId) {
+        appendLogToDom(log);
+    }
+}
+
+function appendLogToDom(log) {
     const entry = document.createElement('div');
     const level = log.level || 'info';
     entry.className = `log-entry log-level-${level}`;
-    entry.dataset.level = level; // Store for filtering
+    entry.dataset.level = level;
 
     const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
-
     let message = log.message;
 
+    // ... [existing colorization logic] ...
     // Multi-color tag mapping
     const tagColors = {
         'quest': 'quest', 'raid': 'quest', 'summon': 'quest',
@@ -599,22 +831,16 @@ function addLog(log) {
         'bot': 'bot'
     };
 
-    // Replace all bracketed tags with colorized spans
     message = message.replace(/\[(.*?)\]/g, (match, tag) => {
-        const cleanTag = tag.toLowerCase().split(' ')[0]; // Handle [Turn 1] -> turn
+        const cleanTag = tag.toLowerCase().split(' ')[0];
         const colorClass = tagColors[cleanTag] || 'bot';
         return `<span class="log-tag log-tag-${colorClass}">${match}</span>`;
     });
-
-    // Highlight Keywords (remaining text highlights)
     message = message.replace(/(successfully|✓)/gi, '<span class="log-highlight-success">$1</span>');
 
-    entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        ${message}
-    `;
+    entry.innerHTML = `<span class="log-time">${time}</span>${message}`;
 
-    // Apply current filter
+    // Filter check
     const activeFilter = document.querySelector('.btn-filter.active').dataset.filter;
     if (activeFilter !== 'all' && activeFilter !== level) {
         entry.style.display = 'none';
@@ -649,73 +875,62 @@ function setRunningState(isRunning) {
     });
 }
 
-// Poll for stats every second if running
+// Reset Stats
+btnResetStats.addEventListener('click', async () => {
+    const profile = currentProfile;
+    // Add reset animation class
+    const statsGrid = document.getElementById('stats-grid');
+    statsGrid.style.opacity = '0';
+    statsGrid.style.transform = 'scale(0.98)';
+
+    const result = await window.electronAPI.resetStats(profile);
+
+    setTimeout(() => {
+        if (result.success) {
+            addLogToProfile(profile, { level: 'info', message: `[${profile}] Stats reset successfully`, timestamp: new Date().toISOString() });
+            showToast('Stats reset successfully', 'success');
+
+            // Reset local state
+            profileState[profile].stats = {
+                completedQuests: 0,
+                raidsCompleted: 0,
+                battleCount: 0,
+                avgBattleTime: 0,
+                avgTurns: 0,
+                battleTimes: [],
+                battleTurns: []
+            };
+
+            if (currentProfile === profile) {
+                refreshStatsDisplay();
+            }
+        }
+        statsGrid.style.opacity = '1';
+        statsGrid.style.transform = 'scale(1)';
+    }, 300);
+});
+
+// Poll for stats every second
 setInterval(async () => {
-    if (statusBadge.textContent === 'Running') {
-        const result = await window.electronAPI.getStatus();
+    // Poll stats for ALL profiles to keep history updated even in background tab
+    for (const pid of Object.keys(profileState)) {
+        const result = await window.electronAPI.getStatus(pid);
+
         if (result.stats) {
-            const botMode = selectBotMode.value;
-            // Update completed runs (Battles Done)
-            // Prioritize battleCount for "Battles Done" display
-            const completed = result.stats.battleCount || result.stats.completedQuests || result.stats.raidsCompleted || 0;
-            const max = result.stats.maxRuns || 0;
-            const completedLabel = result.stats.botMode === 'raid' ? 'Raids Done' : 'Battles Done';
+            // Update state
+            profileState[pid].stats = result.stats;
+            profileState[pid].isRunning = (result.status === 'Running' || result.status === 'Paused');
 
-            // Update completed runs
-            document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
-            document.getElementById('completed-label').textContent = completedLabel;
-
-            // Update Avg Turns
-            document.getElementById('avg-turns').textContent = result.stats.avgTurns || '0.0';
-
-            // Calculate average time display
-            let avgTimeDisplay = '--:--';
-            if (result.stats.avgBattleTime > 0) {
-                const avgMs = result.stats.avgBattleTime;
-                const totalSeconds = Math.floor(avgMs / 1000);
-                const minutes = Math.floor(totalSeconds / 60);
-                const seconds = totalSeconds % 60;
-                avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-            document.getElementById('avg-battle').textContent = avgTimeDisplay;
-
-            // Calculate runs per hour: 60 / (avgBattleTime + 15 sec buffer)
-            if (result.stats.avgBattleTime > 0) {
-                const avgMin = result.stats.avgBattleTime / 60000;
-                const perHour = (60 / (avgMin + 0.25)).toFixed(1);
-                document.getElementById('runs-per-hour').textContent = perHour;
-            } else {
-                document.getElementById('runs-per-hour').textContent = '0.0';
-            }
-
-            // Update progress bar
-            updateProgressBar(completed, max);
-
-            // Update battle times display
-            const battleTimesContainer = document.getElementById('battle-times-display');
-            if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
-                const formatTime = (ms) => {
-                    const totalSeconds = Math.floor(ms / 1000);
-                    const minutes = Math.floor(totalSeconds / 60);
-                    const seconds = totalSeconds % 60;
-                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                };
-
-                const avgTime = formatTime(result.stats.avgBattleTime);
-
-                let html = `<div style="margin-bottom: 10px; color: var(--accent-green); font-weight: bold;">Average: ${avgTime}</div>`;
-                html += '<div style="border-top: 1px solid var(--border); padding-top: 5px;">';
-
-                result.stats.battleTimes.forEach((time, index) => {
-                    const formattedTime = formatTime(time);
-                    const turns = result.stats.battleTurns ? result.stats.battleTurns[index] : 0;
-                    html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime} (${turns} turns)</div>`;
-                });
-
-                html += '</div>';
-                battleTimesContainer.innerHTML = html;
-            } else {
-                battleTimesContainer.innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
+            // If this is the ACTIVE profile, update the UI
+            if (pid === currentProfile) {
+                if (statusBadge.textContent !== result.status) {
+                    updateStatusDisplay();
+                }
+                refreshStatsDisplay();
+                updateProgressBar(
+                    result.stats.battleCount || result.stats.completedQuests || result.stats.raidsCompleted || 0,
+                    parseInt(profileState[pid].settings.maxRuns) || 0
+                );
             }
         }
     }

@@ -761,6 +761,41 @@
             opacity: 1;
             border-color: var(--accent-blue);
         }
+
+        /* Profile Tabs */
+        .profile-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            padding: 0 4px;
+        }
+
+        .tab-button {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            flex: 1;
+            text-align: center;
+        }
+
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+        }
+
+        .tab-button.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
     </style>
 </head>
 
@@ -776,6 +811,12 @@
             <button id="btn-compact" class="btn-icon" title="Toggle Compact Mode">👁️</button>
             <div id="status-badge" class="status-badge status-Stopped">Stopped</div>
         </div>
+    </div>
+
+    <!-- Profile Tabs -->
+    <div class="profile-tabs">
+        <div class="tab-button active" data-tab="profile1">Profile 1</div>
+        <div class="tab-button" data-tab="profile2">Profile 2</div>
     </div>
 
     <div class="container">
