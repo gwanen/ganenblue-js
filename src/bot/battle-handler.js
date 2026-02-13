@@ -32,6 +32,11 @@ class BattleHandler {
         this.battleStartTime = Date.now();
         logger.info(`[Battle] Engaging encounter (${mode})`);
 
+        // Enable Network Listener
+        if (this.controller.network) {
+            this.controller.network.start();
+        }
+
         try {
             // Optimization: Skip wait if already finished
             const currentUrl = this.controller.page.url();
@@ -74,6 +79,11 @@ class BattleHandler {
             await this.controller.takeScreenshot('error_battle');
             // Return empty result to avoid breaking stats update loop
             return { duration: 0, turns: 0 };
+        } finally {
+            // Stop Network Listener
+            if (this.controller.network) {
+                this.controller.network.stop();
+            }
         }
     }
 
@@ -99,21 +109,29 @@ class BattleHandler {
         }
 
         // 2. Check if Auto is already active (via CSS class)
-        const isActive = await this.controller.page.evaluate((sel) => {
+        const status = await this.controller.page.evaluate((sel) => {
             const el = document.querySelector(sel);
-            return el && el.classList.contains('active');
+            if (!el) return { exists: false, active: false };
+            return { exists: true, active: el.classList.contains('active') };
         }, this.selectors.fullAutoButton);
 
-        if (isActive) {
+        if (status.active) {
             logger.info('[FA] Full Auto is already active');
             return;
         }
 
-        // 3. Click Auto
-        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 500);
-        if (found) {
+        if (status.exists) {
+            // Click immediately
             await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
             logger.info('[FA] Full Auto enabled');
+            return;
+        }
+
+        // 3. Click Auto (Delayed check)
+        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 2000);
+        if (found) {
+            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
+            logger.info('[FA] Full Auto enabled (delayed)');
         } else {
             logger.warn('[Wait] Auto button missing. Refreshing...');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
@@ -141,7 +159,7 @@ class BattleHandler {
         const maxWaitMinutes = config.get('bot.max_battle_time') || 15;
         const maxWaitMs = maxWaitMinutes * 60 * 1000;
         const startTime = Date.now();
-        const checkInterval = 1000;
+        // checkInterval will be dynamic inside the loop
         let missingUiCount = 0;
 
         // Initial turn detection to avoid duplicate logging
@@ -160,152 +178,180 @@ class BattleHandler {
             }
         }
 
-        while (Date.now() - startTime < maxWaitMs) {
-            if (this.stopped) {
-                logger.info('[Wait] Cancelled (bot stopped)');
-                const duration = (Date.now() - startTime) / 1000;
-                return { duration, turns: turnCount };
-            }
+        // Network Event Promise
+        let networkFinished = false;
+        const onBattleResult = () => {
+            logger.info('[Network] Battle End detected!');
+            networkFinished = true;
+        };
 
-            // 1. Check turn number (safely)
-            const context = { lastTurn, turnCount };
-            const turnChanged = await this.updateTurnCount(context, honorTarget);
-            lastTurn = context.lastTurn;
-            turnCount = context.turnCount;
+        if (this.controller.network) {
+            this.controller.network.once('battle:result', onBattleResult);
+        }
 
-            if (turnChanged) {
-                lastTurnChangeTime = Date.now();
-                if (turnChanged.honorReached) {
-                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+        try {
+            while (Date.now() - startTime < maxWaitMs) {
+                if (this.stopped) {
+                    logger.info('[Wait] Cancelled (bot stopped)');
+                    const duration = (Date.now() - startTime) / 1000;
+                    return { duration, turns: turnCount };
                 }
-            }
 
-            // Watchdog: If no turn change for 10s and on raid page, check FA
-            if (Date.now() - lastTurnChangeTime > 10000) {
-                const currentRelUrl = this.controller.page.url();
-                if (currentRelUrl.includes('#raid') || currentRelUrl.includes('_raid')) {
-                    const isActive = await this.controller.page.evaluate((sel) => {
-                        const el = document.querySelector(sel);
-                        return el && el.classList.contains('active');
-                    }, this.selectors.fullAutoButton);
-
-                    if (!isActive) {
-                        logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating...');
-                        await this.handleFullAuto();
-                    }
+                if (networkFinished) {
+                    // Short sleep to allow UI to update slightly (optional, but good for safety)
+                    await sleep(500);
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount + 1 };
                 }
-                lastTurnChangeTime = Date.now(); // Reset watchdog to avoid spam
-            }
 
-            const currentUrl = this.controller.page.url();
+                // 1. Check turn number (safely)
+                const context = { lastTurn, turnCount };
+                const turnChanged = await this.updateTurnCount(context, honorTarget);
+                lastTurn = context.lastTurn;
+                turnCount = context.turnCount;
 
-            // 1. Definite End: Result URL or Empty Result Notice
-            if (currentUrl.includes('#result')) {
-                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
-            }
-
-            if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                logger.info('[Wait] Empty result screen detected.');
-                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
-            }
-
-            // 2. Rematch fail popup
-            if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
-                logger.info('[Wait] Rematch fail detected. Refreshing...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(1500); // snappier reload
-                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
-            }
-
-            // 3. Character death
-            if (await this.controller.elementExists('.btn-cheer', 100)) {
-                logger.info('[Raid] Party wiped (cheer button found).');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(1500); // snappier reload
-                return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
-            }
-
-            // 4. Raid Ended popup (Join phase race condition)
-            if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
-                logger.info('[Raid] Battle already ended.');
-                await this.controller.clickSafe(this.selectors.raidEndedOkButton);
-                await sleep(1000);
-                return { duration: 0, turns: 0, raidEnded: true };
-            }
-
-            // 5. Raid Logic (while on raid page)
-            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                // Animation Skipping (Immediate Reload)
-                if (await this.controller.elementExists('.btn-attack-start.display-off', 150)) {
-                    logger.info('[Reload] Skipping animations...');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(1200); // Reduced from 3000ms for snappier response
-
-                    // Proactively check turn after reload but before FA enable
-                    const reloadContext = { lastTurn, turnCount };
-                    const reloadResult = await this.updateTurnCount(reloadContext, honorTarget);
-                    lastTurn = reloadContext.lastTurn;
-                    turnCount = reloadContext.turnCount;
-
-                    if (reloadResult?.honorReached) {
+                if (turnChanged) {
+                    lastTurnChangeTime = Date.now();
+                    if (turnChanged.honorReached) {
                         return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
                     }
-
-                    if (await this.checkStateAndResume(mode)) {
-                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: reloadResult?.honorReached || false };
-                    }
-                    continue;
                 }
 
-                // Stuck detection
-                const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto'];
-                let uiFound = false;
-                for (const sel of uiElements) {
-                    if (await this.controller.elementExists(sel, 200)) {
-                        uiFound = true;
-                        break;
+                // Watchdog: If no turn change for 10s and on raid page, check FA
+                if (Date.now() - lastTurnChangeTime > 10000) {
+                    const currentRelUrl = this.controller.page.url();
+                    if (currentRelUrl.includes('#raid') || currentRelUrl.includes('_raid')) {
+                        const isActive = await this.controller.page.evaluate((sel) => {
+                            const el = document.querySelector(sel);
+                            return el && el.classList.contains('active');
+                        }, this.selectors.fullAutoButton);
+
+                        if (!isActive) {
+                            logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating...');
+                            await this.handleFullAuto();
+                        }
                     }
+                    lastTurnChangeTime = Date.now(); // Reset watchdog to avoid spam
                 }
 
-                if (uiFound) {
-                    missingUiCount = 0;
-                } else {
-                    missingUiCount++;
-                    if (missingUiCount >= 8) { // ~8 seconds
-                        logger.warn('[Wait] UI missing (stuck). Refreshing...');
+                const currentUrl = this.controller.page.url();
+
+                // 1. Definite End: Result URL or Empty Result Notice
+                if (currentUrl.includes('#result')) {
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                }
+
+                if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                    logger.info('[Wait] Empty result screen detected.');
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                }
+
+                // 2. Rematch fail popup
+                if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
+                    logger.info('[Wait] Rematch fail detected. Refreshing...');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(1500); // snappier reload
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                }
+
+                // 3. Character death
+                if (await this.controller.elementExists('.btn-cheer', 100)) {
+                    logger.info('[Raid] Party wiped (cheer button found).');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(1500); // snappier reload
+                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                }
+
+                // 4. Raid Ended popup (Join phase race condition)
+                if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
+                    logger.info('[Raid] Battle already ended.');
+                    await this.controller.clickSafe(this.selectors.raidEndedOkButton);
+                    await sleep(1000);
+                    return { duration: 0, turns: 0, raidEnded: true };
+                }
+
+                // 5. Raid Logic (while on raid page)
+                if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                    // Animation Skipping (Immediate Reload)
+                    // Aggressive check: 100ms timeout for faster detection
+                    if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
+                        logger.info('[Reload] Skipping animations...');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(1200);
+                        await sleep(1200); // Reduced from 3000ms for snappier response
 
                         // Proactively check turn after reload but before FA enable
-                        const stuckContext = { lastTurn, turnCount };
-                        const stuckResult = await this.updateTurnCount(stuckContext, honorTarget);
-                        lastTurn = stuckContext.lastTurn;
-                        turnCount = stuckContext.turnCount;
+                        const reloadContext = { lastTurn, turnCount };
+                        const reloadResult = await this.updateTurnCount(reloadContext, honorTarget);
+                        lastTurn = reloadContext.lastTurn;
+                        turnCount = reloadContext.turnCount;
 
-                        if (stuckResult?.honorReached) {
+                        if (reloadResult?.honorReached) {
                             return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
                         }
 
                         if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: stuckResult?.honorReached || false };
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: reloadResult?.honorReached || false };
                         }
+                        continue;
+                    }
+
+                    // Stuck detection
+                    const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto'];
+                    let uiFound = false;
+                    for (const sel of uiElements) {
+                        if (await this.controller.elementExists(sel, 200)) {
+                            uiFound = true;
+                            break;
+                        }
+                    }
+
+                    if (uiFound) {
                         missingUiCount = 0;
+                    } else {
+                        missingUiCount++;
+                        if (missingUiCount >= 8) { // ~8 seconds
+                            logger.warn('[Wait] UI missing (stuck). Refreshing...');
+                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                            await sleep(1200);
+
+                            // Proactively check turn after reload but before FA enable
+                            const stuckContext = { lastTurn, turnCount };
+                            const stuckResult = await this.updateTurnCount(stuckContext, honorTarget);
+                            lastTurn = stuckContext.lastTurn;
+                            turnCount = stuckContext.turnCount;
+
+                            if (stuckResult?.honorReached) {
+                                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
+                            }
+
+                            if (await this.checkStateAndResume(mode)) {
+                                return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: stuckResult?.honorReached || false };
+                            }
+                            missingUiCount = 0;
+                        }
+                    }
+
+                    // Note: We deliberately do NOT check for OK button here to avoid premature exit on popups.
+                } else {
+                    // 5. Backup for non-raid URLs (Event quests, etc)
+                    if (await this.controller.elementExists(this.selectors.okButton, 300) ||
+                        await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                        return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                     }
                 }
 
-                // Note: We deliberately do NOT check for OK button here to avoid premature exit on popups.
-            } else {
-                // 5. Backup for non-raid URLs (Event quests, etc)
-                if (await this.controller.elementExists(this.selectors.okButton, 300) ||
-                    await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                    return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
-                }
+                // Dynamic wait based on context
+                const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
+                const waitTime = isRaid ? 200 : 1000;
+                await sleep(waitTime);
             }
 
-            await sleep(checkInterval);
+            throw new Error('Battle timeout');
+        } finally {
+            // Cleanup listener
+            if (this.controller.network) {
+                this.controller.network.off('battle:result', onBattleResult);
+            }
         }
-
-        throw new Error('Battle timeout');
     }
 
     async handleResult() {

@@ -99,12 +99,20 @@ function startStatsUpdater() {
                     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
                     duration = `${hours}:${minutes}:${seconds}`;
 
-                    // Calculate Rate (Completed / Hours)
-                    const completed = stats.completedQuests || stats.raidsCompleted || 0;
-                    if (diff > 0) {
-                        const hoursFloat = diff / 3600000;
-                        if (hoursFloat > 0.01) { // Avoid spike at start
-                            rate = (completed / hoursFloat).toFixed(1) + '/h';
+                    // Calculate Rate (Theoretical based on Avg Battle Time + Buffer)
+                    // Matches 'main' branch logic: 60 / (avgTimeMin + 0.25)
+                    if (stats.avgBattleTime > 0) {
+                        const avgMin = stats.avgBattleTime / 60000;
+                        // 0.25 min = 15s buffer for loading/menu
+                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
+                    } else {
+                        // Fallback to actual rate if avg is 0 (first run)
+                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+                        if (diff > 0) {
+                            const hoursFloat = diff / 3600000;
+                            if (hoursFloat > 0.0028) {
+                                rate = (completed / hoursFloat).toFixed(1) + '/h';
+                            }
                         }
                     }
                 }
@@ -212,6 +220,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
 
     try {
         logger.info(`[Bot] [${profileId}] Starting automation in ${settings.botMode} mode...`);
+        logger.debug(`[Bot] [${profileId}] Settings: ${JSON.stringify(settings)}`);
 
         const botMode = settings.botMode || 'quest';
 
@@ -221,20 +230,93 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns));
 
+            // Stats Helper for immediate updates
+            const onBattleEnd = (stats) => {
+                // Remove debug logs
+                // Calculate duration and rate (reuse logic or extract helper)
+                let duration = '00:00:00';
+                let rate = '0.0/h';
+
+                if (instance.stats.startTime) {
+                    const diff = Date.now() - instance.stats.startTime;
+                    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+                    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+                    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+                    duration = `${hours}:${minutes}:${seconds}`;
+
+                    if (stats.avgBattleTime > 0) {
+                        const avgMin = stats.avgBattleTime / 60000;
+                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
+                    } else {
+                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+                        if (diff > 0) {
+                            const hoursFloat = diff / 3600000;
+                            if (hoursFloat > 0.0028) {
+                                rate = (completed / hoursFloat).toFixed(1) + '/h';
+                            }
+                        }
+                    }
+                }
+
+                mainWindow.webContents.send('bot:status', {
+                    profileId,
+                    status: 'Running',
+                    stats: { ...stats, duration, rate }
+                });
+            };
+
             instance.bot = new QuestBot(instance.browser.page, {
                 questUrl: config.get('bot.quest_url'),
                 maxQuests: config.get('bot.max_quests'),
-                battleMode: config.get('bot.battle_mode')
+                battleMode: config.get('bot.battle_mode'),
+                onBattleEnd,
+                blockResources: settings.blockResources
             });
         } else if (botMode === 'raid') {
             // Raid Mode
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_raids', parseInt(settings.maxRuns));
 
+            // Define onBattleEnd for RaidBot too (same logic)
+            const onBattleEnd = (stats) => {
+                // ... same logic as above, cleaner to extract if possible but inline is fine for now
+                let duration = '00:00:00';
+                let rate = '0.0/h';
+
+                if (instance.stats.startTime) {
+                    const diff = Date.now() - instance.stats.startTime;
+                    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+                    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+                    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+                    duration = `${hours}:${minutes}:${seconds}`;
+
+                    if (stats.avgBattleTime > 0) {
+                        const avgMin = stats.avgBattleTime / 60000;
+                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
+                    } else {
+                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+                        if (diff > 0) {
+                            const hoursFloat = diff / 3600000;
+                            if (hoursFloat > 0.0028) {
+                                rate = (completed / hoursFloat).toFixed(1) + '/h';
+                            }
+                        }
+                    }
+                }
+
+                mainWindow.webContents.send('bot:status', {
+                    profileId,
+                    status: 'Running',
+                    stats: { ...stats, duration, rate }
+                });
+            };
+
             instance.bot = new RaidBot(instance.browser.page, {
-                maxRaids: config.get('bot.max_raids'),
-                battleMode: config.get('bot.battle_mode'),
-                honorTarget: parseInt(settings.honorTarget) || 0
+                initialUrl: settings.questUrl || config.get('bot.quest_url'),
+                maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                honorTarget: parseInt(settings.honorTarget) || 0,
+                onBattleEnd,
+                blockResources: settings.blockResources
             });
         } else {
             return { success: false, message: `Unknown bot mode: ${botMode}` };

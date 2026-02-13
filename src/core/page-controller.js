@@ -2,10 +2,63 @@ import { sleep, randomDelay, getRandomInRange, getNormalRandom } from '../utils/
 import logger from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
+import NetworkListener from './network-listener.js';
 
 class PageController {
     constructor(page) {
         this.page = page;
+        this.network = new NetworkListener(page);
+        this.requestHandler = null;
+    }
+
+    async enableResourceBlocking() {
+        if (this.blockingEnabled) return;
+        this.blockingEnabled = true;
+
+        await this.page.setRequestInterception(true);
+        await this.page.setRequestInterception(true);
+
+        this.requestHandler = (req) => {
+            const resourceType = req.resourceType();
+            const url = req.url();
+
+            // Allow essential game assets but block heavy media
+            if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+                // Optimization: Block images for speed, but keep some UI elements if needed
+                // For now, aggressive blocking
+                if (url.includes('assets/img/sp/ui') || url.includes('assets/img/sp/quest')) {
+                    // Keep UI and Quest images to avoid broken layout issues if needed
+                    // req.continue();
+                    // Actually, for pure botting speed, block ALL images.
+                    req.abort();
+                } else {
+                    req.abort();
+                }
+            } else {
+                req.continue();
+            }
+        };
+
+        this.page.on('request', this.requestHandler);
+        logger.info('[Performance] Resource blocking enabled (Images/Media)');
+    }
+
+    async disableResourceBlocking() {
+        if (!this.blockingEnabled) return;
+
+        if (this.requestHandler) {
+            this.page.off('request', this.requestHandler);
+            this.requestHandler = null;
+        }
+
+        try {
+            await this.page.setRequestInterception(false);
+        } catch (e) {
+            // Ignore if already disabled or context lost
+        }
+
+        this.blockingEnabled = false;
+        logger.info('[Performance] Resource blocking disabled');
     }
 
     /**

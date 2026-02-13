@@ -7,12 +7,21 @@ import config from '../utils/config.js';
 class RaidBot {
     constructor(page, options = {}) {
         this.controller = new PageController(page);
-        this.battle = new BattleHandler(page);
         this.raidBackupUrl = 'https://game.granbluefantasy.jp/#quest/assist';
         this.maxRaids = options.maxRaids || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
         this.honorTarget = options.honorTarget || 0;
+        this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.raid;
+        this.battle = new BattleHandler(page);
+
+        // Enable performance optimizations
+        if (options.blockResources) {
+            logger.info('[Performance] Image Blocking: ENABLED');
+            this.controller.enableResourceBlocking().catch(e => logger.warn('Failed to enable resource blocking', e));
+        } else {
+            logger.info('[Performance] Image Blocking: DISABLED');
+        }
 
         this.raidsCompleted = 0;
         this.isRunning = false;
@@ -342,54 +351,34 @@ class RaidBot {
         logger.info('[Summon] Selecting supporter...');
 
         // Wait for summon screen
+        // Optimization: Reduced check interval from 1000ms to 200ms
         let retryCount = 0;
-        while (retryCount < 3) {
-            if (await this.controller.elementExists('.prt-supporter-list', 5000)) {
+        while (retryCount < 15) { // 3s total
+            if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
-            logger.warn('[Wait] [Summon] screen not found, retrying...');
             retryCount++;
-            await sleep(1000);
+            await sleep(200);
         }
 
-        // Check for confirmation popup (General or Raid Ended)
-        if (await this.controller.elementExists('.btn-usual-ok')) {
-            // Specific check for ended raid popup body
-            const popupText = await this.controller.page.evaluate(() => {
-                const body = document.querySelector('.txt-popup-body');
-                return body ? body.innerText : '';
-            });
+        // Check for 'btn-usual-ok' (Confirmation popup)
+        // Optimization: Reduced timeout from 500ms to 100ms
+        if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
+            logger.info('[Bot] Found confirmation popup, clicking OK...');
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+            await sleep(500);
 
-            if (popupText.includes('already ended')) {
-                logger.info('[Raid] Battle already ended (during summon selection).');
-                await this.controller.clickSafe('.btn-usual-ok');
-                await sleep(1000);
-                return 'ended';
-            }
-
-            logger.info('[Wait] Found confirmation popup, clicking OK...');
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 3000, maxRetries: 1 });
-            await sleep(1000);
-
-            // Double check if we moved to battle before handling error popups
-            const urlAfterClick = this.controller.page.url();
-            if (urlAfterClick.includes('#raid') && !urlAfterClick.includes('supporter')) {
-                logger.info('[Bot] Moved to battle screen, skipping error handling.');
-                return 'success';
-            }
-
-            // Check for error popup after clicking OK
-            const error = await this.handleErrorPopup();
-            if (error.detected && error.text.includes('pending battles')) {
-                return 'pending';
-            }
-
-            // Check if we moved to battle (exclude supporter screen false positives)
+            // Double check battle
             const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#raid') && !currentUrl.includes('supporter')) {
-                logger.info('[Bot] Moved to battle screen, skipping summon selection.');
-                return 'success';
+            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                return;
             }
+        }
+
+        // Check for error popup after clicking OK (if any)
+        const error = await this.handleErrorPopup();
+        if (error.detected && error.text.includes('pending battles')) {
+            return 'pending';
         }
 
         // Try to select first available summon
@@ -405,10 +394,9 @@ class RaidBot {
                 }
                 throw error;
             }
-            // EST: Reduced delay for speed (0.2-0.5s)
-            await sleep(randomDelay(200, 500));
 
-            if (await this.controller.elementExists('.btn-usual-ok')) {
+            // Check for confirmation popup
+            if (await this.controller.elementExists('.btn-usual-ok', 200, true)) {
                 logger.info('[Wait] Found start confirmation popup, clicking OK...');
                 await this.controller.clickSafe('.btn-usual-ok');
                 await sleep(1000);
@@ -419,7 +407,6 @@ class RaidBot {
                     return 'pending';
                 }
             }
-
             return;
         }
 
@@ -435,7 +422,7 @@ class RaidBot {
             if (await this.controller.elementExists(selector, 1000)) {
                 await this.controller.clickSafe(selector);
                 logger.info('[Summon] Supporter selected (fallback)');
-                await sleep(randomDelay(500, 1000));
+                await sleep(500);
 
                 if (await this.controller.elementExists('.btn-usual-ok')) {
                     await this.controller.clickSafe('.btn-usual-ok');
@@ -482,6 +469,8 @@ class RaidBot {
         if (this.battle) {
             this.battle.stop();
         }
+        // Cleanup resources
+        this.controller.disableResourceBlocking().catch(e => logger.warn('Failed to disable resource blocking', e));
         logger.info('[Bot] Raid Bot stop requested');
     }
 
@@ -496,6 +485,16 @@ class RaidBot {
         this.battleCount++;
         if (result.turns > 0) {
             this.totalTurns += result.turns;
+        }
+        if (result.duration) {
+            // Convert seconds to ms
+            const ms = Math.floor(result.duration * 1000);
+            this.battleTimes.push(ms);
+            // Keep only last 50
+            if (this.battleTimes.length > 50) this.battleTimes.shift();
+
+            // Trigger callback if provided
+            if (this.onBattleEnd) this.onBattleEnd(this.getStats());
         }
     }
 
@@ -521,7 +520,8 @@ class RaidBot {
             avgTurns: avgTurns,
             battleTimes: this.battleTimes,
             battleTurns: this.battleTurns,
-            battleCount: this.battleCount || 0
+            battleCount: this.battleCount || 0,
+            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0
         };
     }
 }

@@ -66,8 +66,10 @@ function getProfileElements(pid) {
         // Stats
         statCompleted: document.getElementById(`completed-runs-${pid}`),
         statAvgBattle: document.getElementById(`avg-battle-${pid}`),
-        statRunTimer: document.getElementById(`run-timer-${pid}`),
         statAvgTurns: document.getElementById(`avg-turns-${pid}`),
+        // Note: New field 'Last Battle' uses a slightly different ID pattern in index.html, assume consistent suffix
+        statLastBattle: document.getElementById(`stat-last-battle-${pid}`),
+        statRunTimer: document.getElementById(`run-timer-${pid}`),
         statRunRate: document.getElementById(`run-rate-${pid}`),
         // Credentials
         email: document.getElementById(`mobage-email-${pid}`),
@@ -131,12 +133,24 @@ function setupProfileListeners(pid) {
 
     // Start Bot
     els.btnStart.addEventListener('click', async () => {
+        // Get checkbox element dynamically to avoid null reference on init
+        const blockResourcesEl = document.getElementById(`block-resources-${pid}`);
+        let blockResources = false;
+
+        if (blockResourcesEl) {
+            blockResources = blockResourcesEl.checked;
+            log(pid, `Image Blocking: ${blockResources ? 'ENABLED (Fast Mode)' : 'DISABLED (Normal Mode)'}`, blockResources ? 'success' : 'info');
+        } else {
+            log(pid, `[Warning] Image Blocking setting not found, defaulting to OFF`, 'warning');
+        }
+
         const settings = {
             botMode: els.mode.value,
             questUrl: els.questUrl.value.trim(),
             maxRuns: els.maxRuns.value,
             battleMode: els.battleMode.value,
-            honorTarget: els.honorTarget.value
+            honorTarget: els.honorTarget.value,
+            blockResources: blockResourcesEl ? blockResourcesEl.checked : false
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -242,7 +256,7 @@ function updateStatsDisplay(pid) {
     if (!s) return;
 
     // Completed
-    els.statCompleted.textContent = (s.completedQuests || s.raidsCompleted || 0);
+    els.statCompleted.textContent = s.completed || 0;
 
     // Avg Battle Time
     if (s.avgBattleTime > 0) {
@@ -256,6 +270,17 @@ function updateStatsDisplay(pid) {
 
     // Avg Turns
     els.statAvgTurns.textContent = s.avgTurns || '-.-';
+
+    // Last Battle Time
+    if (s.lastBattleTime > 0) {
+        const secs = Math.floor(s.lastBattleTime / 1000);
+        const m = Math.floor(secs / 60);
+        const sc = secs % 60;
+        const timeStr = `${m}:${sc.toString().padStart(2, '0')}`;
+        if (els.statLastBattle) els.statLastBattle.textContent = timeStr;
+    } else {
+        if (els.statLastBattle) els.statLastBattle.textContent = '--:--';
+    }
 
     // Timer & Rate
     if (s.startTime && profileState[pid].isRunning) {
@@ -394,6 +419,8 @@ if (window.electronAPI) {
                     battleCount: s.battleCount || 0,
                     avgBattleTime: s.avgBattleTime || 0,
                     avgTurns: s.avgTurns || 0,
+                    lastBattleTime: s.lastBattleTime || 0,
+                    startTime: s.startTime, // Ensure startTime is passed for rate check
                     rate: s.rate // Store rate from main process
                 };
 

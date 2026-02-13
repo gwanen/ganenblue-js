@@ -1018,6 +1018,29 @@
             cursor: pointer;
         }
 
+        /* Checkbox Custom Style */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .checkbox-container input {
+            cursor: pointer;
+            margin: 0;
+            width: 13px;
+            height: 13px;
+            accent-color: var(--accent-blue);
+        }
+
+        .checkbox-container:hover {
+            color: var(--text-primary);
+        }
+
         /* Compact Mode adjustments for Split View */
         /* body.compact-mode .profile-column {} */
     </style>
@@ -1086,6 +1109,13 @@
                         </select>
                     </div>
 
+                    <div class="form-group" style="margin-top: 8px;">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="block-resources-p1" checked>
+                            <span>Block Images (Fast)</span>
+                        </label>
+                    </div>
+
                     <hr>
 
                     <div class="button-section">
@@ -1118,6 +1148,10 @@
                         <div class="stat-row">
                             <span>Avg Turns:</span>
                             <span id="avg-turns-p1" class="stat-val">-.-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Last Battle:</span>
+                            <span id="stat-last-battle-p1" class="stat-val">--:--</span>
                         </div>
                         <div class="stat-row">
                             <span>Rate:</span>
@@ -1209,6 +1243,13 @@
                         </select>
                     </div>
 
+                    <div class="form-group" style="margin-top: 8px;">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="block-resources-p2" checked>
+                            <span>Block Images (Fast)</span>
+                        </label>
+                    </div>
+
                     <hr>
 
                     <div class="button-section">
@@ -1240,6 +1281,10 @@
                         <div class="stat-row">
                             <span>Avg Turns:</span>
                             <span id="avg-turns-p2" class="stat-val">-.-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Last Battle:</span>
+                            <span id="stat-last-battle-p2" class="stat-val">--:--</span>
                         </div>
                         <div class="stat-row">
                             <span>Rate:</span>
