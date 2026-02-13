@@ -88,16 +88,16 @@ class BattleHandler {
     }
 
     async handleFullAuto() {
-        // Check URL before saying Initializing - we might be on result screen
+        // Check URL first
         const url = this.controller.page.url();
         if (url.includes('#result') || url.includes('#quest/index')) return;
 
-        logger.info('[Battle] Initializing...');
+        logger.info('[Battle] Initializing Full Auto...');
 
-        // 1. Wait for "Ready" phase to end (Busy button display-off)
-        // This ensures the game is actually ready to receive the Auto click
+        // 1. Wait for "Ready" phase (Busy button display-off)
+        // Increased timeout to 10s for low-end machines
         let busyWaitRetry = 0;
-        while (busyWaitRetry < 30) { // Max 3s wait
+        while (busyWaitRetry < 100) { // Max 10s wait (100 * 100ms)
             const busy = await this.controller.page.evaluate((sel) => {
                 const el = document.querySelector(sel);
                 return el && el.classList.contains('display-on');
@@ -108,35 +108,83 @@ class BattleHandler {
             busyWaitRetry++;
         }
 
-        // 2. Check if Auto is already active (via CSS class)
-        const status = await this.controller.page.evaluate((sel) => {
-            const el = document.querySelector(sel);
-            if (!el) return { exists: false, active: false };
-            return { exists: true, active: el.classList.contains('active') };
-        }, this.selectors.fullAutoButton);
+        // 2. Robust Click Loop (3 Attempts)
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            logger.info(`[FA] Click Attempt ${attempt}/3`);
 
-        if (status.active) {
-            logger.info('[FA] Full Auto is already active');
-            return;
+            // Check if already active before clicking (Optimization)
+            const isAlreadyActive = await this.verifyFullAutoState();
+            if (isAlreadyActive) {
+                logger.info('[FA] Full Auto is already active (Verified)');
+                return;
+            }
+
+            // Click (Fast Mode)
+            const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+            if (btnFound) {
+                // Pre-delay 0ms (instant), Post-delay 0ms
+                await this.controller.clickSafe(this.selectors.fullAutoButton, {
+                    silent: true,
+                    preDelay: 0,
+                    delay: 0,
+                    waitAfter: false
+                });
+            } else {
+                logger.warn('[FA] Button not found, refreshing...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await this.checkStateAndResume('full_auto');
+                return; // Recursive call handles the rest
+            }
+
+            // Wait for reaction
+            const waitTime = attempt * 1500; // 1.5s, 3s, 4.5s
+            await sleep(waitTime);
+
+            // Verify
+            if (await this.verifyFullAutoState()) {
+                logger.info('[FA] Full Auto activated successfully');
+                return;
+            } else {
+                logger.warn(`[FA] Attempt ${attempt} failed to activate.`);
+            }
         }
 
-        if (status.exists) {
-            // Click immediately
-            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
-            logger.info('[FA] Full Auto enabled');
-            return;
-        }
+        // 3. Failure - Reload
+        logger.error('[FA] Failed to activate after 3 attempts. Refreshing...');
+        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+        await sleep(2000);
+        await this.checkStateAndResume('full_auto');
+    }
 
-        // 3. Click Auto (Delayed check)
-        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 2000);
-        if (found) {
-            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
-            logger.info('[FA] Full Auto enabled (delayed)');
-        } else {
-            logger.warn('[Wait] Auto button missing. Refreshing...');
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-            await this.checkStateAndResume('full_auto');
-        }
+    /**
+     * Verifies if FA is actually running based on User Logic:
+     * 1. Skill Rail Visible (AND not 'hide') -> SUCCESS
+     * 2. Attack Button Hidden (display-off) -> SUCCESS (Attacking)
+     * 3. Attack Button Visible (display-on) -> FAIL
+     */
+    async verifyFullAutoState() {
+        return await this.controller.page.evaluate((selectors) => {
+            // 1. Check Skill Rail
+            const rail = document.querySelector(selectors.skillRail);
+            if (rail && !rail.classList.contains('hide')) {
+                return true; // Skill Queue Active
+            }
+
+            // 2. Check Attack Button
+            const attackBtn = document.querySelector(selectors.attackButton);
+            if (attackBtn) {
+                if (attackBtn.classList.contains('display-off')) {
+                    return true; // Attack started (or transitioning)
+                }
+                if (attackBtn.classList.contains('display-on')) {
+                    return false; // Still idling, click failed
+                }
+            }
+
+            // Fallback: If neither rail nor button found, assume transitioning (Success-ish)
+            // But to be safe, we return false if we can't confirm action.
+            return false;
+        }, this.selectors);
     }
 
     async handleSemiAuto() {
@@ -308,7 +356,8 @@ class BattleHandler {
                         missingUiCount = 0;
                     } else {
                         missingUiCount++;
-                        if (missingUiCount >= 8) { // ~8 seconds
+                        // User Request: Faster reload on stuck UI (~4 seconds)
+                        if (missingUiCount >= 4) { // ~4 seconds (was 8)
                             logger.warn('[Wait] UI missing (stuck). Refreshing...');
                             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                             await sleep(1200);
@@ -385,7 +434,12 @@ class BattleHandler {
                 // Re-attempt FA
                 const faFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 3000);
                 if (faFound) {
-                    await this.controller.clickSafe(this.selectors.fullAutoButton);
+                    await this.controller.clickSafe(this.selectors.fullAutoButton, {
+                        silent: true,
+                        preDelay: 0,
+                        delay: 0,
+                        waitAfter: false
+                    });
                     logger.info('[FA] Full Auto enabled (after refresh)');
 
                     // Verification check

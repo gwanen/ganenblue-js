@@ -116,6 +116,7 @@ class PageController {
         const {
             waitAfter = true,
             delay = randomDelay(100, 300),
+            preDelay = randomDelay(200, 500), // Default pre-click delay (human-like)
             maxRetries = 3,
             timeout = 5000,
             silent = false
@@ -129,8 +130,10 @@ class PageController {
                     throw new Error(`Element not found: ${selector}`);
                 }
 
-                // Random delay before click
-                await sleep(randomDelay(200, 500));
+                // Random delay before click (configurable)
+                if (preDelay > 0) {
+                    await sleep(preDelay);
+                }
 
                 // Get element and bounding box for randomized click
                 const element = await this.page.$(selector);
