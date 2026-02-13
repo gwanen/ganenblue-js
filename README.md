@@ -9,8 +9,9 @@ A high-performance Granblue Fantasy automation framework built with **Node.js**,
 - **Stealth Core**: Human-mimicry via modern evasion plugins.
 - **Multi-Mode**: Optimized for Quest Farming and Raid Backup.
 - **Smart Battle**: Real-time turn tracking, honor targets, and animation skipping.
-- **Resilient**: Auto-recovery for stuck states, char death, and raid limits.
-- **GUI Dashboard**: Real-time stats, logs, and easy configuration.
+- **Resilient**: Auto-recovery for stuck states, party wipe awareness, and raid join reliability.
+- **Visual Intelligence**: Color-coded activity logs and professionalized system messaging.
+- **Interactive GUI**: Real-time stats, sound-testable alerts (pleasant rising sweep), and easy configuration.
 
 ## 🛠️ Quick Start
 

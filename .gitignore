@@ -47,3 +47,6 @@ screenshots/
 
 # Local preferences and temp files
 local/
+.agent/
+brain/
+*.md-checkpoint

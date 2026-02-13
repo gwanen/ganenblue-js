@@ -13,6 +13,7 @@ battle:
   attackButton: '.btn-attack-start'
   fullAutoButton: '.btn-auto'
   autoButton: '.btn-auto'
+  skillRail: '.prt-ability-rail-overlayer' # Added for FA detection
   attackCancel: '.btn-attack-cancel'
   captchaPopup: '.pop-usual.common-pop-error.pop-show'
   captchaHeader: '.prt-popup-header'

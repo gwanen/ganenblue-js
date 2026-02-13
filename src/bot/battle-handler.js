@@ -24,6 +24,17 @@ class BattleHandler {
         this.stopped = true;
     }
 
+    async isWiped() {
+        return await this.controller.page.evaluate(() => {
+            const wipeSelectors = ['.btn-cheer', '.btn-salute'];
+            for (const sel of wipeSelectors) {
+                const el = document.querySelector(sel);
+                if (el && el.offsetWidth > 0 && el.offsetHeight > 0) return true;
+            }
+            return false;
+        });
+    }
+
     async executeBattle(mode = 'full_auto', options = {}) {
         this.stopped = false;
         this.options = options; // Store options like honorTarget
@@ -51,7 +62,7 @@ class BattleHandler {
                 const currentUrl = this.controller.page.url();
                 // Check if we are actually in battle but maybe button is different or obscured
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.warn('[Wait] Auto button missing. Attempting recovery...');
+                    logger.warn('[Wait] Auto button missing. Attempting recovery');
                 } else if (!currentUrl.includes('#result')) {
                     throw new Error(`Battle failed to load. URL: ${currentUrl}`);
                 }
@@ -71,12 +82,16 @@ class BattleHandler {
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
-            logger.info(`[Summary] Duration ${formattedTime} (${result.turns} turns)`);
+            logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
 
             return result;
         } catch (error) {
-            logger.error('[Error] Battle execution failed:', error);
-            await this.controller.takeScreenshot('error_battle');
+            if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
+                logger.debug('[Battle] Interrupted by browser close/stop');
+            } else {
+                logger.error('[Error] Battle execution failed:', error);
+                await this.controller.takeScreenshot('error_battle');
+            }
             // Return empty result to avoid breaking stats update loop
             return { duration: 0, turns: 0 };
         } finally {
@@ -88,55 +103,124 @@ class BattleHandler {
     }
 
     async handleFullAuto() {
-        // Check URL before saying Initializing - we might be on result screen
         const url = this.controller.page.url();
         if (url.includes('#result') || url.includes('#quest/index')) return;
 
-        logger.info('[Battle] Initializing...');
+        logger.info('[Battle] Initializing Full Auto');
 
-        // 1. Wait for "Ready" phase to end (Busy button display-off)
-        // This ensures the game is actually ready to receive the Auto click
-        let busyWaitRetry = 0;
-        while (busyWaitRetry < 30) { // Max 3s wait
-            const busy = await this.controller.page.evaluate((sel) => {
-                const el = document.querySelector(sel);
-                return el && el.classList.contains('display-on');
-            }, this.selectors.attackCancel);
+        // 1. Wait for Auto Button or Wipe (ensure battle is loaded)
+        // Optimization: Poll for BOTH auto button and wipe state to avoid blocking
+        const startTimeAuto = Date.now();
+        const timeoutAuto = 45000;
+        let autoBtnFound = false;
 
-            if (!busy) break;
-            await sleep(100);
-            busyWaitRetry++;
+        while (Date.now() - startTimeAuto < timeoutAuto) {
+            if (this.stopped) return;
+
+            const state = await this.controller.page.evaluate(() => {
+                const auto = document.querySelector('.btn-auto');
+                const result = window.location.hash.includes('#result');
+
+                return {
+                    autoFound: !!auto && auto.offsetWidth > 0,
+                    isResult: result
+                };
+            });
+
+            if (state.isResult || await this.isWiped()) {
+                logger.info(await this.isWiped() ? '[Raid] Party wiped detected during FA init' : '[Wait] Landed on result during FA init');
+                return; // Let executeBattle handle the result/wipe
+            }
+
+            if (state.autoFound) {
+                autoBtnFound = true;
+                break;
+            }
+
+            await sleep(500);
         }
 
-        // 2. Check if Auto is already active (via CSS class)
-        const status = await this.controller.page.evaluate((sel) => {
-            const el = document.querySelector(sel);
-            if (!el) return { exists: false, active: false };
-            return { exists: true, active: el.classList.contains('active') };
-        }, this.selectors.fullAutoButton);
-
-        if (status.active) {
-            logger.info('[FA] Full Auto is already active');
-            return;
-        }
-
-        if (status.exists) {
-            // Click immediately
-            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
-            logger.info('[FA] Full Auto enabled');
-            return;
-        }
-
-        // 3. Click Auto (Delayed check)
-        const found = await this.controller.waitForElement(this.selectors.fullAutoButton, 2000);
-        if (found) {
-            await this.controller.clickSafe(this.selectors.fullAutoButton, { silent: true });
-            logger.info('[FA] Full Auto enabled (delayed)');
-        } else {
-            logger.warn('[Wait] Auto button missing. Refreshing...');
+        if (!autoBtnFound) {
+            logger.warn('[FA] Auto button not found. Refreshing');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             await this.checkStateAndResume('full_auto');
+            return;
         }
+
+        // 2. Press Auto Button
+        logger.debug('[FA] Clicking Auto button');
+        await this.controller.clickSafe(this.selectors.fullAutoButton, {
+            silent: true,
+            preDelay: 0,
+            delay: 0,
+            waitAfter: false
+        });
+
+        // 3. Wait for Attack or Auto Button Disappearance (Max 45s)
+        logger.info('[Wait] Waiting for attack or auto button disappearance...');
+        const startTime = Date.now();
+        const timeout = 45000; // 45 seconds
+
+        while (Date.now() - startTime < timeout) {
+            if (this.stopped) return;
+
+            const state = await this.controller.page.evaluate((selAttack, selAuto) => {
+                const att = document.querySelector(selAttack);
+                const auto = document.querySelector(selAuto);
+
+                const attHidden = !att || att.classList.contains('display-off') || att.style.display === 'none';
+                const autoHidden = !auto || auto.style.display === 'none';
+
+                return { isHidden: attHidden || autoHidden };
+            }, this.selectors.attackButton, this.selectors.fullAutoButton);
+
+            if (state.isHidden) {
+                logger.info('[FA] Full Auto active (Button hidden)');
+                return;
+            }
+
+            if (await this.isWiped()) {
+                logger.info('[Raid] Party wiped during FA active wait');
+                return;
+            }
+
+            await sleep(500); // Poll every 500ms
+        }
+
+        // 4. Timeout - Refresh
+        logger.error('[FA] Both buttons still visible after 45s. Refreshing');
+        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+        await sleep(800);
+        await this.checkStateAndResume('full_auto');
+    }
+
+    /**
+     * Verifies if FA is actually running based on User Logic:
+     * 1. Skill Rail Visible (AND not 'hide') -> SUCCESS
+     * 2. Attack Button Hidden (display-off) -> SUCCESS (Attacking)
+     * 3. Attack Button Visible (display-on) -> FAIL
+     */
+    async verifyFullAutoState() {
+        return await this.controller.page.evaluate((selectors) => {
+            // Check Attack Button
+            const attackBtn = document.querySelector(selectors.attackButton);
+            if (attackBtn) {
+                if (attackBtn.classList.contains('display-off')) {
+                    return true; // Attack started (or transitioning)
+                }
+                if (attackBtn.classList.contains('display-on')) {
+                    return false; // Still idling, click failed
+                }
+            }
+
+            // Check Auto Button disappearance as fallback
+            const autoBtn = document.querySelector(selectors.fullAutoButton);
+            if (!autoBtn || autoBtn.style.display === 'none') {
+                return true;
+            }
+
+            return false;
+        }, this.selectors);
     }
 
     async handleSemiAuto() {
@@ -148,7 +232,7 @@ class BattleHandler {
 
             // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
         } else {
-            logger.warn('[Wait] Attack button timeout. Refreshing page...');
+            logger.warn('[Wait] Attack button timeout. Refreshing page');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             await this.checkStateAndResume('semi_auto');
         }
@@ -167,7 +251,7 @@ class BattleHandler {
         let lastTurn = turnCount;
         let lastTurnChangeTime = Date.now();
 
-        logger.info('[Wait] Resolving turn...');
+        logger.info('[Wait] Resolving turn');
         if (turnCount > 0) {
             const honors = await this.getHonors();
             logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
@@ -181,7 +265,7 @@ class BattleHandler {
         // Network Event Promise
         let networkFinished = false;
         const onBattleResult = () => {
-            logger.info('[Network] Battle End detected!');
+            logger.info('[Network] Battle end detected');
             networkFinished = true;
         };
 
@@ -192,7 +276,7 @@ class BattleHandler {
         try {
             while (Date.now() - startTime < maxWaitMs) {
                 if (this.stopped) {
-                    logger.info('[Wait] Cancelled (bot stopped)');
+                    logger.info('[Wait] Cancelled (Bot stopped)');
                     const duration = (Date.now() - startTime) / 1000;
                     return { duration, turns: turnCount };
                 }
@@ -226,7 +310,7 @@ class BattleHandler {
                         }, this.selectors.fullAutoButton);
 
                         if (!isActive) {
-                            logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating...');
+                            logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating');
                             await this.handleFullAuto();
                         }
                     }
@@ -241,29 +325,29 @@ class BattleHandler {
                 }
 
                 if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                    logger.info('[Wait] Empty result screen detected.');
+                    logger.info('[Wait] Empty result screen detected');
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
 
                 // 2. Rematch fail popup
                 if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
-                    logger.info('[Wait] Rematch fail detected. Refreshing...');
+                    logger.info('[Wait] Rematch failure detected. Refreshing');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(1500); // snappier reload
+                    await sleep(800); // Standardized fast reload
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
 
-                // 3. Character death
-                if (await this.controller.elementExists('.btn-cheer', 100)) {
-                    logger.info('[Raid] Party wiped (cheer button found).');
+                // 3. Character death (Wipe)
+                if (await this.isWiped()) {
+                    logger.info('[Raid] Party wiped (Death popup detected)');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(1500); // snappier reload
+                    await sleep(800); // Standardized fast reload
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
 
                 // 4. Raid Ended popup (Join phase race condition)
                 if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
-                    logger.info('[Raid] Battle already ended.');
+                    logger.info('[Raid] Battle already ended');
                     await this.controller.clickSafe(this.selectors.raidEndedOkButton);
                     await sleep(1000);
                     return { duration: 0, turns: 0, raidEnded: true };
@@ -274,9 +358,9 @@ class BattleHandler {
                     // Animation Skipping (Immediate Reload)
                     // Aggressive check: 100ms timeout for faster detection
                     if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
-                        logger.info('[Reload] Skipping animations...');
+                        logger.info('[Reload] Skipping animations');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(1200); // Reduced from 3000ms for snappier response
+                        await sleep(800); // Reduced from 1200ms for maximum speed
 
                         // Proactively check turn after reload but before FA enable
                         const reloadContext = { lastTurn, turnCount };
@@ -295,7 +379,7 @@ class BattleHandler {
                     }
 
                     // Stuck detection
-                    const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto'];
+                    const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto', '.btn-cheer', '.btn-salute'];
                     let uiFound = false;
                     for (const sel of uiElements) {
                         if (await this.controller.elementExists(sel, 200)) {
@@ -308,10 +392,11 @@ class BattleHandler {
                         missingUiCount = 0;
                     } else {
                         missingUiCount++;
-                        if (missingUiCount >= 8) { // ~8 seconds
-                            logger.warn('[Wait] UI missing (stuck). Refreshing...');
+                        // User Request: Faster reload on stuck UI (~4 seconds)
+                        if (missingUiCount >= 4) { // ~4 seconds (was 8)
+                            logger.warn('[Wait] UI missing (Stuck). Refreshing');
                             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                            await sleep(1200);
+                            await sleep(800); // Reduced from 1200ms
 
                             // Proactively check turn after reload but before FA enable
                             const stuckContext = { lastTurn, turnCount };
@@ -341,7 +426,7 @@ class BattleHandler {
 
                 // Dynamic wait based on context
                 const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
-                const waitTime = isRaid ? 200 : 1000;
+                const waitTime = isRaid ? 100 : 800; // Faster polling for raids (100ms)
                 await sleep(waitTime);
             }
 
@@ -367,14 +452,22 @@ class BattleHandler {
         const url = this.controller.page.url();
 
         // 1. Check URL first (Most reliable)
+        // If we land on the home page without a hash, or explicitly #mypage, we are likely logged out or session expired
+        if (url === 'https://game.granbluefantasy.jp/' || url === 'https://game.granbluefantasy.jp/#' || url.includes('#mypage')) {
+            logger.error('[Safety] Session expired or Logged out. Human intervention required');
+            this.stop();
+            return true; // Stop execution
+        }
+
         if (url.includes('#result') || url.includes('#quest/index')) {
             return true;
         }
 
-        // 2. Check for OK button (completion modal) or Empty Result Notice
+        // 2. Check for OK button (completion modal), Empty Result Notice, or Wipe
         if (await this.controller.elementExists(this.selectors.okButton, 2000) ||
-            await this.controller.elementExists(this.selectors.emptyResultNotice, 500)) {
-            logger.info('[Cleared] Battle finished');
+            await this.controller.elementExists(this.selectors.emptyResultNotice, 500) ||
+            await this.isWiped()) {
+            logger.info(await this.isWiped() ? '[Cleared] Party wiped' : '[Cleared] Battle finished');
             return true;
         }
 
@@ -382,28 +475,15 @@ class BattleHandler {
         const found = await this.controller.waitForElement('.btn-attack-start', 2000);
         if (found && !this.stopped) {
             if (mode === 'full_auto') {
-                // Re-attempt FA
-                const faFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 3000);
-                if (faFound) {
-                    await this.controller.clickSafe(this.selectors.fullAutoButton);
-                    logger.info('[FA] Full Auto enabled (after refresh)');
-
-                    // Verification check
-                    await sleep(1000);
-                    if (!await this.controller.elementExists(this.selectors.fullAutoButton, 500)) {
-                        const url = this.controller.page.url();
-                        if (!url.includes('#result') && !url.includes('#quest/index')) {
-                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                            return await this.checkStateAndResume(mode);
-                        }
-                    }
-                }
+                // Re-attempt FA using the centralized simplified logic
+                await this.handleFullAuto();
+                return false;
             } else if (mode === 'semi_auto') {
                 // For Semi-Auto, click Attack if available
                 const attackFound = await this.controller.elementExists(this.selectors.attackButton, 500);
                 if (attackFound) {
                     await this.controller.clickSafe(this.selectors.attackButton);
-                    logger.info('[SA] Attack initiated (after refresh)');
+                    logger.info('[SA] Attack initiated (After refresh)');
                 }
                 // NOTE: Per user request, we no longer click the Auto button in semi-auto mode.
             }
