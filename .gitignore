@@ -44,3 +44,6 @@ config/credentials.yaml
 
 # Screenshots
 screenshots/
+
+# Local preferences and temp files
+local/
