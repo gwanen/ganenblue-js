@@ -28,6 +28,7 @@ const dom = {
         logsPanel: document.getElementById('logs-panel'),
         logContainer: document.getElementById('log-container'),
         btnToggleP2: document.getElementById('btn-toggle-p2'),
+        btnTestSound: document.getElementById('btn-test-sound'),
         globalStatus: document.getElementById('global-status')
     },
     p1: null,
@@ -359,6 +360,13 @@ function setupGlobalListeners() {
             }
         });
     }
+
+    // Test Sound Button
+    if (dom.global.btnTestSound) {
+        dom.global.btnTestSound.addEventListener('click', () => {
+            playAlertSound();
+        });
+    }
 }
 
 // === Logging System ===
@@ -370,10 +378,19 @@ function log(pid, message, level = 'info') {
     const time = new Date().toLocaleTimeString();
     const tagColor = pid === 'p1' ? 'var(--accent-blue)' : 'var(--accent-red)'; // Distinguish profiles
 
+    // Professional Log Colorization: Find and style [Tags]
+    // Pattern: Matches [Tag] at the start or mid-message
+    let coloredMessage = message.replace(/\[([a-zA-Z0-9]+)\]/g, (match, tag) => {
+        const lowerTag = tag.toLowerCase();
+        // Check if we have a specific class for this tag
+        // These classes are defined in index.html (e.g., .log-tag-battle)
+        return `<span class="log-tag log-tag-${lowerTag}">[${tag}]</span>`;
+    });
+
     entry.innerHTML = `
         <span class="log-time">${time}</span>
-        <span class="log-tag" style="color: ${tagColor}">[${pid.toUpperCase()}]</span>
-        <span class="log-message">${message}</span>
+        ${pid !== 'sys' ? `<span class="log-tag" style="color: ${tagColor}">${pid.toUpperCase()}</span>` : ''}
+        <span class="log-message">${coloredMessage}</span>
     `;
 
     dom.global.logContainer.appendChild(entry);
@@ -438,8 +455,37 @@ if (window.electronAPI) {
 
     // Sound (if supported)
     window.electronAPI.onPlaySound && window.electronAPI.onPlaySound(() => {
-        // simple beep
+        playAlertSound();
     });
+}
+
+function playAlertSound() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+
+        const ctx = new AudioContext();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        // Alert pattern: Pleasant "Rising Sweep" ping
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, ctx.currentTime); // A4
+        oscillator.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3); // A5
+
+        // Envelope: Snappy attack, smooth decay
+        gainNode.gain.setValueAtTime(0, ctx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+        console.error('Failed to play sound:', e);
+    }
 }
 
 // === Persistence ===

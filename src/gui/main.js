@@ -355,7 +355,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
 
         return { success: true };
     } catch (error) {
-        logger.error(`[Error] [Bot] [${profileId}] Failed to start:`, error);
+        logger.error(`[Error] [Bot] [${profileId}] Initiation failure:`, error);
         return { success: false, message: error.message };
     }
 });
@@ -366,7 +366,7 @@ ipcMain.handle('bot:stop', async (event, profileId) => {
         instance.bot.stop();
         instance.bot = null;
     }
-    logger.info(`[Gui] [${profileId}] Bot stopped (Browser kept open)`);
+    logger.info(`[Gui] [${profileId}] Bot stopped`);
     return { success: true };
 });
 
@@ -392,7 +392,7 @@ ipcMain.handle('bot:reset-stats', (event, profileId) => {
         if (typeof instance.bot.totalTurns !== 'undefined') instance.bot.totalTurns = 0;
         instance.stats.startTime = null; // Reset timer
 
-        logger.info(`[Gui] [${profileId}] Stats reset`);
+        logger.info(`[Gui] [${profileId}] Statistics reset`);
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
@@ -425,10 +425,10 @@ ipcMain.handle('credentials:save', async (event, profileId, credentials) => {
         };
 
         writeFileSync(credPath, yaml.dump(data), 'utf8');
-        logger.info(`[Gui] [${profileId}] Credentials saved successfully`);
+        logger.info(`[Gui] [${profileId}] Credentials updated`);
         return { success: true };
     } catch (error) {
-        logger.error(`[Error] [Gui] Failed to save credentials for ${profileId}:`, error.message);
+        logger.error(`[Error] [Gui] [${profileId}] Credential update failure:`, error.message);
         return { success: false, message: error.message };
     }
 });
@@ -481,9 +481,10 @@ class GuiTransport extends winston.Transport {
 
             // High-priority notification for Captcha/Safety issues
             if (info.level === 'error' && (info.message.includes('Captcha') || info.message.includes('[Safety]'))) {
+                const isLogout = info.message.includes('Logged out') || info.message.includes('Session');
                 showNotification(
-                    '⚠️ CAPTCHA DETECTED ⚠️',
-                    'The bot has stopped for safety. Please solve the verification manually.',
+                    isLogout ? '🚨 SESSION EXPIRED 🚨' : '⚠️ CAPTCHA DETECTED ⚠️',
+                    isLogout ? 'The bot was logged out or the session expired. Please log in again.' : 'The bot has stopped for safety. Please solve the verification manually.',
                     true
                 );
             }

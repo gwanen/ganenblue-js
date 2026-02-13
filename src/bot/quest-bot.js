@@ -16,10 +16,10 @@ class QuestBot {
 
         // Enable performance optimizations
         if (options.blockResources) {
-            logger.info('[Performance] Image Blocking: ENABLED');
-            this.controller.enableResourceBlocking().catch(e => logger.warn('Failed to enable resource blocking', e));
+            logger.info('[Performance] Image blocking: ENABLED');
+            this.controller.enableResourceBlocking().catch(e => logger.warn('[Performance] Failed to enable resource blocking', e));
         } else {
-            logger.info('[Performance] Image Blocking: DISABLED');
+            logger.info('[Performance] Image blocking: DISABLED');
         }
 
         // State
@@ -39,9 +39,9 @@ class QuestBot {
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
-        logger.info('[Core] Set viewport to 1000x1799');
+        logger.debug('[Core] Set viewport to 1000x1799');
 
-        logger.info('[Bot] Bot started. Good luck!');
+        logger.info('[Bot] Session started');
         logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
 
         try {
@@ -53,7 +53,7 @@ class QuestBot {
 
                 // Check quest limit
                 if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    logger.info(`[Bot] Quest limit reached: ${this.questsCompleted}/${this.maxQuests}`);
+                    logger.info(`[Status] Quest limit reached: ${this.questsCompleted}/${this.maxQuests}`);
                     break;
                 }
 
@@ -66,16 +66,21 @@ class QuestBot {
                 await sleep(randomDelay(500, 1000));
             }
         } catch (error) {
-            logger.error('[Error] [Bot] Quest bot error:', error);
-            await this.controller.takeScreenshot('error_quest');
-            throw error;
+            // Graceful exit on browser close/disconnect
+            if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
+                logger.info('[Bot] Session terminated (Browser closed)');
+            } else {
+                logger.error('[Error] [Bot] Quest bot error:', error);
+                await this.controller.takeScreenshot('error_quest');
+                throw error;
+            }
         } finally {
             this.isRunning = false;
         }
     }
 
     async runSingleQuest() {
-        logger.info(`[Quest] Quest started (${this.questsCompleted + 1})`);
+        logger.info(`[Quest] Cycle initiated (${this.questsCompleted + 1})`);
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
@@ -98,11 +103,11 @@ class QuestBot {
         const isBattle = isRaidUrl || isResult || okButton || await this.controller.elementExists('.btn-auto', 200);
 
         if (isBattle) {
-            logger.info('[Wait] Detected battle or result state after navigation. Resuming...');
+            logger.info('[Wait] Battle or results detected. Resuming');
 
             // Check if bot was stopped before starting battle
             if (!this.isRunning) {
-                logger.info('[Bot] Stopped before battle execution');
+                logger.debug('[System] Operation cancelled before battle initiation');
                 return;
             }
 
@@ -129,7 +134,7 @@ class QuestBot {
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
-            logger.info('[Bot] Stopped before battle execution');
+            logger.debug('[System] Operation cancelled before battle initiation');
             return;
         }
 
@@ -150,11 +155,11 @@ class QuestBot {
         // User Optimization: Skip clicking OK button.
         // await this.battle.handleResult();
 
-        logger.info('[Cleared] Victory!');
+        logger.info('[Cleared] Battle completed');
     }
 
     async selectSummon() {
-        logger.info('[Summon] Selecting supporter...');
+        logger.info('[Summon] Selecting supporter');
 
         // Wait for summon screen (retry a few times)
         // Wait for summon screen (retry a few times)
@@ -174,15 +179,15 @@ class QuestBot {
         // Check for 'btn-usual-ok' (Confirmation popup)
         // Optimization: Reduced timeout from 500ms to 100ms
         if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
-            logger.info('[Bot] Found confirmation popup, clicking OK...');
+            logger.info('[Bot] Clicking confirmation popup');
             await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
-            await sleep(500); // Reduced valid sleep from 1000ms
+            await sleep(500);
 
             // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                logger.info('[Bot] Moved to battle screen, skipping summon selection.');
-                return;
+                logger.info('[Bot] Transitioned to battle. Skipping supporter selection');
+                return 'success';
             }
         }
 
@@ -193,7 +198,7 @@ class QuestBot {
         // Try to click the first available summon button/panel
         const summonSelector = '.prt-supporter-detail';
         if (await this.controller.elementExists(summonSelector, 2000, true)) {
-            logger.info('[Summon] Selecting Supporter...');
+            logger.info('[Summon] Supporter selected');
 
             try {
                 // Use visibility check and silent mode for Quest mode as requested
@@ -202,15 +207,15 @@ class QuestBot {
             } catch (error) {
                 // Check if it's a "not found" error which is expected in race conditions
                 if (error.message.includes('Element not found')) {
-                    logger.warn('[Summon] Supporter detail disappeared, assuming battle start.');
-                    return;
+                    logger.warn('[Summon] Supporter detail unavailable. Assuming transition');
+                    return 'success';
                 }
 
                 // If click fails for other reasons, check if we entered battle
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.info('[Bot] Moved to battle screen (during click), ignoring error.');
-                    return;
+                    logger.info('[Bot] Transitioned to battle. Ignoring click error');
+                    return 'success';
                 }
                 throw error;
             }
@@ -220,13 +225,15 @@ class QuestBot {
 
             // Check for another confirmation popup after clicking summon (Start Quest)
             // Optimization: Reduced timeout from 2000ms to 200ms
-            if (await this.controller.elementExists('.btn-usual-ok', 200, true)) {
-                logger.info('[Wait] Found start confirmation popup, clicking OK...');
-                // Click fast
-                await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+            if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
+                logger.info('[Wait] Clicking start confirmation');
+                await this.controller.clickSafe('.btn-usual-ok');
+                await sleep(1000);
+
+                return await this.validatePostClick();
             }
 
-            return;
+            return 'success';
         }
 
         // Fallback to configured selectors if generic failed
@@ -240,21 +247,82 @@ class QuestBot {
             if (await this.controller.elementExists(selector, 1000)) {
                 await this.controller.clickSafe(selector);
                 logger.info('[Summon] Supporter selected (fallback)');
-                await sleep(randomDelay(500, 1000));
+                await sleep(500);
 
                 // Check confirmation again
-                if (await this.controller.elementExists('.btn-usual-ok')) {
+                if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
                     await this.controller.clickSafe('.btn-usual-ok');
+                    await sleep(1000);
+
+                    return await this.validatePostClick();
                 }
-                return;
+                return 'success';
             }
         }
 
         // Check if no summons found after trying fallbacks
         // Instead of throwing error, we'll log warning and try to proceed to battle check
         // This handles cases where summon selection was skipped or handled externally
-        logger.warn('[Wait] [Summon] No supporter selected, attempting to proceed...');
-        return;
+        logger.warn('[Wait] No supporter selected. Attempting to proceed');
+        return 'success';
+    }
+
+    async validatePostClick() {
+        // 1. Check for captcha
+        if (await this.checkCaptcha()) return 'captcha';
+
+        // 2. Detect "Raid already ended" popup
+        const error = await this.handleErrorPopup();
+        if (error.detected) {
+            if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
+                logger.info('[Raid] Raid already ended popup detected');
+                return 'ended';
+            }
+            if (error.text.includes('pending battles')) {
+                return 'pending';
+            }
+        }
+
+        // 3. URL/Session Validation
+        const finalUrl = this.controller.page.url();
+        if (finalUrl === 'https://game.granbluefantasy.jp/' || finalUrl.includes('#mypage')) {
+            logger.error('[Safety] Session expired during join. Stopping');
+            this.stop();
+            return 'ended';
+        }
+
+        if (!finalUrl.includes('#raid') && !finalUrl.includes('_raid') && !finalUrl.includes('#result')) {
+            logger.warn('[Wait] URL did not transition to battle. Potential error');
+            return 'ended';
+        }
+
+        return 'success';
+    }
+
+    async handleErrorPopup() {
+        const errorPopupSelector = '.prt-popup-footer .btn-usual-ok';
+        const bodySelector = '.txt-popup-body';
+
+        if (await this.controller.elementExists(errorPopupSelector, 1000, true)) {
+            const errorText = await this.controller.page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                return el && (el.offsetWidth > 0 || el.offsetHeight > 0) ? el.innerText : '';
+            }, bodySelector);
+
+            if (!errorText) return { detected: false, text: '' };
+
+            logger.info(`[Wait] Error alert detected: ${errorText.trim()}`);
+
+            try {
+                await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
+                await sleep(500);
+            } catch (error) {
+                logger.warn('[Wait] Failed to click error popup OK button:', error.message);
+            }
+            return { detected: true, text: errorText.toLowerCase() };
+        }
+
+        return { detected: false, text: '' };
     }
 
     async checkCaptcha() {
@@ -262,7 +330,7 @@ class QuestBot {
         if (await this.controller.elementExists(selectors.captchaPopup, 1000, true)) {
             const headerText = await this.controller.getText(selectors.captchaHeader);
             if (headerText.includes('Access Verification')) {
-                logger.error('[Safety] Captcha detected! Human intervention required.');
+                logger.error('[Safety] Captcha detected. Human intervention required');
                 this.stop();
                 return true;
             }
@@ -272,12 +340,12 @@ class QuestBot {
 
     pause() {
         this.isPaused = true;
-        logger.info('[Bot] Bot paused');
+        logger.info('[Status] Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        logger.info('[Bot] Bot resumed');
+        logger.info('[Status] Bot resumed');
     }
 
     stop() {
@@ -286,8 +354,8 @@ class QuestBot {
             this.battle.stop();
         }
         // Cleanup resources
-        this.controller.disableResourceBlocking().catch(e => logger.warn('Failed to disable resource blocking', e));
-        logger.info('[Bot] Bot stop requested');
+        this.controller.disableResourceBlocking().catch(e => logger.warn('[Performance] Failed to disable resource blocking', e));
+        logger.info('[System] Shutdown requested');
     }
 
     updateDetailStats(result) {

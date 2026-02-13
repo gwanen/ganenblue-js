@@ -229,6 +229,17 @@ class PageController {
      */
     async takeScreenshot(namePrefix = 'screenshot') {
         try {
+            // Check if browser/page is still accessible
+            if (this.page.isClosed && this.page.isClosed()) {
+                logger.warn('[Debug] Cannot take screenshot: Page is closed');
+                return;
+            }
+            // Puppeteer specific check if browser is connected
+            if (this.page.browser && !this.page.browser().isConnected()) {
+                logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
+                return;
+            }
+
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const dir = path.resolve('screenshots');
             if (!fs.existsSync(dir)) {
@@ -239,7 +250,12 @@ class PageController {
             await this.page.screenshot({ path: filename, fullPage: true });
             logger.info(`[Debug] Screenshot saved: ${filename}`);
         } catch (error) {
-            logger.error(`[Error] Failed to take screenshot: ${error.message}`);
+            // Suppress errors during screenshot if they are due to closing
+            if (this.isNetworkError(error) || error.message.includes('Target closed')) {
+                logger.debug(`[Debug] Screenshot skipped (browser closed)`);
+            } else {
+                logger.error(`[Error] Failed to take screenshot: ${error.message}`);
+            }
         }
     }
 }
