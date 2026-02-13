@@ -7,12 +7,22 @@ import config from '../utils/config.js';
 class QuestBot {
     constructor(page, options = {}) {
         this.controller = new PageController(page);
-        this.battle = new BattleHandler(page);
         this.questUrl = options.questUrl;
         this.maxQuests = options.maxQuests || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
+        this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.quest;
+        this.battle = new BattleHandler(page, this.selectors.battle);
 
+        // Enable performance optimizations
+        if (options.blockResources) {
+            logger.info('[Performance] Image Blocking: ENABLED');
+            this.controller.enableResourceBlocking().catch(e => logger.warn('Failed to enable resource blocking', e));
+        } else {
+            logger.info('[Performance] Image Blocking: DISABLED');
+        }
+
+        // State
         this.questsCompleted = 0;
         this.isRunning = false;
         this.isPaused = false;
@@ -25,6 +35,7 @@ class QuestBot {
         this.questsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
+        this.startTime = Date.now();
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
@@ -56,6 +67,7 @@ class QuestBot {
             }
         } catch (error) {
             logger.error('[Error] [Bot] Quest bot error:', error);
+            await this.controller.takeScreenshot('error_quest');
             throw error;
         } finally {
             this.isRunning = false;
@@ -129,6 +141,10 @@ class QuestBot {
         if (this.battle.lastBattleDuration > 0) {
             this.battleTimes.push(this.battle.lastBattleDuration);
             this.battleTurns.push(result.turns || 0);
+
+            // Memory Optimization: keep only last 50 entries
+            if (this.battleTimes.length > 50) this.battleTimes.shift();
+            if (this.battleTurns.length > 50) this.battleTurns.shift();
         }
 
         // User Optimization: Skip clicking OK button.
@@ -141,23 +157,26 @@ class QuestBot {
         logger.info('[Summon] Selecting supporter...');
 
         // Wait for summon screen (retry a few times)
+        // Wait for summon screen (retry a few times)
+        // Optimization: Reduced check interval from 1000ms to 200ms
         let retryCount = 0;
-        while (retryCount < 3) {
-            if (await this.controller.elementExists('.prt-supporter-list', 5000)) {
+        while (retryCount < 15) { // 15 * 200ms = 3s total
+            if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
-            logger.warn('[Wait] [Summon] screen not found, retrying...');
+            // logger.warn('[Wait] [Summon] screen not found...'); // Remove spam logs
             retryCount++;
-            await sleep(1000);
+            await sleep(200);
         }
 
         // Check for 'btn-usual-ok' (Confirmation popup that might block view)
         // Use visible: true to avoid clicking phantom popups
-        if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
+        // Check for 'btn-usual-ok' (Confirmation popup)
+        // Optimization: Reduced timeout from 500ms to 100ms
+        if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
             logger.info('[Bot] Found confirmation popup, clicking OK...');
-            // Use fast timeout and no retries
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 });
-            await sleep(1000);
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+            await sleep(500); // Reduced valid sleep from 1000ms
 
             // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
@@ -196,13 +215,15 @@ class QuestBot {
                 throw error;
             }
 
-            // EST: Reduced delay for speed
-            await sleep(randomDelay(200, 500));
+            // EST: Reduced delay for speed (removed random delay entirely)
+            // await sleep(randomDelay(200, 500)); 
 
             // Check for another confirmation popup after clicking summon (Start Quest)
-            if (await this.controller.elementExists('.btn-usual-ok', 2000, true)) {
+            // Optimization: Reduced timeout from 2000ms to 200ms
+            if (await this.controller.elementExists('.btn-usual-ok', 200, true)) {
                 logger.info('[Wait] Found start confirmation popup, clicking OK...');
-                await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 });
+                // Click fast
+                await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
             }
 
             return;
@@ -264,6 +285,8 @@ class QuestBot {
         if (this.battle) {
             this.battle.stop();
         }
+        // Cleanup resources
+        this.controller.disableResourceBlocking().catch(e => logger.warn('Failed to disable resource blocking', e));
         logger.info('[Bot] Bot stop requested');
     }
 
@@ -278,6 +301,16 @@ class QuestBot {
         this.battleCount++;
         if (result.turns > 0) {
             this.totalTurns += result.turns;
+        }
+        if (result.duration) {
+            // Convert seconds to ms for consistency with RaidBot/storage
+            const ms = Math.floor(result.duration * 1000);
+            this.battleTimes.push(ms);
+            if (this.battleTimes.length > 50) this.battleTimes.shift();
+
+            // Trigger callback if provided
+            if (this.onBattleEnd) this.onBattleEnd(this.getStats());
+
         }
     }
 
@@ -303,7 +336,8 @@ class QuestBot {
             avgTurns: avgTurns,
             battleTimes: this.battleTimes,
             battleTurns: this.battleTurns,
-            battleCount: this.battleCount || 0
+            battleCount: this.battleCount || 0,
+            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0
         };
     }
 }

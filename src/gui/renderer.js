@@ -1,722 +1,530 @@
-const btnLaunch = document.getElementById('btn-launch');
-const btnStart = document.getElementById('btn-start');
-const btnStop = document.getElementById('btn-stop');
-const btnReload = document.getElementById('btn-reload');
-const btnResetStats = document.getElementById('btn-reset-stats');
-const statusBadge = document.getElementById('status-badge');
-const logContainer = document.getElementById('log-container');
-const selectBotMode = document.getElementById('bot-mode');
-const selectBrowserType = document.getElementById('browser-type');
-const inputQuestUrl = document.getElementById('quest-url');
-const questUrlGroup = document.getElementById('quest-url-group');
-const inputMaxRuns = document.getElementById('max-runs');
-const maxRunsLabel = document.getElementById('max-runs-label');
-const selectBattleMode = document.getElementById('battle-mode');
-const checkboxEnableCustom = document.getElementById('enable-custom-size');
-const inputWindowWidth = document.getElementById('window-width');
-const inputWindowHeight = document.getElementById('window-height');
-const customSizeContainer = document.getElementById('custom-size-inputs');
-const inputHonorTarget = document.getElementById('honor-target');
-const honorTargetGroup = document.getElementById('honor-target-group');
-const checkboxDisableSandbox = document.getElementById('disable-sandbox');
+// === Multi-Profile Renderer Logic ===
 
-// === Toast Notifications ===
-function showToast(message, type = 'info', duration = 3000) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
+const profiles = ['p1', 'p2'];
 
-    const icon = document.createElement('div');
-    icon.className = 'toast-icon';
-    const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-    icon.textContent = icons[type] || icons.info;
+const profileState = {
+    p1: {
+        isRunning: false,
+        isBrowserOpen: false,
+        startTime: null,
+        stats: { completed: 0, battleCount: 0, avgBattleTime: 0 },
+        settings: {}
+    },
+    p2: {
+        isRunning: false,
+        isBrowserOpen: false,
+        startTime: null,
+        stats: { completed: 0, battleCount: 0, avgBattleTime: 0 },
+        settings: {}
+    }
+};
 
-    const messageEl = document.createElement('div');
-    messageEl.className = 'toast-message';
-    messageEl.textContent = message;
+// === DOM Elements Cache ===
+const dom = {
+    global: {
+        btnShowLogs: document.getElementById('btn-show-logs'),
+        btnCloseLogs: document.getElementById('btn-close-logs'),
+        btnClearLogs: document.getElementById('btn-clear-logs'),
+        logsPanel: document.getElementById('logs-panel'),
+        logContainer: document.getElementById('log-container'),
+        btnToggleP2: document.getElementById('btn-toggle-p2'),
+        globalStatus: document.getElementById('global-status')
+    },
+    p1: null,
+    p2: null
+};
 
-    toast.appendChild(icon);
-    toast.appendChild(messageEl);
-
-    const container = document.getElementById('toast-container');
-    container.appendChild(toast);
-
-    // Trigger animation
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    // Auto-dismiss
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
+// Defer DOM fetching until DOMContentLoaded
+function initDomCache() {
+    dom.p1 = getProfileElements('p1');
+    dom.p2 = getProfileElements('p2');
 }
 
-// === Loading State Helpers ===
-function setButtonLoading(button, isLoading, loadingText = '') {
-    if (isLoading) {
-        button.classList.add('loading');
-        button.dataset.originalHtml = button.innerHTML;
-        button.innerHTML = `<span class="spinner"></span>${loadingText || button.innerHTML}`;
-    } else {
-        button.classList.remove('loading');
-        if (button.dataset.originalHtml) {
-            button.innerHTML = button.dataset.originalHtml;
+function getProfileElements(pid) {
+    return {
+        // Name Input
+        nameInput: document.getElementById(`profile-name-${pid}`),
+        // Buttons
+        btnLaunch: document.getElementById(`btn-launch-${pid}`),
+        btnStart: document.getElementById(`btn-start-${pid}`),
+        btnStop: document.getElementById(`btn-stop-${pid}`),
+        btnReset: document.getElementById(`btn-reset-stats-${pid}`),
+        statusBadge: document.getElementById(`status-badge-${pid}`),
+        // Settings
+        mode: document.getElementById(`bot-mode-${pid}`),
+        questUrl: document.getElementById(`quest-url-${pid}`),
+        questUrlGroup: document.getElementById(`quest-url-group-${pid}`),
+        questUrlError: document.getElementById(`quest-url-error-${pid}`),
+        honorTarget: document.getElementById(`honor-target-${pid}`),
+        honorGroup: document.getElementById(`honor-target-group-${pid}`),
+        maxRuns: document.getElementById(`max-runs-${pid}`),
+        maxRunsLabel: document.getElementById(`max-runs-label-${pid}`),
+        battleMode: document.getElementById(`battle-mode-${pid}`),
+        // Browser Settings
+        browserType: document.getElementById(`browser-type-${pid}`),
+        disableSandbox: document.getElementById(`disable-sandbox-${pid}`),
+        // Stats
+        statCompleted: document.getElementById(`completed-runs-${pid}`),
+        statAvgBattle: document.getElementById(`avg-battle-${pid}`),
+        statAvgTurns: document.getElementById(`avg-turns-${pid}`),
+        // Note: New field 'Last Battle' uses a slightly different ID pattern in index.html, assume consistent suffix
+        statLastBattle: document.getElementById(`stat-last-battle-${pid}`),
+        statRunTimer: document.getElementById(`run-timer-${pid}`),
+        statRunRate: document.getElementById(`run-rate-${pid}`),
+        // Credentials
+        email: document.getElementById(`mobage-email-${pid}`),
+        password: document.getElementById(`mobage-password-${pid}`),
+        btnSaveCreds: document.getElementById(`btn-save-credentials-${pid}`)
+    };
+}
+
+// === Initialization ===
+document.addEventListener('DOMContentLoaded', async () => {
+    initDomCache();
+
+    // Load Settings & Credentials
+    loadGlobalSettings();
+
+    for (const pid of profiles) {
+        await loadProfileSettings(pid);
+        await loadCredentials(pid);
+        setupProfileListeners(pid);
+        updateProfileUI(pid);
+    }
+
+    setupGlobalListeners();
+});
+
+// === Profile Logic ===
+
+function setupProfileListeners(pid) {
+    const els = dom[pid];
+
+    // Launch Browser
+    els.btnLaunch.addEventListener('click', async () => {
+        if (profileState[pid].isBrowserOpen) {
+            if (!confirm(`Close browser for ${pid}?`)) return;
+            setLoading(els.btnLaunch, true, 'Closing...');
+            await window.electronAPI.closeBrowser(pid);
+            profileState[pid].isBrowserOpen = false;
+            profileState[pid].isRunning = false;
+            log(pid, 'Browser closed', 'info');
+            setLoading(els.btnLaunch, false);
+        } else {
+            setLoading(els.btnLaunch, true, 'Launching...');
+            const browserType = els.browserType ? els.browserType.value : 'chromium';
+            const settings = {
+                width: 500,
+                height: 850,
+                disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false
+            };
+
+            const res = await window.electronAPI.launchBrowser(pid, browserType, settings);
+            setLoading(els.btnLaunch, false);
+            if (res.success) {
+                profileState[pid].isBrowserOpen = true;
+                log(pid, `Browser launched (${browserType})`, 'success');
+            } else {
+                log(pid, `Launch failed: ${res.message}`, 'error');
+            }
         }
+        updateProfileUI(pid);
+    });
+
+    // Start Bot
+    els.btnStart.addEventListener('click', async () => {
+        // Get checkbox element dynamically to avoid null reference on init
+        const blockResourcesEl = document.getElementById(`block-resources-${pid}`);
+        let blockResources = false;
+
+        if (blockResourcesEl) {
+            blockResources = blockResourcesEl.checked;
+            log(pid, `Image Blocking: ${blockResources ? 'ENABLED (Fast Mode)' : 'DISABLED (Normal Mode)'}`, blockResources ? 'success' : 'info');
+        } else {
+            log(pid, `[Warning] Image Blocking setting not found, defaulting to OFF`, 'warning');
+        }
+
+        const settings = {
+            botMode: els.mode.value,
+            questUrl: els.questUrl.value.trim(),
+            maxRuns: els.maxRuns.value,
+            battleMode: els.battleMode.value,
+            honorTarget: els.honorTarget.value,
+            blockResources: blockResourcesEl ? blockResourcesEl.checked : false
+        };
+
+        if (settings.botMode === 'quest' && !settings.questUrl) {
+            showToast('Quest URL required', 'error');
+            return;
+        }
+
+        profileState[pid].isRunning = true;
+        profileState[pid].startTime = Date.now();
+        updateProfileUI(pid);
+        log(pid, 'Starting bot...', 'info');
+
+        const res = await window.electronAPI.startBot(pid, settings);
+        if (!res.success) {
+            profileState[pid].isRunning = false;
+            updateProfileUI(pid);
+            log(pid, `Start failed: ${res.message}`, 'error');
+        }
+    });
+
+    // Stop Bot
+    els.btnStop.addEventListener('click', async () => {
+        await window.electronAPI.stopBot(pid);
+        profileState[pid].isRunning = false;
+        updateProfileUI(pid);
+        log(pid, 'Bot stopped', 'warn');
+    });
+
+    // Reset Stats
+    els.btnReset.addEventListener('click', () => {
+        window.electronAPI.resetStats(pid);
+        profileState[pid].stats = { completed: 0, battleCount: 0, avgBattleTime: 0 };
+        updateStatsDisplay(pid);
+        log(pid, 'Stats reset', 'info');
+    });
+
+    // Save Credentials
+    els.btnSaveCreds.addEventListener('click', async () => {
+        const email = els.email.value.trim();
+        const password = els.password.value;
+        if (!email || !password) return showToast('Email & Password required', 'warn');
+        await window.electronAPI.saveCredentials(pid, { email, password });
+        log(pid, 'Credentials saved', 'success');
+    });
+
+    // Settings Change (Auto-Save)
+    // Auto-save settings on change
+    const inputs = [
+        els.nameInput,
+        els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget,
+        els.browserType, els.disableSandbox
+    ];
+    inputs.forEach(input => {
+        if (input) {
+            input.addEventListener('change', () => {
+                saveProfileSettings(pid);
+                updateFormVisibility(pid);
+            });
+        }
+    });
+
+    // URL Validation
+    els.questUrl.addEventListener('input', () => {
+        const url = els.questUrl.value;
+        const valid = !url || url.includes('game.granbluefantasy.jp');
+        els.questUrlError.classList.toggle('show', !valid);
+        els.questUrl.classList.toggle('input-error', !valid);
+    });
+}
+
+function updateProfileUI(pid) {
+    const s = profileState[pid];
+    const els = dom[pid];
+
+    // Status Badge
+    els.statusBadge.textContent = s.isRunning ? '▶' : '⏹'; // Using icons as requested
+    els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
+
+    // Buttons
+    els.btnLaunch.textContent = s.isBrowserOpen ? 'Close Browser' : 'Open Browser';
+    els.btnStart.disabled = s.isRunning || !s.isBrowserOpen;
+    els.btnStop.disabled = !s.isRunning;
+
+    // Form Visibility
+    updateFormVisibility(pid);
+}
+
+function updateFormVisibility(pid) {
+    const els = dom[pid];
+    const isQuest = els.mode.value === 'quest';
+
+    els.questUrlGroup.style.display = isQuest ? 'block' : 'none';
+    els.honorGroup.style.display = isQuest ? 'none' : 'block';
+
+    const label = els.maxRunsLabel;
+    if (label) label.textContent = isQuest ? 'Max Quests' : 'Max Raids';
+}
+
+function updateStatsDisplay(pid) {
+    const s = profileState[pid].stats;
+    const els = dom[pid];
+
+    if (!s) return;
+
+    // Completed
+    els.statCompleted.textContent = s.completed || 0;
+
+    // Avg Battle Time
+    if (s.avgBattleTime > 0) {
+        const secs = Math.floor(s.avgBattleTime / 1000);
+        const m = Math.floor(secs / 60);
+        const sc = secs % 60;
+        els.statAvgBattle.textContent = `${m}:${sc.toString().padStart(2, '0')}`;
+    } else {
+        els.statAvgBattle.textContent = '--:--';
+    }
+
+    // Avg Turns
+    els.statAvgTurns.textContent = s.avgTurns || '-.-';
+
+    // Last Battle Time
+    if (s.lastBattleTime > 0) {
+        const secs = Math.floor(s.lastBattleTime / 1000);
+        const m = Math.floor(secs / 60);
+        const sc = secs % 60;
+        const timeStr = `${m}:${sc.toString().padStart(2, '0')}`;
+        if (els.statLastBattle) els.statLastBattle.textContent = timeStr;
+    } else {
+        if (els.statLastBattle) els.statLastBattle.textContent = '--:--';
+    }
+
+    // Timer & Rate
+    if (s.startTime && profileState[pid].isRunning) {
+        const diff = Date.now() - s.startTime;
+        const seconds = Math.floor(diff / 1000);
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const sc = seconds % 60;
+        els.statRunTimer.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sc.toString().padStart(2, '0')}`;
+
+        // Rate (per hour)
+        if (s.rate) {
+            els.statRunRate.textContent = s.rate;
+        } else if (diff > 10000) {
+            // Fallback client-side calculation (shouldn't be needed often)
+            const hours = diff / 3600000;
+            const completed = (s.completed || 0);
+            const rate = (completed / hours).toFixed(1);
+            els.statRunRate.textContent = `${rate}/h`;
+        } else {
+            els.statRunRate.textContent = '0.0/h';
+        }
+    } else if (!profileState[pid].isRunning) {
+        // Keep last values or reset? Usually reset on stop/start, so keeping last known is fine for now
+        // or we could show static if we stored end time.
+        // For now, if stopped, we might want to just show what we have, but time won't update.
     }
 }
 
-// === Progress Tracking ===
-let farmingStartTime = null;
+// === Global / Shared Logic ===
 
-function updateProgressBar(current, max) {
-    const progressSection = document.getElementById('progress-section');
-    const progressFill = document.getElementById('progress-fill');
-    const progressPercent = document.getElementById('progress-percent');
-    const progressEta = document.getElementById('progress-eta');
-    const progressRemaining = document.getElementById('progress-remaining');
+function setupGlobalListeners() {
+    dom.global.btnShowLogs.addEventListener('click', () => {
+        // Toggle behavior
+        dom.global.logsPanel.classList.toggle('hidden');
+        // 📜 = Scroll (Show), ✕ = Close (Hide)
+        dom.global.btnShowLogs.textContent = dom.global.logsPanel.classList.contains('hidden') ? '📜' : '✕';
+        dom.global.btnShowLogs.title = dom.global.logsPanel.classList.contains('hidden') ? 'Show Logs' : 'Hide Logs';
+    });
 
-    if (max > 0) {
-        progressSection.style.display = 'block';
-        const percent = Math.min(100, (current / max) * 100);
-        progressFill.style.width = `${percent}%`;
-        progressPercent.textContent = `${Math.round(percent)}%`;
+    dom.global.btnCloseLogs.addEventListener('click', () => {
+        dom.global.logsPanel.classList.add('hidden');
+        dom.global.btnShowLogs.textContent = '📜';
+        dom.global.btnShowLogs.title = 'Show Logs';
+    });
 
-        // Calculate ETA
-        if (current > 0 && farmingStartTime) {
-            const elapsed = Date.now() - farmingStartTime;
-            const avgTimePerRun = elapsed / current;
-            const remaining = max - current;
-            const etaMs = remaining * avgTimePerRun;
+    dom.global.btnClearLogs.addEventListener('click', () => {
+        dom.global.logContainer.innerHTML = '';
+        log('sys', 'Logs cleared', 'info');
+    });
 
-            const etaMinutes = Math.floor(etaMs / 60000);
-            const etaSeconds = Math.floor((etaMs % 60000) / 1000);
-            progressEta.textContent = `Est: ${etaMinutes}m ${etaSeconds}s`;
-            progressRemaining.textContent = `${remaining} remaining`;
-        }
-    } else {
-        progressSection.style.display = 'none';
+    // Hide/Show P2
+    if (dom.global.btnToggleP2) {
+        dom.global.btnToggleP2.addEventListener('click', () => {
+            const splitView = document.querySelector('.split-view');
+            const colP2 = document.getElementById('col-p2');
+
+            if (colP2.style.display === 'none') {
+                // Show Dual
+                colP2.style.display = 'flex';
+                splitView.style.gridTemplateColumns = '1fr 1fr';
+                dom.global.btnToggleP2.textContent = '👁️'; // Keep eye icon
+                dom.global.btnToggleP2.title = 'Hide Profile 2';
+                // Show Title
+                document.querySelector('.header h1').style.display = 'block';
+                window.electronAPI.resizeWindow(460, 700);
+            } else {
+                // Hide Single
+                colP2.style.display = 'none';
+                splitView.style.gridTemplateColumns = '1fr';
+                dom.global.btnToggleP2.textContent = '👁️'; // Keep eye icon
+                dom.global.btnToggleP2.title = 'Show Profile 2';
+                // Hide Title
+                document.querySelector('.header h1').style.display = 'none';
+                window.electronAPI.resizeWindow(230, 700);
+            }
+        });
     }
 }
 
-// === Persistent Settings ===
-function saveSettings() {
-    const settings = {
-        botMode: selectBotMode.value,
-        questUrl: inputQuestUrl.value,
-        maxRuns: inputMaxRuns.value,
-        browserType: selectBrowserType.value,
-        battleMode: selectBattleMode.value,
-        customSize: checkboxEnableCustom.checked,
-        disableSandbox: checkboxDisableSandbox.checked,
-        windowWidth: inputWindowWidth.value,
-        windowHeight: inputWindowHeight.value,
-        honorTarget: cleanHonorsValue(inputHonorTarget.value)
-    };
-    localStorage.setItem('ganenblue_settings', JSON.stringify(settings));
+// === Logging System ===
+
+function log(pid, message, level = 'info') {
+    const entry = document.createElement('div');
+    entry.className = `log-entry log-level-${level}`;
+
+    const time = new Date().toLocaleTimeString();
+    const tagColor = pid === 'p1' ? 'var(--accent-blue)' : 'var(--accent-red)'; // Distinguish profiles
+
+    entry.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-tag" style="color: ${tagColor}">[${pid.toUpperCase()}]</span>
+        <span class="log-message">${message}</span>
+    `;
+
+    dom.global.logContainer.appendChild(entry);
+    dom.global.logContainer.scrollTop = dom.global.logContainer.scrollHeight;
+
+    // Memory Guard: Limit logs to 200 entries
+    if (dom.global.logContainer.children.length > 200) {
+        dom.global.logContainer.removeChild(dom.global.logContainer.firstChild);
+    }
 }
 
-function loadSettings() {
-    try {
-        const saved = localStorage.getItem('ganenblue_settings');
-        if (saved) {
-            const settings = JSON.parse(saved);
-            selectBotMode.value = settings.botMode || 'quest';
-            inputQuestUrl.value = settings.questUrl || '';
-            inputMaxRuns.value = settings.maxRuns || 0;
-            selectBrowserType.value = settings.browserType || 'chromium';
-            selectBattleMode.value = settings.battleMode || 'full_auto';
-            checkboxEnableCustom.checked = settings.customSize || false;
-            inputWindowWidth.value = settings.windowWidth || 500;
-            inputWindowHeight.value = settings.windowHeight || 850;
-            inputHonorTarget.value = formatHonorsInput(settings.honorTarget || '0');
-            checkboxDisableSandbox.checked = settings.disableSandbox || false;
+// === IPC Event Handlers ===
 
-            // Trigger UI updates
-            updateUIForBotMode();
-            updateUIForCustomSize();
+if (window.electronAPI) {
+    window.electronAPI.onLogUpdate((data) => {
+        // data = { level, message, ... }
+        // Attempt to extract profile from message if wrapper didn't strictly structure it
+        let pid = 'sys';
+        let msg = data.message;
 
-            // Restore Compact Mode
-            if (settings.compactMode) {
-                document.body.classList.add('compact-mode');
-                if (btnCompact) btnCompact.textContent = '🔼';
+        if (msg.includes('[p1]') || msg.includes('[profile1]')) pid = 'p1';
+        else if (msg.includes('[p2]') || msg.includes('[profile2]')) pid = 'p2';
+        else if (msg.includes('[Bot] [p1]')) pid = 'p1';
+        else if (msg.includes('[Bot] [p2]')) pid = 'p2';
+
+        // Clean msg tag if preferred, or just leave it
+        log(pid, msg, data.level);
+    });
+
+    window.electronAPI.onStatusUpdate((data) => {
+        // data = { profileId, status, stats }
+        const pid = data.profileId;
+        if (profileState[pid]) {
+            if (data.status === 'Stopped' || data.status === 'Error') {
+                profileState[pid].isRunning = false;
             }
 
-            // Trigger UI updates for bot mode
-            updateUIForBotMode();
+            // Update stats if provided
+            if (data.stats) {
+                const s = data.stats;
+                profileState[pid].stats = {
+                    completed: s.completedQuests || s.raidsCompleted || 0,
+                    battleCount: s.battleCount || 0,
+                    avgBattleTime: s.avgBattleTime || 0,
+                    avgTurns: s.avgTurns || 0,
+                    lastBattleTime: s.lastBattleTime || 0,
+                    startTime: s.startTime, // Ensure startTime is passed for rate check
+                    rate: s.rate // Store rate from main process
+                };
+
+                // Update Time Display directly if duration is provided
+                if (s.duration) {
+                    const timerEl = document.getElementById(`run-timer-${pid}`);
+                    if (timerEl) timerEl.textContent = s.duration;
+                }
+
+                updateStatsDisplay(pid);
+            }
+            updateProfileUI(pid);
         }
-    } catch (error) {
-        console.error('Failed to load settings:', error);
+    });
+
+    // Sound (if supported)
+    window.electronAPI.onPlaySound && window.electronAPI.onPlaySound(() => {
+        // simple beep
+    });
+}
+
+// === Persistence ===
+
+function loadGlobalSettings() {
+    // e.g. compact mode
+}
+
+async function loadProfileSettings(pid) {
+    const saved = localStorage.getItem(`settings_${pid}`);
+    if (saved) {
+        const s = JSON.parse(saved);
+        profileState[pid].settings = s;
+        // Apply to DOM
+        const els = dom[pid];
+        if (s.profileName && els.nameInput) els.nameInput.value = s.profileName; // Restore Name
+        if (s.botMode) els.mode.value = s.botMode;
+        if (s.questUrl) els.questUrl.value = s.questUrl;
+        if (s.maxRuns) els.maxRuns.value = s.maxRuns;
+        if (s.battleMode) els.battleMode.value = s.battleMode;
+        // Browser Settings
+        if (s.browserType && els.browserType) els.browserType.value = s.browserType;
+        if (s.disableSandbox !== undefined && els.disableSandbox) els.disableSandbox.checked = s.disableSandbox;
     }
 }
 
-function updateUIForBotMode() {
-    const mode = selectBotMode.value;
-    if (mode === 'quest') {
-        questUrlGroup.style.display = 'block';
-        maxRunsLabel.textContent = 'Max Quests';
-        honorTargetGroup.style.display = 'none';
-    } else if (mode === 'raid') {
-        questUrlGroup.style.display = 'none';
-        maxRunsLabel.textContent = 'Max Raids';
-        honorTargetGroup.style.display = 'block';
-    }
+function saveProfileSettings(pid) {
+    const els = dom[pid];
+    const s = {
+        profileName: els.nameInput ? els.nameInput.value : `Profile ${pid === 'p1' ? '1' : '2'}`,
+        botMode: els.mode.value,
+        questUrl: els.questUrl.value,
+        maxRuns: els.maxRuns.value,
+        battleMode: els.battleMode.value,
+        // Browser Settings
+        browserType: els.browserType ? els.browserType.value : 'chromium',
+        disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false
+    };
+    localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }
 
-function updateUIForCustomSize() {
-    if (checkboxEnableCustom.checked) {
-        customSizeContainer.style.display = 'block';
+async function loadCredentials(pid) {
+    const res = await window.electronAPI.loadCredentials(pid);
+    if (res.success && res.credentials) {
+        // pid is 'p1' or 'p2'
+        dom[pid].email.value = res.credentials.email || '';
+        dom[pid].password.value = res.credentials.password || '';
     } else {
-        customSizeContainer.style.display = 'none';
+        // Check if legacy formatting exists? No, assuming main process handles it or returns null
+        // If we want to support 'profile1' -> 'p1' migration, it should happen in main.js
+        console.log(`No credentials found for ${pid}`);
     }
 }
 
-// Debounced save to avoid excessive writes
-let saveTimeout;
-function debouncedSave() {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => saveSettings(), 500);
-}
-
-// Load settings on startup
-window.addEventListener('DOMContentLoaded', () => {
-    loadSettings();
-});
-
-// Auto-save on changes
-selectBotMode.addEventListener('change', debouncedSave);
-selectBrowserType.addEventListener('change', debouncedSave);
-selectBattleMode.addEventListener('change', debouncedSave);
-inputQuestUrl.addEventListener('input', debouncedSave);
-inputMaxRuns.addEventListener('input', debouncedSave);
-checkboxEnableCustom.addEventListener('change', debouncedSave);
-inputWindowWidth.addEventListener('input', debouncedSave);
-inputWindowHeight.addEventListener('input', debouncedSave);
-inputHonorTarget.addEventListener('input', debouncedSave);
-checkboxDisableSandbox.addEventListener('change', debouncedSave);
-
-// Custom Size Toggle Handler
-checkboxEnableCustom.addEventListener('change', () => {
-    updateUIForCustomSize();
-});
-
-// Honor Target Formatting
-function formatHonorsInput(value) {
-    const numeric = value.toString().replace(/\D/g, '');
-    if (!numeric) return '0';
-    return parseInt(numeric, 10).toLocaleString('de-DE'); // Use de-DE or similar for dot separator
-}
-
-function cleanHonorsValue(value) {
-    return value.toString().replace(/\D/g, '') || '0';
-}
-
-inputHonorTarget.addEventListener('input', (e) => {
-    const cursor = e.target.selectionStart;
-    const oldVal = e.target.value;
-    const newVal = formatHonorsInput(e.target.value);
-    e.target.value = newVal;
-
-    // Adjust cursor position if dots were added/removed
-    const diff = newVal.length - oldVal.length;
-    e.target.setSelectionRange(cursor + diff, cursor + diff);
-    debouncedSave();
-});
-
-// Bot Mode Change Handler
-selectBotMode.addEventListener('change', () => {
-    updateUIForBotMode();
-});
-
-// === Input Validation ===
-function validateQuestUrl(url) {
-    if (!url) return true;// Empty is valid
-    return url.startsWith('http://game.granbluefantasy.jp/') || url.startsWith('https://game.granbluefantasy.jp/');
-}
-
-// Real-time URL validation
-inputQuestUrl.addEventListener('input', (e) => {
-    const url = e.target.value.trim();
-    const errorEl = document.getElementById('quest-url-error');
-
-    if (url && !validateQuestUrl(url)) {
-        inputQuestUrl.classList.add('input-error');
-        inputQuestUrl.classList.remove('input-success');
-        errorEl.classList.add('show');
-    } else if (url) {
-        inputQuestUrl.classList.remove('input-error');
-        inputQuestUrl.classList.add('input-success');
-        errorEl.classList.remove('show');
+// === Helpers ===
+function setLoading(btn, isLoading, text) {
+    if (isLoading) {
+        btn.dataset.original = btn.textContent;
+        btn.textContent = text;
+        btn.disabled = true;
     } else {
-        inputQuestUrl.classList.remove('input-error', 'input-success');
-        errorEl.classList.remove('show');
+        btn.textContent = btn.dataset.original || 'Action';
+        btn.disabled = false;
     }
-});
+}
 
-// === Collapsible Sections ===
-// === Collapsible Sections ===
-function toggleSection(sectionName) {
-    const content = document.getElementById(`${sectionName}-content`);
-    const chevron = document.getElementById(`${sectionName}-chevron`);
+function showToast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.className = `toast toast-${type} show`;
+    t.innerHTML = `<span class="toast-message">${msg}</span>`;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
 
-    if (content.classList.contains('open')) {
+// Global scope for collapse toggles (onclick in HTML)
+window.toggleSection = function (id) {
+    const content = document.getElementById(`${id}-content`);
+    const chevron = document.getElementById(`${id}-chevron`);
+    const isOpen = content.classList.contains('open');
+
+    if (isOpen) {
         content.classList.remove('open');
         chevron.textContent = '▼';
     } else {
         content.classList.add('open');
         chevron.textContent = '▲';
     }
-}
-window.toggleSection = toggleSection;
-
-// Legacy support for toggleCredentials (if called directly)
-window.toggleCredentials = () => toggleSection('credentials');
-
-// === Log Filtering ===
-document.querySelectorAll('.btn-filter').forEach(btn => {
-    btn.addEventListener('click', () => {
-        // Toggle active button
-        document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        const filter = btn.dataset.filter;
-        const logs = document.querySelectorAll('.log-entry');
-
-        logs.forEach(log => {
-            if (filter === 'all' || log.dataset.level === filter) {
-                log.style.display = 'block';
-            } else {
-                log.style.display = 'none';
-            }
-        });
-
-        // Auto-scroll to bottom of visible logs
-        logContainer.scrollTop = logContainer.scrollHeight;
-    });
-});
-
-// === Compact Mode Toggle ===
-const btnCompact = document.getElementById('btn-compact');
-btnCompact.addEventListener('click', () => {
-    document.body.classList.toggle('compact-mode');
-    const isCompact = document.body.classList.contains('compact-mode');
-    btnCompact.textContent = isCompact ? '🔼' : '👁️';
-
-    // Save state
-    const currentSettings = JSON.parse(localStorage.getItem('ganenblue_settings') || '{}');
-    currentSettings.compactMode = isCompact;
-    localStorage.setItem('ganenblue_settings', JSON.stringify(currentSettings));
-});
-
-// === Legacy Support ===
-// Keeping this for potential future restoring if needed, but listeners are removed as per request.
-
-// === Interactive Status Badge ===
-// === Interactive Status Badge ===
-statusBadge.addEventListener('click', () => {
-    console.log('Status badge clicked');
-    const currentStatus = statusBadge.textContent.trim();
-
-    if (currentStatus === 'Stopped') {
-        // Check if browser is launched
-        if (btnStart.disabled) {
-            console.log('Cannot start: Browser not launched');
-            showToast('Please launch browser first', 'warning');
-            return;
-        }
-
-        // Confirm Start
-        if (confirm('Start farming?')) {
-            btnStart.click();
-        }
-    } else if (currentStatus === 'Running' || currentStatus === 'Paused') {
-        // Confirm Stop
-        if (confirm('Stop the bot?')) {
-            btnStop.click();
-        }
-    }
-});
-
-// === Sound Playback ===
-if (window.electronAPI && window.electronAPI.onPlaySound) {
-    window.electronAPI.onPlaySound((soundType) => {
-        // Simple beep using Web Audio API (no external files needed)
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            // Notification sound: 2 quick beeps
-            oscillator.frequency.value = 800;
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.1);
-
-            // Second beep
-            const oscillator2 = audioContext.createOscillator();
-            const gainNode2 = audioContext.createGain();
-            oscillator2.connect(gainNode2);
-            gainNode2.connect(audioContext.destination);
-            oscillator2.frequency.value = 1000;
-            gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
-            gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
-            oscillator2.start(audioContext.currentTime + 0.15);
-            oscillator2.stop(audioContext.currentTime + 0.25);
-        } catch (error) {
-            console.error('Sound playback failed:', error);
-        }
-    });
-}
-
-// Save Credentials Button
-const btnSaveCredentials = document.getElementById('btn-save-credentials');
-const inputMobageEmail = document.getElementById('mobage-email');
-const inputMobagePassword = document.getElementById('mobage-password');
-
-btnSaveCredentials.addEventListener('click', async () => {
-    const email = inputMobageEmail.value.trim();
-    const password = inputMobagePassword.value.trim();
-
-    if (!email || !password) {
-        addLog({ level: 'warn', message: 'Please enter both email and password', timestamp: new Date().toISOString() });
-        return;
-    }
-
-    const result = await window.electronAPI.saveCredentials({ email, password });
-
-    if (result.success) {
-        addLog({ level: 'info', message: '✓ Credentials saved successfully!', timestamp: new Date().toISOString() });
-    } else {
-        addLog({ level: 'error', message: `Failed to save credentials: ${result.message}`, timestamp: new Date().toISOString() });
-    }
-});
-
-// Load credentials on startup
-(async () => {
-    try {
-        console.log('Loading saved credentials...');
-        const result = await window.electronAPI.loadCredentials();
-
-        if (result.success && result.credentials) {
-            // Only load email, keep password empty for security
-            inputMobageEmail.value = result.credentials.email || '';
-            // Don't log email or password
-            addLog({ level: 'info', message: `[Login] ✓ Loaded saved email: ${result.credentials.email}`, timestamp: new Date().toISOString() });
-        } else {
-            console.log('No credentials found or load failed');
-            addLog({ level: 'info', message: 'No saved credentials found', timestamp: new Date().toISOString() });
-        }
-    } catch (error) {
-        console.error('Error loading credentials:', error);
-        addLog({ level: 'error', message: `Failed to load credentials: ${error.message}`, timestamp: new Date().toISOString() });
-    }
-})();
-
-// 1. Launch Browser
-btnLaunch.addEventListener('click', async () => {
-    setButtonLoading(btnLaunch, true, 'Launching...');
-    btnLaunch.disabled = true;
-    addLog({ level: 'info', message: '[Login] Launching browser...', timestamp: new Date().toISOString() });
-
-    const browserType = selectBrowserType.value;
-    const deviceSettings = {
-        mode: checkboxEnableCustom.checked ? 'custom' : 'desktop',
-        width: parseInt(inputWindowWidth.value),
-        height: parseInt(inputWindowHeight.value),
-        disable_sandbox: checkboxDisableSandbox.checked
-    };
-
-    const result = await window.electronAPI.launchBrowser(browserType, deviceSettings);
-
-    setButtonLoading(btnLaunch, false);
-
-    if (result.success) {
-        btnLaunch.textContent = 'Browser Open';
-        addLog({ level: 'info', message: '[Login] Browser launched. Please login manually.', timestamp: new Date().toISOString() });
-        showToast('Browser launched successfully!', 'success');
-        btnStart.disabled = false;
-
-        // Hide credentials section after browser launches
-        const credContent = document.getElementById('credentials-content');
-        if (credContent) {
-            credContent.classList.remove('open');
-            const credChevron = document.getElementById('credentials-chevron');
-            if (credChevron) credChevron.textContent = '▼';
-        }
-    } else {
-        addLog({ level: 'error', message: `Launch failed: ${result.message}`, timestamp: new Date().toISOString() });
-        showToast(`Launch failed: ${result.message}`, 'error');
-        btnLaunch.disabled = false;
-        btnLaunch.textContent = 'Launch Browser';
-    }
-});
-
-// 2. Start Bot
-btnStart.addEventListener('click', async () => {
-    const botMode = selectBotMode.value;
-    const settings = {
-        botMode: botMode,
-        questUrl: inputQuestUrl.value,
-        maxRuns: inputMaxRuns.value,
-        battleMode: selectBattleMode.value,
-        honorTarget: parseInt(cleanHonorsValue(inputHonorTarget.value), 10) || 0
-    };
-
-    // Validate quest mode requires URL
-    if (botMode === 'quest' && !settings.questUrl) {
-        addLog({ level: 'warn', message: 'Please enter a Quest URL', timestamp: new Date().toISOString() });
-        showToast('Please enter a Quest URL', 'warning');
-        return;
-    }
-
-    farmingStartTime = Date.now();
-    setRunningState(true);
-    startTimer(); // Start elapsed timer
-    addLog({ level: 'info', message: 'Starting farming...', timestamp: new Date().toISOString() });
-    showToast('Bot started successfully!', 'success');
-
-    const result = await window.electronAPI.startBot(settings);
-
-    if (!result.success) {
-        addLog({ level: 'error', message: `Start failed: ${result.message}`, timestamp: new Date().toISOString() });
-        showToast(`Start failed: ${result.message}`, 'error');
-        setRunningState(false);
-        stopTimer(); // Stop timer if failed
-        farmingStartTime = null;
-    }
-});
-
-// Stop Bot
-btnStop.addEventListener('click', async () => {
-    addLog({ level: 'info', message: 'Stopping bot...', timestamp: new Date().toISOString() });
-    await window.electronAPI.stopBot();
-    setRunningState(false);
-    stopTimer(); // Stop elapsed timer
-    farmingStartTime = null;
-
-    // Reset state
-    // btnLaunch.disabled = false; // Keep browser button disabled as browser is open
-    // btnStart.disabled = true;   // ERROR: This was disabling start. Remove it.
-
-    // Ensure Start is enabled for next run
-    btnStart.disabled = false;
-    // Removed manual textContent assignment that was causing overlap glitch
-
-    addLog({ level: 'info', message: 'Bot stopped', timestamp: new Date().toISOString() });
-    showToast('Bot stopped', 'info');
-});
-
-// Timer functionality
-let timerInterval = null;
-let startTime = null;
-
-function startTimer() {
-    startTime = Date.now();
-    timerInterval = setInterval(updateTimer, 1000);
-}
-
-function stopTimer() {
-    if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-    }
-}
-
-function updateTimer() {
-    if (!startTime) return;
-
-    const elapsed = Date.now() - startTime;
-    const hours = Math.floor(elapsed / 3600000);
-    const minutes = Math.floor((elapsed % 3600000) / 60000);
-    const seconds = Math.floor((elapsed % 60000) / 1000);
-
-    const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    document.getElementById('elapsed-time').textContent = timeString;
-}
-
-// Reload App
-btnReload.addEventListener('click', async () => {
-    addLog({ level: 'info', message: 'Restarting application...', timestamp: new Date().toISOString() });
-    await window.electronAPI.restartApp();
-});
-
-// Reset Stats
-btnResetStats.addEventListener('click', async () => {
-    // Add reset animation class
-    const statsGrid = document.getElementById('stats-grid');
-    statsGrid.style.opacity = '0';
-    statsGrid.style.transform = 'scale(0.98)';
-
-    const result = await window.electronAPI.resetStats();
-
-    setTimeout(() => {
-        if (result.success) {
-            addLog({ level: 'info', message: 'Stats reset successfully', timestamp: new Date().toISOString() });
-            showToast('Stats reset successfully', 'success');
-            document.getElementById('battle-times-display').innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
-            document.getElementById('completed-runs').textContent = '0';
-            document.getElementById('avg-battle').textContent = '--:--';
-            document.getElementById('avg-turns').textContent = '0.0'; // Reset avg-turns
-            document.getElementById('runs-per-hour').textContent = '0.0';
-            farmingStartTime = null;
-        }
-        statsGrid.style.opacity = '1';
-        statsGrid.style.transform = 'scale(1)';
-    }, 300);
-});
-
-// Log Updates
-if (window.electronAPI && window.electronAPI.onLogUpdate) {
-    window.electronAPI.onLogUpdate((log) => {
-        addLog(log);
-    });
-}
-
-function addLog(log) {
-    const entry = document.createElement('div');
-    const level = log.level || 'info';
-    entry.className = `log-entry log-level-${level}`;
-    entry.dataset.level = level; // Store for filtering
-
-    const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
-
-    let message = log.message;
-
-    // Multi-color tag mapping
-    const tagColors = {
-        'quest': 'quest', 'raid': 'quest', 'summon': 'quest',
-        'battle': 'battle', 'turn': 'battle',
-        'wait': 'wait', 'reload': 'wait', 'fa': 'wait',
-        'cleared': 'success', 'summary': 'success', 'victory': 'success', 'loot': 'success', 'drop': 'success',
-        'bot': 'bot'
-    };
-
-    // Replace all bracketed tags with colorized spans
-    message = message.replace(/\[(.*?)\]/g, (match, tag) => {
-        const cleanTag = tag.toLowerCase().split(' ')[0]; // Handle [Turn 1] -> turn
-        const colorClass = tagColors[cleanTag] || 'bot';
-        return `<span class="log-tag log-tag-${colorClass}">${match}</span>`;
-    });
-
-    // Highlight Keywords (remaining text highlights)
-    message = message.replace(/(successfully|✓)/gi, '<span class="log-highlight-success">$1</span>');
-
-    entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        ${message}
-    `;
-
-    // Apply current filter
-    const activeFilter = document.querySelector('.btn-filter.active').dataset.filter;
-    if (activeFilter !== 'all' && activeFilter !== level) {
-        entry.style.display = 'none';
-    }
-
-    logContainer.appendChild(entry);
-    logContainer.scrollTop = logContainer.scrollHeight;
-}
-
-function setRunningState(isRunning) {
-    btnStart.disabled = isRunning;
-    btnStop.disabled = !isRunning;
-
-    statusBadge.className = `status-badge status-${isRunning ? 'Running' : 'Stopped'}`;
-    statusBadge.textContent = isRunning ? 'Running' : 'Stopped';
-
-    // Disable inputs while running
-    const inputs = [
-        selectBotMode,
-        inputQuestUrl,
-        inputMaxRuns,
-        selectBrowserType,
-        selectBattleMode,
-        inputHonorTarget,
-        checkboxEnableCustom,
-        inputWindowWidth,
-        inputWindowHeight
-    ];
-
-    inputs.forEach(input => {
-        if (input) input.disabled = isRunning;
-    });
-}
-
-// Poll for stats every second if running
-setInterval(async () => {
-    if (statusBadge.textContent === 'Running') {
-        const result = await window.electronAPI.getStatus();
-        if (result.stats) {
-            const botMode = selectBotMode.value;
-            // Update completed runs (Battles Done)
-            // Prioritize battleCount for "Battles Done" display
-            const completed = result.stats.battleCount || result.stats.completedQuests || result.stats.raidsCompleted || 0;
-            const max = result.stats.maxRuns || 0;
-            const completedLabel = result.stats.botMode === 'raid' ? 'Raids Done' : 'Battles Done';
-
-            // Update completed runs
-            document.getElementById('completed-runs').textContent = max > 0 ? `${completed} / ${max}` : completed;
-            document.getElementById('completed-label').textContent = completedLabel;
-
-            // Update Avg Turns
-            document.getElementById('avg-turns').textContent = result.stats.avgTurns || '0.0';
-
-            // Calculate average time display
-            let avgTimeDisplay = '--:--';
-            if (result.stats.avgBattleTime > 0) {
-                const avgMs = result.stats.avgBattleTime;
-                const totalSeconds = Math.floor(avgMs / 1000);
-                const minutes = Math.floor(totalSeconds / 60);
-                const seconds = totalSeconds % 60;
-                avgTimeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-            document.getElementById('avg-battle').textContent = avgTimeDisplay;
-
-            // Calculate runs per hour: 60 / (avgBattleTime + 15 sec buffer)
-            if (result.stats.avgBattleTime > 0) {
-                const avgMin = result.stats.avgBattleTime / 60000;
-                const perHour = (60 / (avgMin + 0.25)).toFixed(1);
-                document.getElementById('runs-per-hour').textContent = perHour;
-            } else {
-                document.getElementById('runs-per-hour').textContent = '0.0';
-            }
-
-            // Update progress bar
-            updateProgressBar(completed, max);
-
-            // Update battle times display
-            const battleTimesContainer = document.getElementById('battle-times-display');
-            if (result.stats.battleTimes && result.stats.battleTimes.length > 0) {
-                const formatTime = (ms) => {
-                    const totalSeconds = Math.floor(ms / 1000);
-                    const minutes = Math.floor(totalSeconds / 60);
-                    const seconds = totalSeconds % 60;
-                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                };
-
-                const avgTime = formatTime(result.stats.avgBattleTime);
-
-                let html = `<div style="margin-bottom: 10px; color: var(--accent-green); font-weight: bold;">Average: ${avgTime}</div>`;
-                html += '<div style="border-top: 1px solid var(--border); padding-top: 5px;">';
-
-                result.stats.battleTimes.forEach((time, index) => {
-                    const formattedTime = formatTime(time);
-                    const turns = result.stats.battleTurns ? result.stats.battleTurns[index] : 0;
-                    html += `<div style="margin-bottom: 3px; color: var(--text-primary);">Battle ${index + 1}: ${formattedTime} (${turns} turns)</div>`;
-                });
-
-                html += '</div>';
-                battleTimesContainer.innerHTML = html;
-            } else {
-                battleTimesContainer.innerHTML = '<div style="color: var(--text-secondary);">No battles yet</div>';
-            }
-        }
-    }
-}, 1000);
+};

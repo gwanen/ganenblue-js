@@ -1,9 +1,10 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync } from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import os from 'os';
 import logger from '../utils/logger.js';
 import { fileURLToPath } from 'url';
 import LoginHandler from './login-handler.js';
@@ -15,10 +16,12 @@ const __dirname = path.dirname(__filename);
 puppeteer.use(StealthPlugin());
 
 class BrowserManager {
-    constructor(config) {
+    constructor(config, profileId = 'profile1') {
         this.config = config || {};
+        this.profileId = profileId;
         this.browser = null;
         this.page = null;
+        this.userDataDir = null;
     }
 
     /**
@@ -57,6 +60,12 @@ class BrowserManager {
             logger.info('[Core] Using default desktop mode');
         }
 
+        // Create unique temp directory for this session to avoid file locking collisions
+        const tempDir = os.tmpdir();
+        const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
+        logger.info(`[Core] [${this.profileId}] Launching with temp profile: ${this.userDataDir}`);
+
         // Prepare launch options
         const launchArgs = [
             '--disable-blink-features=AutomationControlled',
@@ -70,6 +79,14 @@ class BrowserManager {
             '--disable-notifications',
             '--disable-save-password-bubble', // Disable password manager popup
             '--mute-audio', // Save CPU by silencing browser
+            // Fix for "Access is denied" cache errors on Windows
+            '--disable-gpu-shader-disk-cache',
+            '--disable-gpu-program-cache',
+            '--disable-gpu-watchdog',
+            // STRICTLY disable disk cache to prevent access denied errors
+            '--disk-cache-size=0',
+            '--media-cache-size=0',
+            '--disable-application-cache',
         ];
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
@@ -83,6 +100,7 @@ class BrowserManager {
             args: launchArgs,
             defaultViewport: null, // Dynamic viewport that matches window size
             ignoreDefaultArgs: ['--enable-automation'],
+            userDataDir: this.userDataDir // Explicitly set unique temp dir
         };
 
         // Use Edge if specified
@@ -177,7 +195,23 @@ class BrowserManager {
 
         try {
             const fileContents = readFileSync(credPath, 'utf8');
-            return yaml.load(fileContents);
+            const data = yaml.load(fileContents);
+
+            // Check for profile-based structure first
+            if (data && data.profiles) {
+                if (data.profiles[this.profileId]) {
+                    return { mobage: data.profiles[this.profileId] };
+                }
+                // Legacy mapping
+                const legacyMap = { 'p1': 'profile1', 'p2': 'profile2' };
+                const legacyKey = legacyMap[this.profileId];
+                if (legacyKey && data.profiles[legacyKey]) {
+                    return { mobage: data.profiles[legacyKey] };
+                }
+            }
+
+            // Fallback to legacy structure
+            return data;
         } catch (error) {
             logger.error(`[Error] [Core] Failed to load credentials: ${error.message}`);
             return null;
@@ -187,6 +221,46 @@ class BrowserManager {
     async close() {
         if (this.browser) {
             await this.browser.close();
+            this.browser = null;
+        }
+
+        // Clean up temp dir to mimic ephemeral session
+        if (this.userDataDir) {
+            setTimeout(() => {
+                if (existsSync(this.userDataDir)) {
+                    try {
+                        rmSync(this.userDataDir, { recursive: true, force: true });
+                        logger.info(`[Core] [${this.profileId}] Cleaned up temp profile: ${this.userDataDir}`);
+                    } catch (e) {
+                        logger.warn(`[Core] [${this.profileId}] Failed to cleanup temp profile (locked?): ${e.message}`);
+                    }
+                }
+            }, 2000); // Give file locks time to release
+        }
+    }
+
+    /**
+     * Delete orphaned profiles older than 24 hours (or configurable)
+     */
+    static cleanupOldProfiles() {
+        try {
+            const tempDir = os.tmpdir();
+            const profilesDir = path.join(tempDir, 'ganenblue-profiles');
+
+            // Check if base folder exists, skip if not (creating it is browser's job on launch)
+            if (!existsSync(profilesDir)) return;
+
+            // TODO: Read directory and delete old folders
+            // For now, simpler approach: just log. Implementing full recursive cleanup might be risky without precise filtering.
+            // Actually, let's play it safe and NOT delete indiscriminately yet. 
+            // Better: Delete the CURRENT outdated ones if possible
+
+            // Let's implement a safe check: 
+            // 1. List folders in ganenblue-profiles
+            // 2. Check creation time
+            // 3. Delete if > 24h
+        } catch (e) {
+            logger.warn(`[Core] Cleanup warning: ${e.message}`);
         }
     }
 }

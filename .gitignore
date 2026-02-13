@@ -41,3 +41,9 @@ coverage/
 
 # Credentials (contains sensitive login info)
 config/credentials.yaml
+
+# Screenshots
+screenshots/
+
+# Local preferences and temp files
+local/
