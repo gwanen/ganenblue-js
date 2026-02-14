@@ -84,8 +84,10 @@ class QuestBot {
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
-        // EST: Reduced delay for speed (0.5-1s)
-        await sleep(randomDelay(500, 1000));
+        // Optimization: Minimum delay for maximum snappiness (100-200ms)
+        await sleep(randomDelay(100, 200));
+
+        // ... rest of the code ...
 
         // Check for existing battle state (Redirected or Resume)
         const currentUrl = this.controller.page.url();

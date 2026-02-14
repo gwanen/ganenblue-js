@@ -133,56 +133,21 @@ class BattleHandler {
 
         logger.info('[Battle] Initializing Full Auto');
 
-        // 1. Wait for Auto Button or Wipe (ensure battle is loaded)
-        // Optimization: Poll for BOTH auto button and wipe state to avoid blocking
-        const startTimeAuto = Date.now();
-        const timeoutAuto = 45000;
-        let autoBtnFound = false;
-
-        while (Date.now() - startTimeAuto < timeoutAuto) {
-            if (this.stopped) return;
-
-            const state = await this.controller.page.evaluate(() => {
-                const auto = document.querySelector('.btn-auto');
-                const result = window.location.hash.includes('#result');
-
-                return {
-                    autoFound: !!auto && auto.offsetWidth > 0,
-                    isResult: result
-                };
-            });
-
-            if (state.isResult || await this.isWiped()) {
-                logger.info(await this.isWiped() ? '[Raid] Party wiped detected during FA init' : '[Wait] Landed on result during FA init');
-                return; // Let executeBattle handle the result/wipe
-            }
-
-            if (state.autoFound) {
-                autoBtnFound = true;
-                break;
-            }
-
-            await sleep(500);
-        }
-
-        if (!autoBtnFound) {
-            logger.warn('[FA] Auto button not found. Refreshing');
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-            await this.checkStateAndResume('full_auto');
-            return;
-        }
+        // 1. Initial State Check (already handled by caller, but safety first)
+        if (this.stopped) return;
 
         // 2. Press Auto Button
+        // Optimization: Added 50ms stable delay as requested for snappiness
         logger.debug('[FA] Clicking Auto button');
         await this.controller.clickSafe(this.selectors.fullAutoButton, {
             silent: true,
-            preDelay: 0,
-            delay: 0,
+            preDelay: 50,
+            delay: randomDelay(40, 60),
             waitAfter: false
         });
 
         // 3. Wait for Attack or Auto Button Disappearance (Max 45s)
-        logger.info('[Wait] Waiting for attack or auto button disappearance...');
+        logger.info('[Wait] Waiting for Full Auto activation...');
         const startTime = Date.now();
         const timeout = 45000; // 45 seconds
 
@@ -205,7 +170,7 @@ class BattleHandler {
                     logger.info('[Raid] Battle end detected via popup after FA toggle');
                     return;
                 }
-                logger.info('[FA] Full Auto active (Button hidden)');
+                logger.info('[FA] Full Auto active');
                 return;
             }
 
@@ -214,7 +179,7 @@ class BattleHandler {
                 return;
             }
 
-            await sleep(500); // Poll every 500ms
+            await sleep(200); // Poll every 200ms for snappiness
         }
 
         // 4. Timeout - Refresh
@@ -550,18 +515,20 @@ class BattleHandler {
         }
 
         // 2. Check for OK button (completion modal), Empty Result Notice, or Wipe
-        if (await this.controller.elementExists(this.selectors.okButton, 2000) ||
-            await this.controller.elementExists(this.selectors.emptyResultNotice, 500) ||
+        // Optimized: Shorter timeouts for faster detection
+        if (await this.controller.elementExists(this.selectors.okButton, 300) ||
+            await this.controller.elementExists(this.selectors.emptyResultNotice, 300) ||
             await this.isWiped()) {
             logger.info(await this.isWiped() ? '[Cleared] Party wiped' : '[Cleared] Battle finished');
             return true;
         }
 
         // 3. Still in battle? Wait for UI components to appear
-        const found = await this.controller.waitForElement('.btn-attack-start', 2000);
+        // Optimized: 500ms timeout for faster engagement
+        const found = await this.controller.waitForElement('.btn-attack-start', 500);
         if (found && !this.stopped) {
             if (mode === 'full_auto') {
-                // Re-attempt FA using the centralized simplified logic
+                // Re-attempt FA
                 await this.handleFullAuto();
                 return false;
             } else if (mode === 'semi_auto') {
