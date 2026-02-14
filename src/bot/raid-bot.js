@@ -360,9 +360,14 @@ class RaidBot {
         while (retryCount < 15) { // 3s total
             // Optimization: If battle detected, skip summon selection
             const instantBattle = await this.controller.page.evaluate(() => {
-                const url = window.location.href;
+                const hash = window.location.hash;
                 const att = document.querySelector('.btn-attack-start');
-                return url.includes('#raid') || url.includes('_raid') || (att && (att.offsetWidth > 0 || att.classList.contains('display-on')));
+
+                // Explicitly check for battle hashes, avoiding quest/supporter_raid
+                const isBattleHash = hash.startsWith('#raid') || hash.startsWith('#raid_multi');
+                const hasAttackBtn = att && (att.offsetWidth > 0 || att.classList.contains('display-on'));
+
+                return isBattleHash || hasAttackBtn;
             });
 
             if (instantBattle) {
