@@ -166,10 +166,21 @@ class QuestBot {
         // Optimization: Reduced check interval from 1000ms to 200ms
         let retryCount = 0;
         while (retryCount < 15) { // 15 * 200ms = 3s total
+            // Optimization: If battle detected, skip summon selection
+            const instantBattle = await this.controller.page.evaluate(() => {
+                const url = window.location.href;
+                const att = document.querySelector('.btn-attack-start');
+                return url.includes('#raid') || url.includes('_raid') || (att && (att.offsetWidth > 0 || att.classList.contains('display-on')));
+            });
+
+            if (instantBattle) {
+                logger.info('[Bot] Transitioned to battle. Skipping summon search');
+                return 'success';
+            }
+
             if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
-            // logger.warn('[Wait] [Summon] screen not found...'); // Remove spam logs
             retryCount++;
             await sleep(200);
         }
@@ -272,10 +283,6 @@ class QuestBot {
             }
         }
 
-        // Check if no summons found after trying fallbacks
-        // Instead of throwing error, we'll log warning and try to proceed to battle check
-        // This handles cases where summon selection was skipped or handled externally
-        logger.warn('[Wait] No supporter selected. Attempting to proceed');
         return 'success';
     }
 

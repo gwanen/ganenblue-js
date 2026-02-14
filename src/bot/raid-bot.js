@@ -358,6 +358,18 @@ class RaidBot {
         // Optimization: Reduced check interval from 1000ms to 200ms
         let retryCount = 0;
         while (retryCount < 15) { // 3s total
+            // Optimization: If battle detected, skip summon selection
+            const instantBattle = await this.controller.page.evaluate(() => {
+                const url = window.location.href;
+                const att = document.querySelector('.btn-attack-start');
+                return url.includes('#raid') || url.includes('_raid') || (att && (att.offsetWidth > 0 || att.classList.contains('display-on')));
+            });
+
+            if (instantBattle) {
+                logger.info('[Bot] Transitioned to battle. Skipping summon search');
+                return 'success';
+            }
+
             if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
@@ -441,7 +453,6 @@ class RaidBot {
             }
         }
 
-        logger.warn('[Wait] [Summon] No supporters available, proceeding anyway');
         return 'success';
     }
 
