@@ -97,7 +97,6 @@
 
         .status-badge:hover {
             filter: brightness(1.2);
-            transform: scale(1.05);
         }
 
         .status-Stopped {
@@ -194,12 +193,14 @@
         }
 
         button:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            /* Remove transform to keep size stable */
+            filter: brightness(1.1);
         }
 
         button:disabled {
-            opacity: 0.4;
+            filter: grayscale(0.5) contrast(0.8);
+            opacity: 0.6;
+            /* Increased from 0.4 for better visibility and size stability */
             cursor: not-allowed;
         }
 
@@ -207,11 +208,13 @@
             background: rgba(59, 130, 246, 0.1);
             border: 1px solid var(--accent-blue);
             color: var(--text-primary);
-            padding: 10px;
-            font-size: 13px;
-            text-transform: none;
-            letter-spacing: 0;
+            padding: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             font-weight: 600;
+            border-radius: 4px;
+            transition: all 0.2s ease;
         }
 
         .btn-launch:hover:not(:disabled) {
@@ -219,49 +222,56 @@
             border-color: #6366f1;
         }
 
+        .btn-group {
+            display: flex;
+            justify-content: flex-start;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .btn-square {
+            width: 34px !important;
+            height: 34px !important;
+            padding: 0 !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px !important;
+            border-radius: 4px !important;
+            margin: 0 !important;
+            flex-shrink: 0;
+            cursor: pointer;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            transition: all 0.2s ease !important;
+        }
+
         .btn-start {
-            background: #1e4d3b;
-            /* Solid Warm Green */
+            background: #1e4d3b !important;
             color: #d1fae5;
         }
 
         .btn-stop {
-            background: #5c1f1f;
-            /* Solid Warm Red */
+            background: #5c1f1f !important;
             color: #fee2e2;
         }
 
+        /* Fix Stop Icon Centering (Square emoji often has built-in offset) */
+        .btn-stop::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: currentColor;
+            border-radius: 1px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
         .btn-reset {
-            background: #2e3b5c;
-            /* Solid Warm Blue */
+            background: #2e3b5c !important;
             color: #e0e7ff;
-        }
-
-        .btn-reload {
-            background: #5c411f;
-            /* Solid Warm Orange/Gold */
-            color: #fef3c7;
-        }
-
-        .btn-group {
-            display: flex;
-            justify-content: space-between;
-            gap: 6px;
-            margin-top: 6px;
-        }
-
-        .btn-square {
-            width: 40px !important;
-            height: 40px !important;
-            padding: 0 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px !important;
-            border-radius: 6px !important;
-            margin: 0 !important;
-            flex-shrink: 0;
-            box-shadow: none !important;
         }
 
         #log-container {
@@ -1175,8 +1185,8 @@
                         <h4>Bot Actions</h4>
                         <div class="btn-group">
                             <button id="btn-start-p1" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶️</button>
-                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                                disabled>▶</button>
+                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled></button>
                             <button id="btn-reset-stats-p1" class="btn-square btn-reset" title="Reset Stats">🔄</button>
                         </div>
                         <button id="btn-launch-p1" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
@@ -1309,8 +1319,8 @@
                         <h4>Bot Actions</h4>
                         <div class="btn-group">
                             <button id="btn-start-p2" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶️</button>
-                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled>⏹️</button>
+                                disabled>▶</button>
+                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled></button>
                             <button id="btn-reset-stats-p2" class="btn-square btn-reset" title="Reset Stats">🔄</button>
                         </div>
                         <button id="btn-launch-p2" class="btn-launch" style="margin-top: 12px;">Open Browser</button>

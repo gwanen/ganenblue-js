@@ -174,14 +174,22 @@ class QuestBot {
             await sleep(200);
         }
 
-        // Check for 'btn-usual-ok' (Confirmation popup that might block view)
-        // Use visible: true to avoid clicking phantom popups
         // Check for 'btn-usual-ok' (Confirmation popup)
         // Optimization: Reduced timeout from 500ms to 100ms
-        if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
+        const okFound = await this.controller.elementExists('.btn-usual-ok', 100, true);
+        if (okFound) {
+            // Priority: Check if the OK button belongs to a "Battle Concluded" popup first
+            const error = await this.handleErrorPopup();
+            if (error.detected && (error.text.includes('already ended') || error.text.includes('defeated'))) {
+                return 'ended';
+            }
+
             logger.info('[Bot] Clicking confirmation popup');
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
-            await sleep(500);
+            // Use 1 retry and short timeout to avoid getting stuck if the popup vanishes
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
+                logger.debug('[Wait] Confirmation popup vanished before click');
+            });
+            await sleep(400);
 
             // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
@@ -227,8 +235,10 @@ class QuestBot {
             // Optimization: Reduced timeout from 2000ms to 200ms
             if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
                 logger.info('[Wait] Clicking start confirmation');
-                await this.controller.clickSafe('.btn-usual-ok');
-                await sleep(1000);
+                await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
+                    logger.debug('[Wait] Start confirmation vanished before click');
+                });
+                await sleep(800);
 
                 return await this.validatePostClick();
             }
@@ -251,8 +261,10 @@ class QuestBot {
 
                 // Check confirmation again
                 if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
-                    await this.controller.clickSafe('.btn-usual-ok');
-                    await sleep(1000);
+                    await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
+                        logger.debug('[Wait] Fallback confirmation vanished before click');
+                    });
+                    await sleep(800);
 
                     return await this.validatePostClick();
                 }
@@ -268,25 +280,41 @@ class QuestBot {
     }
 
     async validatePostClick() {
-        // 1. Check for captcha
+        // 1. Check for captcha (Highest priority)
         if (await this.checkCaptcha()) return 'captcha';
 
-        // 2. Detect "Raid already ended" popup
-        const error = await this.handleErrorPopup();
-        if (error.detected) {
-            if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
-                logger.info('[Raid] Raid already ended popup detected');
-                return 'ended';
+        // 2. Detect "already ended" or other errors with proactive polling
+        // Optimization: Poll for up to 3 seconds to catch late-appearing popups
+        for (let i = 0; i < 3; i++) {
+            const error = await this.handleErrorPopup();
+            if (error.detected) {
+                if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
+                    logger.info('[Quest] Quest already ended popup detected. Returning to quest page');
+                    return 'ended';
+                }
+                if (error.text.includes('pending battles')) {
+                    return 'pending';
+                }
+                // Stop polling if we found any error popup
+                break;
             }
-            if (error.text.includes('pending battles')) {
-                return 'pending';
-            }
+            await sleep(1000);
         }
 
         // 3. URL/Session Validation
-        const finalUrl = this.controller.page.url();
-        if (finalUrl === 'https://game.granbluefantasy.jp/' || finalUrl.includes('#mypage')) {
-            logger.error('[Safety] Session expired during join. Stopping');
+        const isLoggedOut = await this.controller.page.evaluate(() => {
+            const url = window.location.href;
+            const hasLogin = !!document.querySelector('#login-auth');
+            const isHome = url === 'https://game.granbluefantasy.jp/' ||
+                url === 'https://game.granbluefantasy.jp/#' ||
+                url.includes('#mypage') ||
+                url.includes('#top') ||
+                url.includes('mobage.jp');
+            return hasLogin || isHome;
+        });
+
+        if (isLoggedOut) {
+            logger.error('[Safety] Session expired or Redirected to landing. Stopping');
             this.stop();
             return 'ended';
         }

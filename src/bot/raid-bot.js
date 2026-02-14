@@ -140,7 +140,7 @@ class RaidBot {
 
         const honorReached = result?.honorReached || false;
         if (honorReached) {
-            logger.info(`[Target] Honor goal exceeded: ${this.honorTarget.toLocaleString()}. Withdrawing`);
+            logger.info(`[Target] Honor goal reached: ${this.honorTarget.toLocaleString()}. Skipping rest of battle`);
         }
 
         this.updateDetailStats(result);
@@ -156,10 +156,9 @@ class RaidBot {
         }
 
         if (honorReached) {
-            logger.info('[Cleared] Goal reached');
             // Immediate navigation back to raid list to ensure we move on
             await this.controller.goto(this.raidBackupUrl);
-            await sleep(1000);
+            await sleep(800);
         } else {
             logger.info('[Cleared] Battle completed');
         }
@@ -367,48 +366,53 @@ class RaidBot {
         }
 
         // Check for 'btn-usual-ok' (Confirmation popup)
-        // Optimization: Reduced timeout from 500ms to 100ms
-        if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
-            logger.info('[Bot] Clicking confirmation popup');
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
-            await sleep(500);
+        const okFound = await this.controller.elementExists('.btn-usual-ok', 200, true);
+        if (okFound) {
+            // Priority: Check if the OK button belongs to a "Battle Concluded" popup first
+            const error = await this.handleErrorPopup();
+            if (error.detected) {
+                if (error.text.includes('already ended') || error.text.includes('defeated')) return 'ended';
+                if (error.text.includes('pending battles')) return 'pending';
+            }
 
-            // Double check battle
+            logger.info('[Bot] Clicking confirmation popup');
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
+                logger.debug('[Wait] Confirmation popup vanished before click');
+            });
+            await sleep(400);
+
+            // Double check transition
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                return;
+                return 'success';
             }
         }
 
-        // Check for error popup after clicking OK (if any)
-        const error = await this.handleErrorPopup();
-        if (error.detected && error.text.includes('pending battles')) {
-            return 'pending';
-        }
-
-        // Try to select first available summon
         const summonSelector = '.prt-supporter-detail';
-        if (await this.controller.elementExists(summonSelector, 2000, true)) {
+        if (await this.controller.elementExists(summonSelector, 2500, true)) {
             logger.info('[Summon] Supporter selected');
+
             try {
-                await this.controller.clickSafe(summonSelector, { timeout: 1000, maxRetries: 1, silent: true });
+                await this.controller.clickSafe(summonSelector, { timeout: 2000, maxRetries: 1 });
             } catch (error) {
-                if (error.message.includes('Element not found')) {
-                    logger.warn('[Summon] Supporter detail unavailable. Assuming transition');
+                const currentUrl = this.controller.page.url();
+                if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                    logger.info('[Bot] Transitioned to battle. Ignoring click error');
                     return 'success';
                 }
                 throw error;
             }
 
-            // Check for confirmation popup
-            if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
+            // Check confirmation after selection
+            if (await this.controller.elementExists('.btn-usual-ok', 1000, true)) {
                 logger.info('[Wait] Clicking start confirmation');
-                await this.controller.clickSafe('.btn-usual-ok');
-                await sleep(1000);
-
-                return await this.validatePostClick();
+                await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
+                    logger.debug('[Wait] Start confirmation vanished before click');
+                });
+                await sleep(800);
             }
-            return 'success';
+
+            return await this.validatePostClick();
         }
 
         // Fallback to configured selectors
@@ -426,8 +430,10 @@ class RaidBot {
                 await sleep(500);
 
                 if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
-                    await this.controller.clickSafe('.btn-usual-ok');
-                    await sleep(1000);
+                    await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
+                        logger.debug('[Wait] Fallback confirmation vanished before click');
+                    });
+                    await sleep(800);
 
                     return await this.validatePostClick();
                 }
@@ -440,25 +446,41 @@ class RaidBot {
     }
 
     async validatePostClick() {
-        // 1. Check for captcha
+        // 1. Check for captcha (Highest priority)
         if (await this.checkCaptcha()) return 'captcha';
 
-        // 2. Detect "Raid already ended" popup
-        const error = await this.handleErrorPopup();
-        if (error.detected) {
-            if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
-                logger.info('[Raid] Raid already ended popup detected. Returning to backup page');
-                return 'ended';
+        // 2. Detect "Raid already ended" or other errors with proactive polling
+        // Optimization: Poll for up to 3 seconds to catch late-appearing popups
+        for (let i = 0; i < 3; i++) {
+            const error = await this.handleErrorPopup();
+            if (error.detected) {
+                if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
+                    logger.info('[Raid] Raid already ended popup detected. Returning to backup page');
+                    return 'ended';
+                }
+                if (error.text.includes('pending battles')) {
+                    return 'pending';
+                }
+                // Stop polling if we found any error popup
+                break;
             }
-            if (error.text.includes('pending battles')) {
-                return 'pending';
-            }
+            await sleep(1000);
         }
 
         // 3. URL/Session Validation
-        const finalUrl = this.controller.page.url();
-        if (finalUrl === 'https://game.granbluefantasy.jp/' || finalUrl.includes('#mypage')) {
-            logger.error('[Safety] Session expired during join. Stopping');
+        const isLoggedOut = await this.controller.page.evaluate(() => {
+            const url = window.location.href;
+            const hasLogin = !!document.querySelector('#login-auth');
+            const isHome = url === 'https://game.granbluefantasy.jp/' ||
+                url === 'https://game.granbluefantasy.jp/#' ||
+                url.includes('#mypage') ||
+                url.includes('#top') ||
+                url.includes('mobage.jp');
+            return hasLogin || isHome;
+        });
+
+        if (isLoggedOut) {
+            logger.error('[Safety] Session expired or Redirected to landing. Stopping');
             this.stop();
             return 'ended';
         }

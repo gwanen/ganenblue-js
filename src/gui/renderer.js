@@ -227,7 +227,7 @@ function updateProfileUI(pid) {
     const els = dom[pid];
 
     // Status Badge
-    els.statusBadge.textContent = s.isRunning ? '▶' : '⏹'; // Using icons as requested
+    els.statusBadge.textContent = s.isRunning ? '▶' : '⏹';
     els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
 
     // Buttons
