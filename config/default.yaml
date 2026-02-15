@@ -30,3 +30,6 @@ timeouts:
   page_load: 30000
   element_wait: 10000
   battle_max: 600000  # 10 minutes
+
+notifications:
+  discord_webhook: "" # Add your Discord Webhook URL here

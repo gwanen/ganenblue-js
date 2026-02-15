@@ -4,13 +4,14 @@ import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 
 class BattleHandler {
-    constructor(page) {
+    constructor(page, options = {}) {
         this.controller = new PageController(page);
         this.selectors = config.selectors.battle;
         this.stopped = false;
         this.battleStartTime = null;
         this.lastBattleDuration = 0;
         this.lastHonors = 0;
+        this.fastRefresh = options.fastRefresh || false;
     }
 
     formatTime(milliseconds) {
@@ -399,7 +400,8 @@ class BattleHandler {
                     if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
                         logger.info('[Reload] Skipping animations');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(800); // Reduced from 1200ms for maximum speed
+                        // Optimization: Even faster follow-up delay if fastRefresh is enabled
+                        await sleep(this.fastRefresh ? 400 : 800);
 
                         // Proactively check turn after reload but before FA enable
                         const reloadContext = { lastTurn, turnCount };

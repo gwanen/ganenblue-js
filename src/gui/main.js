@@ -254,7 +254,8 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 maxQuests: config.get('bot.max_quests'),
                 battleMode: config.get('bot.battle_mode'),
                 onBattleEnd,
-                blockResources: settings.blockResources
+                blockResources: settings.blockResources,
+                fastRefresh: settings.fastRefresh
             });
         } else if (botMode === 'raid') {
             // Raid Mode
@@ -297,7 +298,8 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
                 honorTarget: parseInt(settings.honorTarget) || 0,
                 onBattleEnd,
-                blockResources: settings.blockResources
+                blockResources: settings.blockResources,
+                fastRefresh: settings.fastRefresh
             });
         } else {
             return { success: false, message: `Unknown bot mode: ${botMode}` };

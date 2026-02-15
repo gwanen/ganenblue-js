@@ -151,7 +151,8 @@ function setupProfileListeners(pid) {
             maxRuns: els.maxRuns.value,
             battleMode: els.battleMode.value,
             honorTarget: els.honorTarget.value,
-            blockResources: blockResourcesEl ? blockResourcesEl.checked : false
+            blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
+            fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -502,6 +503,10 @@ async function loadProfileSettings(pid) {
         // Browser Settings
         if (s.browserType && els.browserType) els.browserType.value = s.browserType;
         if (s.disableSandbox !== undefined && els.disableSandbox) els.disableSandbox.checked = s.disableSandbox;
+        if (s.fastRefresh !== undefined) {
+            const frEl = document.getElementById(`fast-refresh-${pid}`);
+            if (frEl) frEl.checked = s.fastRefresh;
+        }
     }
 }
 
@@ -515,7 +520,8 @@ function saveProfileSettings(pid) {
         battleMode: els.battleMode.value,
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',
-        disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false
+        disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
+        fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }
