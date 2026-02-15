@@ -3,6 +3,7 @@ import BattleHandler from './battle-handler.js';
 import { sleep, randomDelay } from '../utils/random.js';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
+import notifier from '../utils/notifier.js';
 
 class RaidBot {
     constructor(page, options = {}) {
@@ -13,7 +14,9 @@ class RaidBot {
         this.honorTarget = options.honorTarget || 0;
         this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.raid;
-        this.battle = new BattleHandler(page);
+        this.battle = new BattleHandler(page, {
+            fastRefresh: options.fastRefresh || false
+        });
 
         // Enable performance optimizations
         if (options.blockResources) {
@@ -44,6 +47,9 @@ class RaidBot {
         logger.info('[Bot] Session started');
         logger.info(`[Bot] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
 
+        // Notify session start
+        notifier.notifySessionStart(this.profileId || 'p1', 'raid').catch(e => logger.debug('[Notifier] Failed to notify start', e));
+
         try {
             while (this.isRunning) {
                 if (this.isPaused) {
@@ -73,6 +79,7 @@ class RaidBot {
                 logger.info('[Bot] Session terminated (Browser closed)');
             } else {
                 logger.error('[Error] [Bot] Raid bot error:', error);
+                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => logger.debug('[Notifier] Failed to notify error', e));
                 await this.controller.takeScreenshot('error_raid');
                 throw error;
             }
@@ -515,6 +522,7 @@ class RaidBot {
             const headerText = await this.controller.getText(selectors.captchaHeader);
             if (headerText.includes('Access Verification')) {
                 logger.error('[Safety] Captcha detected. Human intervention required');
+                notifier.notifyCaptcha(this.profileId || 'p1').catch(e => logger.debug('[Notifier] Failed to notify captcha', e));
                 this.stop();
                 return true;
             }
@@ -540,6 +548,9 @@ class RaidBot {
         // Cleanup resources
         this.controller.disableResourceBlocking().catch(e => logger.warn('[Performance] Failed to disable resource blocking', e));
         logger.info('[System] Shutdown requested');
+
+        // Notify session completion
+        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(e => logger.debug('[Notifier] Failed to notify completion', e));
     }
 
     updateDetailStats(result) {

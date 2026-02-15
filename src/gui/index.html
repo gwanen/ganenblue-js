@@ -9,19 +9,21 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --bg-primary: #0a0b14;
-            --bg-secondary: rgba(26, 27, 46, 0.7);
-            --bg-tertiary: rgba(36, 37, 56, 0.6);
-            --bg-glass: rgba(255, 255, 255, 0.03);
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --accent-blue: #3b82f6;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
-            --border: rgba(255, 255, 255, 0.08);
-            --glow-blue: rgba(59, 130, 246, 0.4);
-            --glass-blur: blur(12px);
+            --bg-primary: #05060b;
+            --bg-secondary: rgba(13, 14, 24, 0.8);
+            --bg-tertiary: rgba(22, 23, 38, 0.7);
+            --bg-glass: rgba(255, 255, 255, 0.02);
+            --text-primary: #e2e8f0;
+            --text-secondary: #64748b;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-red: #f87171;
+            --accent-yellow: #fbbf24;
+            --accent-purple: #a78bfa;
+            --border: rgba(255, 255, 255, 0.05);
+            --glow-blue: rgba(96, 165, 250, 0.3);
+            --glass-blur: blur(16px);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
         * {
@@ -125,12 +127,17 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 12px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            box-shadow: var(--card-shadow);
             backdrop-filter: var(--glass-blur);
             -webkit-backdrop-filter: var(--glass-blur);
             overflow-y: auto;
             overflow-x: hidden;
-            transition: transform 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .panel:hover {
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(13, 14, 24, 0.9);
         }
 
         .panel h3 {
@@ -205,21 +212,24 @@
         }
 
         .btn-launch {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid var(--accent-blue);
+            background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0.05));
+            border: 1px solid rgba(96, 165, 250, 0.3);
             color: var(--text-primary);
-            padding: 8px;
+            padding: 10px;
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-            border-radius: 4px;
-            transition: all 0.2s ease;
+            letter-spacing: 1px;
+            font-weight: 700;
+            border-radius: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .btn-launch:hover:not(:disabled) {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: #6366f1;
+            background: rgba(96, 165, 250, 0.2);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 20px rgba(96, 165, 250, 0.2);
+            transform: translateY(-1px);
         }
 
         .btn-group {
@@ -247,13 +257,23 @@
         }
 
         .btn-start {
-            background: #1e4d3b !important;
+            background: linear-gradient(135deg, #065f46, #064e3b) !important;
             color: #d1fae5;
+            box-shadow: 0 4px 12px rgba(6, 95, 70, 0.3);
+        }
+
+        .btn-start:hover:not(:disabled) {
+            box-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
         }
 
         .btn-stop {
-            background: #5c1f1f !important;
+            background: linear-gradient(135deg, #991b1b, #7f1d1d) !important;
             color: #fee2e2;
+            box-shadow: 0 4px 12px rgba(153, 27, 27, 0.3);
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
         }
 
         /* Fix Stop Icon Centering (Square emoji often has built-in offset) */
@@ -1177,6 +1197,10 @@
                             <input type="checkbox" id="block-resources-p1" checked>
                             <span>Block Images (Fast)</span>
                         </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="fast-refresh-p1">
+                            <span>Fast Refresh (Aggressive)</span>
+                        </label>
                     </div>
 
                     <hr>
@@ -1310,6 +1334,10 @@
                         <label class="checkbox-container">
                             <input type="checkbox" id="block-resources-p2" checked>
                             <span>Block Images (Fast)</span>
+                        </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="fast-refresh-p2">
+                            <span>Fast Refresh (Aggressive)</span>
                         </label>
                     </div>
 

@@ -3,6 +3,7 @@ import BattleHandler from './battle-handler.js';
 import { sleep, randomDelay } from '../utils/random.js';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
+import notifier from '../utils/notifier.js';
 
 class QuestBot {
     constructor(page, options = {}) {
@@ -12,7 +13,9 @@ class QuestBot {
         this.battleMode = options.battleMode || 'full_auto';
         this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.quest;
-        this.battle = new BattleHandler(page, this.selectors.battle);
+        this.battle = new BattleHandler(page, {
+            fastRefresh: options.fastRefresh || false
+        });
 
         // Enable performance optimizations
         if (options.blockResources) {
@@ -44,6 +47,9 @@ class QuestBot {
         logger.info('[Bot] Session started');
         logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} quests`);
 
+        // Notify session start
+        notifier.notifySessionStart(this.profileId || 'p1', 'quest').catch(e => logger.debug('[Notifier] Failed to notify start', e));
+
         try {
             while (this.isRunning) {
                 if (this.isPaused) {
@@ -71,6 +77,7 @@ class QuestBot {
                 logger.info('[Bot] Session terminated (Browser closed)');
             } else {
                 logger.error('[Error] [Bot] Quest bot error:', error);
+                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => logger.debug('[Notifier] Failed to notify error', e));
                 await this.controller.takeScreenshot('error_quest');
                 throw error;
             }
@@ -373,6 +380,7 @@ class QuestBot {
             const headerText = await this.controller.getText(selectors.captchaHeader);
             if (headerText.includes('Access Verification')) {
                 logger.error('[Safety] Captcha detected. Human intervention required');
+                notifier.notifyCaptcha(this.profileId || 'p1').catch(e => logger.debug('[Notifier] Failed to notify captcha', e));
                 this.stop();
                 return true;
             }
@@ -398,6 +406,9 @@ class QuestBot {
         // Cleanup resources
         this.controller.disableResourceBlocking().catch(e => logger.warn('[Performance] Failed to disable resource blocking', e));
         logger.info('[System] Shutdown requested');
+
+        // Notify session completion
+        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(e => logger.debug('[Notifier] Failed to notify completion', e));
     }
 
     updateDetailStats(result) {
