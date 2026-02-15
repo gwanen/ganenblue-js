@@ -27,7 +27,8 @@ function getInstance(profileId) {
                 startTime: null,
                 completedQuests: 0,
                 raidsCompleted: 0,
-                battleCount: 0
+                battleCount: 0,
+                lastRate: '0.0/h'
             }
         });
     }
@@ -99,22 +100,8 @@ function startStatsUpdater() {
                     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
                     duration = `${hours}:${minutes}:${seconds}`;
 
-                    // Calculate Rate (Theoretical based on Avg Battle Time + Buffer)
-                    // Matches 'main' branch logic: 60 / (avgTimeMin + 0.25)
-                    if (stats.avgBattleTime > 0) {
-                        const avgMin = stats.avgBattleTime / 60000;
-                        // 0.25 min = 15s buffer for loading/menu
-                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
-                    } else {
-                        // Fallback to actual rate if avg is 0 (first run)
-                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
-                        if (diff > 0) {
-                            const hoursFloat = diff / 3600000;
-                            if (hoursFloat > 0.0028) {
-                                rate = (completed / hoursFloat).toFixed(1) + '/h';
-                            }
-                        }
-                    }
+                    // Display Actual Rate (Locked-in from last battle completion)
+                    rate = instance.stats.lastRate || '0.0/h';
                 }
 
                 mainWindow.webContents.send('bot:status', {
@@ -244,18 +231,15 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
                     duration = `${hours}:${minutes}:${seconds}`;
 
-                    if (stats.avgBattleTime > 0) {
-                        const avgMin = stats.avgBattleTime / 60000;
-                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
+                    // Calculate and Lock-in Rate (Actual)
+                    const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+                    if (diff > 5000) {
+                        const hoursFloat = diff / 3600000;
+                        instance.stats.lastRate = (completed / hoursFloat).toFixed(1) + '/h';
                     } else {
-                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
-                        if (diff > 0) {
-                            const hoursFloat = diff / 3600000;
-                            if (hoursFloat > 0.0028) {
-                                rate = (completed / hoursFloat).toFixed(1) + '/h';
-                            }
-                        }
+                        instance.stats.lastRate = '0.0/h';
                     }
+                    rate = instance.stats.lastRate;
                 }
 
                 mainWindow.webContents.send('bot:status', {
@@ -290,18 +274,15 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
                     duration = `${hours}:${minutes}:${seconds}`;
 
-                    if (stats.avgBattleTime > 0) {
-                        const avgMin = stats.avgBattleTime / 60000;
-                        rate = (60 / (avgMin + 0.25)).toFixed(1) + '/h';
+                    // Calculate and Lock-in Rate (Actual)
+                    const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+                    if (diff > 5000) {
+                        const hoursFloat = diff / 3600000;
+                        instance.stats.lastRate = (completed / hoursFloat).toFixed(1) + '/h';
                     } else {
-                        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
-                        if (diff > 0) {
-                            const hoursFloat = diff / 3600000;
-                            if (hoursFloat > 0.0028) {
-                                rate = (completed / hoursFloat).toFixed(1) + '/h';
-                            }
-                        }
+                        instance.stats.lastRate = '0.0/h';
                     }
+                    rate = instance.stats.lastRate;
                 }
 
                 mainWindow.webContents.send('bot:status', {
@@ -391,6 +372,7 @@ ipcMain.handle('bot:reset-stats', (event, profileId) => {
         if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
         if (typeof instance.bot.totalTurns !== 'undefined') instance.bot.totalTurns = 0;
         instance.stats.startTime = null; // Reset timer
+        instance.stats.lastRate = '0.0/h'; // Reset rate
 
         logger.info(`[Gui] [${profileId}] Statistics reset`);
         return { success: true };

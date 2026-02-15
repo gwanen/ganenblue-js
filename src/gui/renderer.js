@@ -295,12 +295,6 @@ function updateStatsDisplay(pid) {
         // Rate (per hour)
         if (s.rate) {
             els.statRunRate.textContent = s.rate;
-        } else if (diff > 10000) {
-            // Fallback client-side calculation (shouldn't be needed often)
-            const hours = diff / 3600000;
-            const completed = (s.completed || 0);
-            const rate = (completed / hours).toFixed(1);
-            els.statRunRate.textContent = `${rate}/h`;
         } else {
             els.statRunRate.textContent = '0.0/h';
         }
@@ -437,11 +431,10 @@ if (window.electronAPI) {
                     avgBattleTime: s.avgBattleTime || 0,
                     avgTurns: s.avgTurns || 0,
                     lastBattleTime: s.lastBattleTime || 0,
-                    startTime: s.startTime, // Ensure startTime is passed for rate check
-                    rate: s.rate // Store rate from main process
+                    startTime: s.startTime,
+                    rate: s.rate
                 };
 
-                // Update Time Display directly if duration is provided
                 if (s.duration) {
                     const timerEl = document.getElementById(`run-timer-${pid}`);
                     if (timerEl) timerEl.textContent = s.duration;
