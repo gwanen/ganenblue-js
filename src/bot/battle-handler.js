@@ -303,6 +303,8 @@ class BattleHandler {
         // 4. Refresh
         logger.info('[SA] Refreshing');
         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+        // Optimization: Reduced wait to 200ms (was implicit or longer via loop)
+        await sleep(200);
     }
 
     async waitForBattleEnd(mode) {
@@ -527,7 +529,9 @@ class BattleHandler {
 
                 // Dynamic wait based on context
                 const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
-                const waitTime = isRaid ? 100 : 800; // Faster polling for raids (100ms)
+                // Optimization: Speed up Quest Mode polling (was 800ms)
+                // 100ms for Raid (unchanged), 200ms for Quest (4x faster)
+                const waitTime = isRaid ? 100 : 200;
                 await sleep(waitTime);
             }
 
@@ -586,8 +590,8 @@ class BattleHandler {
         }
 
         // 3. Still in battle? Wait for UI components to appear
-        // Optimized: 500ms timeout for faster engagement
-        const found = await this.controller.waitForElement('.btn-attack-start', 500);
+        // Optimized: Reduced to 200ms for faster re-engagement (was 500ms)
+        const found = await this.controller.waitForElement('.btn-attack-start', 200);
         if (found && !this.stopped) {
             if (mode === 'full_auto') {
                 // Re-attempt FA

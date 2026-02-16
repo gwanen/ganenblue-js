@@ -260,6 +260,21 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh
             });
+        } else if (botMode === 'replicard') {
+            // Replicard Mode (QuestBot variant)
+            if (settings.questUrl) config.set('bot.quest_url', settings.questUrl);
+            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
+            if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns)); // Reuse max_quests config
+
+            instance.bot = new QuestBot(instance.browser.page, {
+                questUrl: config.get('bot.quest_url'),
+                maxQuests: config.get('bot.max_quests'),
+                battleMode: config.get('bot.battle_mode'),
+                onBattleEnd: createStatsCallback(profileId, instance),
+                blockResources: settings.blockResources,
+                fastRefresh: settings.fastRefresh,
+                isReplicard: true // Enable Replicard logic
+            });
         } else if (botMode === 'raid') {
             // Raid Mode
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);

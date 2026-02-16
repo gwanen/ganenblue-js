@@ -241,13 +241,18 @@ function updateProfileUI(pid) {
 
 function updateFormVisibility(pid) {
     const els = dom[pid];
-    const isQuest = els.mode.value === 'quest';
+    const mode = els.mode.value;
+    const isQuestOrReplicard = mode === 'quest' || mode === 'replicard';
 
-    els.questUrlGroup.style.display = isQuest ? 'block' : 'none';
-    els.honorGroup.style.display = isQuest ? 'none' : 'block';
+    els.questUrlGroup.style.display = isQuestOrReplicard ? 'block' : 'none';
+    els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
 
     const label = els.maxRunsLabel;
-    if (label) label.textContent = isQuest ? 'Max Quests' : 'Max Raids';
+    if (label) {
+        if (mode === 'quest') label.textContent = 'Max Quests';
+        else if (mode === 'raid') label.textContent = 'Max Raids';
+        else if (mode === 'replicard') label.textContent = 'Max Runs';
+    }
 }
 
 function updateStatsDisplay(pid) {

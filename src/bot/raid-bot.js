@@ -473,8 +473,14 @@ class RaidBot {
         if (await this.checkCaptcha()) return 'captcha';
 
         // 2. Detect "Raid already ended" or other errors with proactive polling
-        // Optimization: Poll for up to 3 seconds to catch late-appearing popups
+        // Optimization: Poll for up to 1.5 seconds (3x500ms) but exit EARLY if URL changes
         for (let i = 0; i < 3; i++) {
+            // Check for success transition first
+            const currentUrl = this.controller.page.url();
+            if (currentUrl.includes('#raid') || currentUrl.includes('_raid') || currentUrl.includes('#result')) {
+                return 'success';
+            }
+
             const error = await this.handleErrorPopup();
             if (error.detected) {
                 if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
@@ -487,7 +493,7 @@ class RaidBot {
                 // Stop polling if we found any error popup
                 break;
             }
-            await sleep(1000);
+            await sleep(500);
         }
 
         // 3. URL/Session Validation

@@ -1,5 +1,26 @@
 # Ganenblue
 
+## Installation
+
+### For Users (Download)
+- Go to the [Releases](https://github.com/gwanen/ganenblue-js/releases) page.
+- Download the latest `Ganenblue-JS-Setup.exe`.
+- Run the installer and follow the instructions.
+
+### For Developers (Build from source)
+1. Clone the repository: `git clone https://github.com/gwanen/ganenblue-js.git`
+2. Install dependencies: `npm install`
+3. Run the GUI: `npm start`
+4. Build the installer: `npm run dist`
+
+## Releases
+Check the [Releases](https://github.com/gwanen/ganenblue-js/releases) page for the latest versions and changelogs.
+
+## License
+
+This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](LICENSE.md).
+
+**Non-commercial use only.** You may use, modify, and share this code, but strictly for non-commercial purposes.
 A high-performance Granblue Fantasy automation framework built with **Node.js**, **Puppeteer-Extra**, and **Electron**.
 
 > [!WARNING]

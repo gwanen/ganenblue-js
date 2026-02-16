@@ -42,7 +42,8 @@ raid:
 replicard:
   nodeMap: '.prt-replicard-map'
   node: '.map-node'
-  startButton: '.btn-start'
+  startButton: '.se-quest-start'
+  startWrapper: '.pop-deck.supporter'
 
 login:
   loginButton: '#login-auth'
