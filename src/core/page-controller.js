@@ -1,4 +1,4 @@
-import { sleep, randomDelay, getRandomInRange, getNormalRandom } from '../utils/random.js';
+import { sleep, randomDelay, getRandomInRange, getNormalRandom, generateBezierCurve } from '../utils/random.js';
 import logger from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
@@ -8,14 +8,15 @@ class PageController {
     constructor(page) {
         this.page = page;
         this.network = new NetworkListener(page);
+        this.network.start(); // Start listening immediately
         this.requestHandler = null;
+        this.lastMousePos = { x: 0, y: 0 };
     }
 
     async enableResourceBlocking() {
         if (this.blockingEnabled) return;
         this.blockingEnabled = true;
 
-        await this.page.setRequestInterception(true);
         await this.page.setRequestInterception(true);
 
         this.requestHandler = (req) => {
@@ -62,6 +63,16 @@ class PageController {
     }
 
     /**
+     * Stop and cleanup all controller resources
+     */
+    async stop() {
+        if (this.network) {
+            this.network.stop();
+        }
+        await this.disableResourceBlocking();
+    }
+
+    /**
      * Check if error is network-related
      */
     isNetworkError(error) {
@@ -71,6 +82,17 @@ class PageController {
             message.includes('Protocol error') ||
             message.includes('Session closed') ||
             message.includes('Target closed');
+    }
+
+    /**
+     * Check if page is still "alive" (not crashed/closed)
+     */
+    isAlive() {
+        try {
+            return this.page && !this.page.isClosed();
+        } catch (e) {
+            return false;
+        }
     }
 
     /**
@@ -159,9 +181,15 @@ class PageController {
                 randomX = Math.max(box.x + marginX, Math.min(box.x + box.width - marginX, randomX));
                 randomY = Math.max(box.y + marginY, Math.min(box.y + box.height - marginY, randomY));
 
+                // Move mouse human-like to target
+                await this.moveMouseHumanLike(randomX, randomY);
+
+                // Tiny hesitation before click (human-like)
+                await sleep(randomDelay(50, 150));
+
                 // Perform randomized click
                 await this.page.mouse.click(randomX, randomY);
-                logger.debug(`[Debug] Centralized Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
+                logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
                 // Wait after click
                 if (waitAfter) {
@@ -178,6 +206,36 @@ class PageController {
                 }
                 await sleep(1000);
             }
+        }
+    }
+
+    /**
+     * Move mouse cursor naturally
+     */
+    async moveMouseHumanLike(targetX, targetY) {
+        try {
+            const start = this.lastMousePos;
+            const end = { x: targetX, y: targetY };
+
+            // If movement is very small, skip curve for speed
+            const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+            if (distance < 5) {
+                await this.page.mouse.move(end.x, end.y);
+                this.lastMousePos = end;
+                return;
+            }
+
+            const points = generateBezierCurve(start, end);
+
+            for (const point of points) {
+                await this.page.mouse.move(point.x, point.y);
+                // Tiny variable delay between points for human-like speed jitter
+                await sleep(getRandomInRange(2, 8));
+            }
+
+            this.lastMousePos = end;
+        } catch (e) {
+            logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
         }
     }
 

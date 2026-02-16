@@ -14,16 +14,21 @@ export async function sleep(baseMs, jitterPercent = 20) {
   return new Promise(resolve => setTimeout(resolve, actualDelay));
 }
 
-// Human-like mouse movement (for future CDP implementation)
-export function generateBezierCurve(start, end, steps = 20) {
-  const points = [];
-  const cp1x = start.x + (end.x - start.x) * (0.25 + Math.random() * 0.25);
-  const cp1y = start.y + (end.y - start.y) * (0.25 + Math.random() * 0.25);
-  const cp2x = start.x + (end.x - start.x) * (0.5 + Math.random() * 0.25);
-  const cp2y = start.y + (end.y - start.y) * (0.5 + Math.random() * 0.25);
+// Human-like mouse movement
+export function generateBezierCurve(start, end, steps = 0) {
+  // Dynamic steps based on distance (min 15, max 40)
+  const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+  const calculatedSteps = steps || Math.max(15, Math.min(40, Math.floor(distance / 20)));
 
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
+  const points = [];
+  // Randomized control points for natural "arc"
+  const cp1x = start.x + (end.x - start.x) * (0.1 + Math.random() * 0.4);
+  const cp1y = start.y + (end.y - start.y) * (0.1 + Math.random() * 0.4);
+  const cp2x = start.x + (end.x - start.x) * (0.5 + Math.random() * 0.4);
+  const cp2y = start.y + (end.y - start.y) * (0.5 + Math.random() * 0.4);
+
+  for (let i = 0; i <= calculatedSteps; i++) {
+    const t = i / calculatedSteps;
     const x = Math.pow(1 - t, 3) * start.x +
       3 * Math.pow(1 - t, 2) * t * cp1x +
       3 * (1 - t) * Math.pow(t, 2) * cp2x +

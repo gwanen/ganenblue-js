@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow;
 
+
 // Store instances per profile: 'p1', 'p2'
 // Structure: { [profileId]: { browser: BrowserManager, bot: Bot, stats: Object } }
 const instances = new Map();
@@ -125,6 +126,38 @@ function stopStatsUpdater() {
     }
 }
 
+// Helpers for IPC handlers
+const createStatsCallback = (profileId, instance) => (stats) => {
+    let duration = '00:00:00';
+    let rate = '0.0/h';
+
+    if (instance.stats.startTime) {
+        const diff = Date.now() - instance.stats.startTime;
+        const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+        const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+        const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+        duration = `${hours}:${minutes}:${seconds}`;
+
+        // Calculate and Lock-in Rate (Actual)
+        const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
+        if (diff > 5000) {
+            const hoursFloat = diff / 3600000;
+            instance.stats.lastRate = (completed / hoursFloat).toFixed(1) + '/h';
+        } else {
+            instance.stats.lastRate = '0.0/h';
+        }
+        rate = instance.stats.lastRate;
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('bot:status', {
+            profileId,
+            status: 'Running',
+            stats: { ...stats, duration, rate }
+        });
+    }
+};
+
 app.on('before-quit', stopStatsUpdater);
 
 app.on('window-all-closed', async () => {
@@ -138,6 +171,8 @@ app.on('window-all-closed', async () => {
                 try { await instance.browser.close(); } catch (e) { console.error(`Failed to close browser ${id}`, e); }
             }
         }
+        // Force close JSON window if open
+
         app.quit();
     }
 });
@@ -217,43 +252,11 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns));
 
-            // Stats Helper for immediate updates
-            const onBattleEnd = (stats) => {
-                // Remove debug logs
-                // Calculate duration and rate (reuse logic or extract helper)
-                let duration = '00:00:00';
-                let rate = '0.0/h';
-
-                if (instance.stats.startTime) {
-                    const diff = Date.now() - instance.stats.startTime;
-                    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
-                    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
-                    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-                    duration = `${hours}:${minutes}:${seconds}`;
-
-                    // Calculate and Lock-in Rate (Actual)
-                    const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
-                    if (diff > 5000) {
-                        const hoursFloat = diff / 3600000;
-                        instance.stats.lastRate = (completed / hoursFloat).toFixed(1) + '/h';
-                    } else {
-                        instance.stats.lastRate = '0.0/h';
-                    }
-                    rate = instance.stats.lastRate;
-                }
-
-                mainWindow.webContents.send('bot:status', {
-                    profileId,
-                    status: 'Running',
-                    stats: { ...stats, duration, rate }
-                });
-            };
-
             instance.bot = new QuestBot(instance.browser.page, {
                 questUrl: config.get('bot.quest_url'),
                 maxQuests: config.get('bot.max_quests'),
                 battleMode: config.get('bot.battle_mode'),
-                onBattleEnd,
+                onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh
             });
@@ -262,48 +265,19 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
             if (settings.maxRuns) config.set('bot.max_raids', parseInt(settings.maxRuns));
 
-            // Define onBattleEnd for RaidBot too (same logic)
-            const onBattleEnd = (stats) => {
-                // ... same logic as above, cleaner to extract if possible but inline is fine for now
-                let duration = '00:00:00';
-                let rate = '0.0/h';
-
-                if (instance.stats.startTime) {
-                    const diff = Date.now() - instance.stats.startTime;
-                    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
-                    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
-                    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-                    duration = `${hours}:${minutes}:${seconds}`;
-
-                    // Calculate and Lock-in Rate (Actual)
-                    const completed = stats.battleCount || stats.completedQuests || stats.raidsCompleted || 0;
-                    if (diff > 5000) {
-                        const hoursFloat = diff / 3600000;
-                        instance.stats.lastRate = (completed / hoursFloat).toFixed(1) + '/h';
-                    } else {
-                        instance.stats.lastRate = '0.0/h';
-                    }
-                    rate = instance.stats.lastRate;
-                }
-
-                mainWindow.webContents.send('bot:status', {
-                    profileId,
-                    status: 'Running',
-                    stats: { ...stats, duration, rate }
-                });
-            };
-
             instance.bot = new RaidBot(instance.browser.page, {
                 initialUrl: settings.questUrl || config.get('bot.quest_url'),
                 maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
                 honorTarget: parseInt(settings.honorTarget) || 0,
-                onBattleEnd,
+                onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh
             });
         } else {
             return { success: false, message: `Unknown bot mode: ${botMode}` };
         }
+
+
 
         // Start bot loop (non-blocking)
         const currentBot = instance.bot;
@@ -370,7 +344,6 @@ ipcMain.handle('bot:reset-stats', (event, profileId) => {
         if (instance.bot.battleTurns) instance.bot.battleTurns = [];
         instance.bot.questsCompleted = 0;
         instance.bot.raidsCompleted = 0;
-        if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
         if (typeof instance.bot.battleCount !== 'undefined') instance.bot.battleCount = 0;
         if (typeof instance.bot.totalTurns !== 'undefined') instance.bot.totalTurns = 0;
         instance.stats.startTime = null; // Reset timer
@@ -453,6 +426,8 @@ ipcMain.handle('app:restart', async () => {
     app.relaunch();
     app.exit(0);
 });
+
+
 
 // Setup log streaming to renderer
 // We need to extend our logger to send events to mainWindow

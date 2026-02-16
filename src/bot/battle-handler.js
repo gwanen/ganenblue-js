@@ -26,27 +26,42 @@ class BattleHandler {
     }
 
     async isWiped() {
+        if (!this.controller.isAlive()) return false;
+
         return await this.controller.page.evaluate(() => {
-            // 1. Check for party wipe buttons
+            // 1. Check for party wipe buttons (Cheer/Salute)
             const wipeSelectors = ['.btn-cheer', '.btn-salute'];
             for (const sel of wipeSelectors) {
                 const el = document.querySelector(sel);
                 if (el && el.offsetWidth > 0 && el.offsetHeight > 0) return true;
             }
 
-            // 2. Check for End-of-Battle popups (Watchdog for late-appearing errors/conclusion)
-            // Case A: Assist Raid already ended
-            const assistEnded = document.querySelector('.pop-result-assist-raid.pop-show');
-            if (assistEnded && assistEnded.style.display === 'block') {
-                const bodyText = assistEnded.querySelector('.txt-popup-body')?.textContent || '';
-                if (bodyText.includes('already ended')) return true;
+            // 2. Check for "You were defeated" popups/text
+            const bodyText = document.body.innerText.toLowerCase();
+            if (bodyText.includes('you were defeated') || bodyText.includes('battle has ended')) {
+                // Verify it's in a popup or major container, not just random text
+                const visiblePopup = document.querySelector('.pop-show, .prt-popup-body, .prt-result');
+                if (visiblePopup && (visiblePopup.offsetWidth > 0 || visiblePopup.offsetHeight > 0)) {
+                    return true;
+                }
             }
 
-            // Case B: Battle Concluded (Rematch Fail popup)
-            const rematchFail = document.querySelector('.pop-rematch-fail.pop-show');
-            if (rematchFail && (rematchFail.style.display === 'block' || rematchFail.offsetWidth > 0)) {
-                const bodyText = rematchFail.querySelector('.txt-popup-body')?.textContent || '';
-                if (bodyText.includes('battle has ended') || bodyText.includes('defeated')) return true;
+            // 3. Check for Elixir prompt (appears when team is wiped)
+            const elixirPrompt = document.querySelector('.pop-use-elixir, .img-elixir');
+            if (elixirPrompt && (elixirPrompt.offsetWidth > 0 || elixirPrompt.offsetHeight > 0)) {
+                return true;
+            }
+
+            // 4. Check for End-of-Battle popups (Assist Raid ended, Conclusion, etc.)
+            const conclusionPopups = ['.pop-result-assist-raid.pop-show', '.pop-rematch-fail.pop-show', '.pop-conclusion'];
+            for (const sel of conclusionPopups) {
+                const el = document.querySelector(sel);
+                if (el && (el.offsetWidth > 0 || el.style.display === 'block')) {
+                    const text = el.textContent.toLowerCase();
+                    if (text.includes('ended') || text.includes('defeated') || text.includes('concluded') || text.includes('home screen')) {
+                        return true;
+                    }
+                }
             }
 
             return false;
@@ -73,11 +88,25 @@ class BattleHandler {
                 return await this.waitForBattleEnd(mode);
             }
 
+            // User Optimization: Refresh on start to skip entrance animations
+            if (options.refreshOnStart) {
+                logger.info('[Battle] Refreshing to skip animations');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(500);
+            }
+
+            if (!this.controller.isAlive()) {
+                throw new Error('Battle failed: Page crashed or disconnected');
+            }
+
             // Wait for battle screen to load (look for Auto button in FA, Attack button in SA)
             const loadSelector = mode === 'semi_auto' ? this.selectors.attackButton : '.btn-auto';
             const battleLoaded = await this.controller.waitForElement(loadSelector, 20000);
 
             if (!battleLoaded) {
+                if (!this.controller.isAlive()) {
+                    throw new Error('Battle failed: Page crashed during load');
+                }
                 const currentUrl = this.controller.page.url();
                 // Check if we are actually in battle but maybe button is different or obscured
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
@@ -102,6 +131,9 @@ class BattleHandler {
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
             logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
+
+            // Attach current honors to result for tracking
+            result.honors = this.lastHonors;
 
             return result;
         } catch (error) {
@@ -132,59 +164,74 @@ class BattleHandler {
         const url = this.controller.page.url();
         if (url.includes('#result') || url.includes('#quest/index')) return;
 
-        logger.info('[Battle] Initializing Full Auto');
+        logger.info('[Battle] Initializing Full Auto (Skill Rail Check)');
 
-        // 1. Initial State Check (already handled by caller, but safety first)
-        if (this.stopped) return;
-
-        // 2. Press Auto Button
-        // Optimization: Added 50ms stable delay as requested for snappiness
-        logger.debug('[FA] Clicking Auto button');
+        // 1. Press Auto Button
         await this.controller.clickSafe(this.selectors.fullAutoButton, {
             silent: true,
             preDelay: 50,
-            delay: randomDelay(40, 60),
+            delay: 100,
             waitAfter: false
         });
 
-        // 3. Wait for Attack or Auto Button Disappearance (Max 45s)
-        logger.info('[Wait] Waiting for Full Auto activation...');
-        const startTime = Date.now();
-        const timeout = 45000; // 45 seconds
+        // 2. Monitor for Skill Rail Overlayer (Max 10s)
+        const checkResult = await this.controller.page.evaluate(async (selectors) => {
+            const startTime = Date.now();
 
-        while (Date.now() - startTime < timeout) {
-            if (this.stopped) return;
+            while (Date.now() - startTime < 10000) { // 10s timeout
+                // Check Overlayer (Goal: It should NOT have 'hide' class)
+                const overlayer = document.querySelector('.prt-ability-rail-overlayer');
+                const isOverlayerVisible = overlayer && !overlayer.classList.contains('hide');
 
-            const state = await this.controller.page.evaluate((selAttack, selAuto) => {
-                const att = document.querySelector(selAttack);
-                const auto = document.querySelector(selAuto);
+                // Check Attack Button (Gone = Bad state if Overlayer not yet seen?)
+                // User requirement: "if still in waiting for ability overlayer but attack button is gone -> refresh too"
+                const attackBtn = document.querySelector(selectors.attackButton);
+                const isAttackGone = !attackBtn || attackBtn.classList.contains('display-off') || attackBtn.offsetHeight === 0;
 
-                const attHidden = !att || att.classList.contains('display-off') || att.style.display === 'none';
-                const autoHidden = !auto || auto.style.display === 'none';
-
-                return { isHidden: attHidden || autoHidden };
-            }, this.selectors.attackButton, this.selectors.fullAutoButton);
-
-            if (state.isHidden) {
-                // Proactively check for popups/result after disappearance to avoid false positive active state
-                if (await this.isWiped()) {
-                    logger.info('[Raid] Battle end detected via popup after FA toggle');
-                    return;
+                if (isOverlayerVisible) {
+                    return { status: 'success' };
                 }
-                logger.info('[FA] Full Auto active');
-                return;
+
+                if (isAttackGone) {
+                    // Attack gone but overlayer never showed up
+                    return { status: 'refresh_attack_gone' };
+                }
+
+                await new Promise(r => setTimeout(r, 100));
             }
 
-            if (await this.isWiped()) {
-                logger.info('[Raid] Battle end detected via popup during FA active wait');
-                return;
-            }
+            return { status: 'timeout' }; // 10s passed with overlayer still hidden
+        }, this.selectors);
 
-            await sleep(200); // Poll every 200ms for snappiness
+        // Handle Check Results
+        if (checkResult.status === 'success') {
+            logger.info('[FA] Skill Rail detected. Waiting for turn processing...');
+
+            // 3. Wait for Attack Button to disappear (Max 45s)
+            // Implementation: Wait for the attack button to definitely be gone
+            try {
+                await this.controller.page.waitForFunction((sel) => {
+                    const btn = document.querySelector(sel);
+                    return !btn || btn.classList.contains('display-off') || btn.offsetHeight === 0;
+                }, { timeout: 45000 }, this.selectors.attackButton);
+                logger.info('[FA] Turn processing confirmed');
+            } catch (e) {
+                logger.warn('[FA] Timeout waiting for attack button to clear (45s)');
+                // Optional: Refresh here? Or just let the loop continue? User didn't specify, assuming continue check.
+            }
+            return;
         }
 
-        // 4. Timeout - Refresh
-        logger.error('[FA] Both buttons still visible after 45s. Refreshing');
+        // Failure Cases -> Refresh
+        if (checkResult.status === 'timeout') {
+            logger.warn('[FA] Activation timed out (Skill Rail not visible after 10s). Refreshing');
+        } else if (checkResult.status === 'refresh_attack_gone') {
+            logger.warn('[FA] Attack button disappeared without Skill Rail. Refreshing');
+        } else {
+            logger.warn(`[FA] Unexpected status: ${checkResult.status}. Refreshing`);
+        }
+
+        // Perform Refresh Verification
         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
         await sleep(800);
         await this.checkStateAndResume('full_auto');
@@ -333,18 +380,32 @@ class BattleHandler {
                         }
                     }
 
-                    // Original watchdog (10s)
-                    if (Date.now() - lastTurnChangeTime > 10000 && isRaid) {
+                    // Stuck UI Watchdog: Reduced to 4s from 10s
+                    const idleTime = Date.now() - lastTurnChangeTime;
+                    if (idleTime > 4000) {
+                        logger.warn(`[Watchdog] UI stuck for ${Math.round(idleTime / 1000)}s. Refreshing`);
+                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                        await sleep(800);
+
+                        if (await this.checkStateAndResume(mode)) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
+                        }
+
+                        lastTurnChangeTime = Date.now(); // Reset
+                        continue;
+                    }
+
+                    // Original watchdog logic for FA re-activation (if needed after refresh/stuck)
+                    if (idleTime > 2000 && isRaid) {
                         const isActive = await this.controller.page.evaluate((sel) => {
                             const el = document.querySelector(sel);
                             return el && el.classList.contains('active');
                         }, this.selectors.fullAutoButton);
 
-                        if (!isActive) {
-                            logger.warn('[Wait] Watchdog: Battle stuck and Full Auto is OFF. Re-activating');
+                        if (!isActive && !this.stopped) {
+                            logger.warn('[Wait] FA dropped during idle. Re-activating');
                             await this.handleFullAuto();
                         }
-                        lastTurnChangeTime = Date.now(); // Reset watchdog timer
                     }
                 }
 
@@ -433,8 +494,7 @@ class BattleHandler {
                         missingUiCount = 0;
                     } else {
                         missingUiCount++;
-                        // User Request: Faster reload on stuck UI (~4 seconds)
-                        if (missingUiCount >= 4) { // ~4 seconds (was 8)
+                        if (missingUiCount >= 4) { // 4-second stuck detection
                             logger.warn('[Wait] UI missing (Stuck). Refreshing');
                             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                             await sleep(800); // Reduced from 1200ms

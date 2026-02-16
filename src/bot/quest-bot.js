@@ -67,9 +67,8 @@ class QuestBot {
                 this.questsCompleted++;
 
 
-                // Random delay between quests
-                // EST: Reduced delay for speed (0.5-1s)
-                await sleep(randomDelay(500, 1000));
+                // Minimum delay for snappiness
+                await sleep(500);
             }
         } catch (error) {
             // Graceful exit on browser close/disconnect
@@ -91,8 +90,8 @@ class QuestBot {
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
-        // Optimization: Minimum delay for maximum snappiness (100-200ms)
-        await sleep(randomDelay(100, 200));
+        // Snappy navigation delay
+        await sleep(150);
 
         // ... rest of the code ...
 
@@ -253,8 +252,6 @@ class QuestBot {
                 throw error;
             }
 
-            // EST: Reduced delay for speed (removed random delay entirely)
-            // await sleep(randomDelay(200, 500)); 
 
             // Check for another confirmation popup after clicking summon (Start Quest)
             // Optimization: Reduced timeout from 2000ms to 200ms
@@ -340,6 +337,7 @@ class QuestBot {
             return 'ended';
         }
 
+        const finalUrl = this.controller.page.url();
         if (!finalUrl.includes('#raid') && !finalUrl.includes('_raid') && !finalUrl.includes('#result')) {
             logger.warn('[Wait] URL did not transition to battle. Potential error');
             return 'ended';
@@ -404,7 +402,7 @@ class QuestBot {
             this.battle.stop();
         }
         // Cleanup resources
-        this.controller.disableResourceBlocking().catch(e => logger.warn('[Performance] Failed to disable resource blocking', e));
+        this.controller.stop().catch(e => logger.warn('[Performance] Failed to stop controller', e));
         logger.info('[System] Shutdown requested');
 
         // Notify session completion
@@ -448,6 +446,15 @@ class QuestBot {
             avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
         }
 
+        // Calculate Rate
+        let rate = '0.0/h';
+        const now = Date.now();
+        const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
+        if (uptimeHours > 0) {
+            const qph = this.questsCompleted / uptimeHours;
+            rate = `${qph.toFixed(1)}/h`;
+        }
+
         return {
             completedQuests: this.questsCompleted,
             isRunning: this.isRunning,
@@ -458,7 +465,8 @@ class QuestBot {
             battleTimes: this.battleTimes,
             battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0,
-            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0
+            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
+            rate: rate
         };
     }
 }

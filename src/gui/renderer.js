@@ -68,7 +68,6 @@ function getProfileElements(pid) {
         statCompleted: document.getElementById(`completed-runs-${pid}`),
         statAvgBattle: document.getElementById(`avg-battle-${pid}`),
         statAvgTurns: document.getElementById(`avg-turns-${pid}`),
-        // Note: New field 'Last Battle' uses a slightly different ID pattern in index.html, assume consistent suffix
         statLastBattle: document.getElementById(`stat-last-battle-${pid}`),
         statRunTimer: document.getElementById(`run-timer-${pid}`),
         statRunRate: document.getElementById(`run-rate-${pid}`),
@@ -293,7 +292,7 @@ function updateStatsDisplay(pid) {
         const sc = seconds % 60;
         els.statRunTimer.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sc.toString().padStart(2, '0')}`;
 
-        // Rate (per hour)
+        // Rate
         if (s.rate) {
             els.statRunRate.textContent = s.rate;
         } else {
@@ -357,11 +356,10 @@ function setupGlobalListeners() {
     }
 
     // Test Sound Button
-    if (dom.global.btnTestSound) {
-        dom.global.btnTestSound.addEventListener('click', () => {
-            playAlertSound();
-        });
-    }
+    dom.global.btnTestSound.addEventListener('click', () => {
+        playAlertSound();
+    });
+
 }
 
 // === Logging System ===
@@ -402,16 +400,14 @@ function log(pid, message, level = 'info') {
 if (window.electronAPI) {
     window.electronAPI.onLogUpdate((data) => {
         // data = { level, message, ... }
-        // Attempt to extract profile from message if wrapper didn't strictly structure it
         let pid = 'sys';
-        let msg = data.message;
+        const msg = data.message;
 
-        if (msg.includes('[p1]') || msg.includes('[profile1]')) pid = 'p1';
-        else if (msg.includes('[p2]') || msg.includes('[profile2]')) pid = 'p2';
-        else if (msg.includes('[Bot] [p1]')) pid = 'p1';
-        else if (msg.includes('[Bot] [p2]')) pid = 'p2';
+        // More robust profile detection
+        if (msg.includes('[p1]') || msg.includes('[p1]') || msg.match(/\[bot\]\s*\[p1\]/i)) pid = 'p1';
+        else if (msg.includes('[p2]') || msg.includes('[p2]') || msg.match(/\[bot\]\s*\[p2\]/i)) pid = 'p2';
+        else if (data.profileId) pid = data.profileId; // Use explicit profile if provided
 
-        // Clean msg tag if preferred, or just leave it
         log(pid, msg, data.level);
     });
 

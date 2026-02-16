@@ -9,8 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resetStats: (profileId) => ipcRenderer.invoke('bot:reset-stats', profileId),
     restartApp: () => ipcRenderer.invoke('app:restart'),
     saveCredentials: (profileId, credentials) => ipcRenderer.invoke('credentials:save', profileId, credentials),
-    loadCredentials: (profileId) => ipcRenderer.invoke('credentials:load', profileId),
     onLogUpdate: (callback) => ipcRenderer.on('log:update', (_event, value) => callback(value)),
+
     onStatusUpdate: (callback) => ipcRenderer.on('bot:status', (_event, value) => callback(value)),
     onPlaySound: (callback) => ipcRenderer.on('play-sound', (_event, value) => callback(value)),
     resizeWindow: (width, height) => ipcRenderer.invoke('app:resize-window', width, height),

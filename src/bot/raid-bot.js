@@ -68,10 +68,8 @@ class RaidBot {
                     this.raidsCompleted++;
                 }
 
-
-                // Random delay between raids
-                // EST: Reduced delay for speed (0.5-1s)
-                await sleep(randomDelay(500, 1000));
+                // Short delay between raids
+                await sleep(500);
             }
         } catch (error) {
             // Graceful exit on browser close/disconnect
@@ -139,7 +137,10 @@ class RaidBot {
         }
 
         // Handle battle
-        const result = await this.battle.executeBattle(this.battleMode, { honorTarget: this.honorTarget });
+        const result = await this.battle.executeBattle(this.battleMode, {
+            honorTarget: this.honorTarget,
+            refreshOnStart: true // User requested refresh after join to skip animations
+        });
 
         if (result?.raidEnded) {
             return false;
@@ -177,8 +178,8 @@ class RaidBot {
         // Navigate to raid backup page
         logger.info('[Raid] Navigating to backup page');
         await this.controller.goto(this.raidBackupUrl);
-        // EST: Reduced delay for speed (0.5-1s)
-        await sleep(randomDelay(500, 1000));
+        // Snappy navigation delay
+        await sleep(500);
 
         let attempts = 0;
         const maxAttempts = 10; // Prevent infinite loops
@@ -361,8 +362,7 @@ class RaidBot {
     async selectSummon() {
         logger.info('[Summon] Selecting supporter');
 
-        // Wait for summon screen
-        // Optimization: Reduced check interval from 1000ms to 200ms
+        // Wait for summon screen (Faster check interval)
         let retryCount = 0;
         while (retryCount < 15) { // 3s total
             // Optimization: If battle detected, skip summon selection
@@ -508,6 +508,7 @@ class RaidBot {
             return 'ended';
         }
 
+        const finalUrl = this.controller.page.url();
         if (!finalUrl.includes('#raid') && !finalUrl.includes('_raid') && !finalUrl.includes('#result')) {
             logger.warn('[Wait] URL did not transition to battle. Potential error');
             return 'ended';
@@ -546,7 +547,7 @@ class RaidBot {
             this.battle.stop();
         }
         // Cleanup resources
-        this.controller.disableResourceBlocking().catch(e => logger.warn('[Performance] Failed to disable resource blocking', e));
+        this.controller.stop().catch(e => logger.warn('[Performance] Failed to stop controller', e));
         logger.info('[System] Shutdown requested');
 
         // Notify session completion
@@ -590,6 +591,15 @@ class RaidBot {
             avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
         }
 
+        // Calculate Rate
+        let rate = '0.0/h';
+        const now = Date.now();
+        const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
+        if (uptimeHours > 0) {
+            const rph = this.raidsCompleted / uptimeHours;
+            rate = `${rph.toFixed(1)}/h`;
+        }
+
         return {
             raidsCompleted: this.raidsCompleted,
             isRunning: this.isRunning,
@@ -600,7 +610,8 @@ class RaidBot {
             battleTimes: this.battleTimes,
             battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0,
-            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0
+            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
+            rate: rate
         };
     }
 }
