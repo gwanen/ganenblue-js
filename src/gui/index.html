@@ -1163,16 +1163,29 @@
                     <div class="form-group">
                         <label for="bot-mode-p1">Bot Mode</label>
                         <select id="bot-mode-p1">
-                            <option value="quest">Quest Farming</option>
-                            <option value="raid">Raid Backup</option>
-                            <option value="replicard">Replicard Mode</option>
+                            <option value="quest">Quest / Event</option>
+                            <option value="raid">Raid / Multi</option>
+                            <option value="replicard">Replicard (Sandbox)</option>
+                            <option value="xeno_replicard">Xeno Replicard</option>
+                        </select>
+                    </div>
+
+                    <!-- Zone Selection (Xeno Only) -->
+                    <div class="form-group" id="zone-group-p1" style="display: none;">
+                        <label>Zone</label>
+                        <select id="zone-p1">
+                            <option value="6">Invidia (ID: 6)</option>
+                            <option value="7">Joculator (ID: 7)</option>
+                            <option value="8">Kalendae (ID: 8)</option>
+                            <option value="9">Liber (ID: 9)</option>
                         </select>
                     </div>
 
                     <div class="form-group" id="quest-url-group-p1">
-                        <label for="quest-url-p1">Quest URL</label>
-                        <input type="text" id="quest-url-p1" placeholder="http://game.granbluefantasy.jp/..." value="">
-                        <div class="error-message" id="quest-url-error-p1">Please enter a valid GBF quest URL</div>
+                        <label>Quest / Raid URL</label>
+                        <input type="text" id="quest-url-p1"
+                            placeholder="http://game.granbluefantasy.jp/#quest/supporter/..." autocomplete="off">
+                        <div class="error-message" id="quest-url-error-p1">Invalid URL format</div>
                     </div>
 
                     <div class="form-group" id="honor-target-group-p1" style="display: none;">
@@ -1302,16 +1315,30 @@
                     <div class="form-group">
                         <label for="bot-mode-p2">Bot Mode</label>
                         <select id="bot-mode-p2">
-                            <option value="quest">Quest Farming</option>
-                            <option value="raid">Raid Backup</option>
-                            <option value="replicard">Replicard Mode</option>
+                            <option value="quest">Quest / Event</option>
+                            <option value="raid">Raid / Multi</option>
+                            <option value="replicard">Replicard (Sandbox)</option>
+                            <option value="xeno_replicard">Xeno Replicard</option>
+                        </select>
+                    </div>
+
+                    <!-- Zone Selection (Xeno Only) -->
+                    <div class="form-group" id="zone-group-p2" style="display: none;">
+                        <label>Zone</label>
+                        <select id="zone-p2">
+                            <option value="6">Invidia (ID: 6)</option>
+                            <option value="7">Joculator (ID: 7)</option>
+                            <option value="8">Kalendae (ID: 8)</option>
+                            <option value="9">Liber (ID: 9)</option>
                         </select>
                     </div>
 
                     <div class="form-group" id="quest-url-group-p2">
-                        <label for="quest-url-p2">Quest URL</label>
-                        <input type="text" id="quest-url-p2" placeholder="http://game.granbluefantasy.jp/..." value="">
-                        <div class="error-message" id="quest-url-error-p2">Please enter a valid GBF quest URL</div>
+                        <label for="quest-url-p2">Quest / Raid URL</label>
+                        <input type="text" id="quest-url-p2"
+                            placeholder="http://game.granbluefantasy.jp/#quest/supporter/..." value=""
+                            autocomplete="off">
+                        <div class="error-message" id="quest-url-error-p2">Invalid URL format</div>
                     </div>
 
                     <div class="form-group" id="honor-target-group-p2" style="display: none;">

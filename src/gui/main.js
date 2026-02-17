@@ -248,45 +248,51 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
 
         if (botMode === 'quest') {
             // Quest Mode
-            if (settings.questUrl) config.set('bot.quest_url', settings.questUrl);
-            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
-            if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns));
-
             instance.bot = new QuestBot(instance.browser.page, {
-                questUrl: config.get('bot.quest_url'),
-                maxQuests: config.get('bot.max_quests'),
-                battleMode: config.get('bot.battle_mode'),
-                onBattleEnd: createStatsCallback(profileId, instance),
-                blockResources: settings.blockResources,
-                fastRefresh: settings.fastRefresh
-            });
-        } else if (botMode === 'replicard') {
-            // Replicard Mode (QuestBot variant)
-            if (settings.questUrl) config.set('bot.quest_url', settings.questUrl);
-            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
-            if (settings.maxRuns) config.set('bot.max_quests', parseInt(settings.maxRuns)); // Reuse max_quests config
-
-            instance.bot = new QuestBot(instance.browser.page, {
-                questUrl: config.get('bot.quest_url'),
-                maxQuests: config.get('bot.max_quests'),
-                battleMode: config.get('bot.battle_mode'),
+                questUrl: settings.questUrl || config.get('bot.quest_url'),
+                maxQuests: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                battleMode: settings.battleMode || config.get('bot.battle_mode'),
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
-                isReplicard: true // Enable Replicard logic
+                profileId: profileId
+            });
+        } else if (botMode === 'replicard') {
+            // Replicard Mode (QuestBot variant)
+            instance.bot = new QuestBot(instance.browser.page, {
+                questUrl: settings.questUrl || config.get('bot.quest_url'),
+                maxQuests: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                battleMode: settings.battleMode || config.get('bot.battle_mode'),
+                onBattleEnd: createStatsCallback(profileId, instance),
+                blockResources: settings.blockResources,
+                fastRefresh: settings.fastRefresh,
+                isReplicard: true,
+                profileId: profileId
+            });
+        } else if (botMode === 'xeno_replicard') {
+            // Xeno Replicard Mode
+            instance.bot = new QuestBot(instance.browser.page, {
+                questUrl: settings.questUrl || config.get('bot.quest_url'),
+                maxQuests: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                battleMode: settings.battleMode || config.get('bot.battle_mode'),
+                onBattleEnd: createStatsCallback(profileId, instance),
+                blockResources: settings.blockResources,
+                fastRefresh: settings.fastRefresh,
+                isReplicard: true,
+                isXeno: true,
+                zoneId: settings.zoneId,
+                profileId: profileId
             });
         } else if (botMode === 'raid') {
             // Raid Mode
-            if (settings.battleMode) config.set('bot.battle_mode', settings.battleMode);
-            if (settings.maxRuns) config.set('bot.max_raids', parseInt(settings.maxRuns));
-
             instance.bot = new RaidBot(instance.browser.page, {
                 initialUrl: settings.questUrl || config.get('bot.quest_url'),
                 maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
                 honorTarget: parseInt(settings.honorTarget) || 0,
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
-                fastRefresh: settings.fastRefresh
+                fastRefresh: settings.fastRefresh,
+                profileId: profileId
             });
         } else {
             return { success: false, message: `Unknown bot mode: ${botMode}` };

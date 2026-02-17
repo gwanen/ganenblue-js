@@ -1,7 +1,7 @@
 import PageController from '../core/page-controller.js';
 import BattleHandler from './battle-handler.js';
 import { sleep, randomDelay } from '../utils/random.js';
-import logger from '../utils/logger.js';
+import logger, { createScopedLogger } from '../utils/logger.js';
 import config from '../utils/config.js';
 import notifier from '../utils/notifier.js';
 
@@ -12,19 +12,25 @@ class QuestBot {
         this.maxQuests = options.maxQuests || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
         this.isReplicard = options.isReplicard || false;
+        this.isXeno = options.isXeno || false;
+        this.zoneId = options.zoneId || null;
+        this.profileId = options.profileId || config.get('profile_id') || 'p1';
+        this.logger = createScopedLogger(this.profileId);
+        this.replicardZoneUrl = 'https://game.granbluefantasy.jp/#replicard/stage/';
         this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.quest;
         this.replicardSelectors = config.selectors.replicard;
         this.battle = new BattleHandler(page, {
-            fastRefresh: options.fastRefresh || false
+            fastRefresh: options.fastRefresh || false,
+            logger: this.logger
         });
 
         // Enable performance optimizations
         if (options.blockResources) {
-            logger.info('[Performance] Image blocking: ENABLED');
-            this.controller.enableResourceBlocking().catch(e => logger.warn('[Performance] Failed to enable resource blocking', e));
+            this.logger.info('[Performance] Image blocking: ENABLED');
+            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[Performance] Failed to enable resource blocking', e));
         } else {
-            logger.info('[Performance] Image blocking: DISABLED');
+            this.logger.info('[Performance] Image blocking: DISABLED');
         }
 
         // State
@@ -44,13 +50,13 @@ class QuestBot {
 
         // Set viewport to optimal resolution for farming
         await this.controller.page.setViewport({ width: 1000, height: 1799 });
-        logger.debug('[Core] Set viewport to 1000x1799');
+        this.logger.debug('[Core] Set viewport to 1000x1799');
 
-        logger.info('[Bot] Session started');
-        logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} ${this.isReplicard ? 'runs' : 'quests'}`);
+        this.logger.info('[Bot] Session started');
+        this.logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} ${this.isReplicard ? 'runs' : 'quests'}`);
 
         // Notify session start
-        notifier.notifySessionStart(this.profileId || 'p1', this.isReplicard ? 'replicard' : 'quest').catch(e => logger.debug('[Notifier] Failed to notify start', e));
+        notifier.notifySessionStart(this.profileId || 'p1', this.isReplicard ? 'replicard' : 'quest').catch(e => this.logger.debug('[Notifier] Failed to notify start', e));
 
         try {
             while (this.isRunning) {
@@ -61,7 +67,7 @@ class QuestBot {
 
                 // Check quest limit
                 if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    logger.info(`[Status] Limit reached: ${this.questsCompleted}/${this.maxQuests}`);
+                    this.logger.info(`[Status] Limit reached: ${this.questsCompleted}/${this.maxQuests}`);
                     break;
                 }
 
@@ -75,10 +81,10 @@ class QuestBot {
         } catch (error) {
             // Graceful exit on browser close/disconnect
             if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                logger.info('[Bot] Session terminated (Browser closed)');
+                this.logger.info('[Bot] Session terminated (Browser closed)');
             } else {
-                logger.error('[Error] [Bot] Bot error:', error);
-                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => logger.debug('[Notifier] Failed to notify error', e));
+                this.logger.error('[Error] [Bot] Bot error:', error);
+                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
                 await this.controller.takeScreenshot('error_bot');
                 throw error;
             }
@@ -88,7 +94,7 @@ class QuestBot {
     }
 
     async runSingleQuest() {
-        logger.info(`[${this.isReplicard ? 'Replicard' : 'Quest'}] Cycle initiated (${this.questsCompleted + 1})`);
+        this.logger.info(`[${this.isReplicard ? 'Replicard' : 'Quest'}] Cycle initiated (${this.questsCompleted + 1})`);
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
@@ -113,11 +119,11 @@ class QuestBot {
         const isBattle = isRaidUrl || isResult || okButton || await this.controller.elementExists('.btn-auto', 200);
 
         if (isBattle) {
-            logger.info('[Wait] Battle or results detected. Resuming');
+            this.logger.info('[Wait] Battle or results detected. Resuming');
 
             // Check if bot was stopped before starting battle
             if (!this.isRunning) {
-                logger.debug('[System] Operation cancelled before battle initiation');
+                this.logger.debug('[System] Operation cancelled before battle initiation');
                 return;
             }
 
@@ -154,7 +160,7 @@ class QuestBot {
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
-            logger.debug('[System] Operation cancelled before battle initiation');
+            this.logger.debug('[System] Operation cancelled before battle initiation');
             return;
         }
 
@@ -175,15 +181,24 @@ class QuestBot {
         // User Optimization: Skip clicking OK button.
         // await this.battle.handleResult();
 
-        logger.info('[Cleared] Battle completed');
+        this.logger.info('[Cleared] Battle completed');
+
+        // Xeno Replicard Logic: Redirect -> Wait
+        if (this.isXeno && this.zoneId) {
+            const redirectUrl = `${this.replicardZoneUrl}${this.zoneId}`;
+            this.logger.info(`[Xeno] Redirecting to Zone ${this.zoneId}: ${redirectUrl}`);
+            await this.controller.goto(redirectUrl);
+            this.logger.info('[Xeno] Waiting for 3 seconds...');
+            await sleep(3000);
+        }
     }
 
     async startReplicardBattle() {
-        logger.info('[Replicard] Checking for start button');
+        this.logger.info('[Replicard] Checking for start button');
 
         // Wait for the Replicard start button
         // 3s timeout with polling
-        logger.debug(`[Replicard] Searching for selector: ${this.replicardSelectors.startButton}`);
+        this.logger.debug(`[Replicard] Searching for selector: ${this.replicardSelectors.startButton}`);
 
         let btnState = { found: false };
         let attempts = 0;
@@ -209,10 +224,10 @@ class QuestBot {
             await sleep(200);
         }
 
-        logger.debug(`[Replicard] Button State: ${JSON.stringify(btnState)}`);
+        this.logger.debug(`[Replicard] Button State: ${JSON.stringify(btnState)}`);
 
         if (btnState.found && btnState.visible) {
-            logger.info('[Replicard] Start button found and visible. Clicking...');
+            this.logger.info('[Replicard] Start button found and visible. Clicking...');
 
             try {
                 await this.controller.clickSafe(this.replicardSelectors.startButton, { timeout: 2000, maxRetries: 1 });
@@ -221,7 +236,7 @@ class QuestBot {
                 // Verify we moved to battle
                 return await this.validatePostClick();
             } catch (error) {
-                logger.error('[Replicard] Failed to click start button:', error);
+                this.logger.error('[Replicard] Failed to click start button:', error);
                 throw error;
             }
         } else {
@@ -232,17 +247,17 @@ class QuestBot {
             });
 
             if (inBattle) {
-                logger.info('[Replicard] Already in battle. Proceeding.');
+                this.logger.info('[Replicard] Already in battle. Proceeding.');
                 return 'success';
             }
 
-            logger.warn('[Replicard] Start button not found after waiting. Retrying cycle.');
+            this.logger.warn('[Replicard] Start button not found after waiting. Retrying cycle.');
             return 'retry';
         }
     }
 
     async selectSummon() {
-        logger.info('[Summon] Selecting supporter');
+        this.logger.info('[Summon] Selecting supporter');
 
         // Wait for summon screen (retry a few times)
         // Wait for summon screen (retry a few times)
@@ -262,7 +277,7 @@ class QuestBot {
             });
 
             if (instantBattle) {
-                logger.info('[Bot] Transitioned to battle. Skipping summon search');
+                this.logger.info('[Bot] Transitioned to battle. Skipping summon search');
                 return 'success';
             }
 
@@ -283,17 +298,17 @@ class QuestBot {
                 return 'ended';
             }
 
-            logger.info('[Bot] Clicking confirmation popup');
+            this.logger.info('[Bot] Clicking confirmation popup');
             // Use 1 retry and short timeout to avoid getting stuck if the popup vanishes
             await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
-                logger.debug('[Wait] Confirmation popup vanished before click');
+                this.logger.debug('[Wait] Confirmation popup vanished before click');
             });
             await sleep(400);
 
             // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                logger.info('[Bot] Transitioned to battle. Skipping supporter selection');
+                this.logger.info('[Bot] Transitioned to battle. Skipping supporter selection');
                 return 'success';
             }
         }
@@ -305,7 +320,7 @@ class QuestBot {
         // Try to click the first available summon button/panel
         const summonSelector = '.prt-supporter-detail';
         if (await this.controller.elementExists(summonSelector, 2000, true)) {
-            logger.info('[Summon] Supporter selected');
+            this.logger.info('[Summon] Supporter selected');
 
             try {
                 // Use visibility check and silent mode for Quest mode as requested
@@ -314,14 +329,14 @@ class QuestBot {
             } catch (error) {
                 // Check if it's a "not found" error which is expected in race conditions
                 if (error.message.includes('Element not found')) {
-                    logger.warn('[Summon] Supporter detail unavailable. Assuming transition');
+                    this.logger.warn('[Summon] Supporter detail unavailable. Assuming transition');
                     return 'success';
                 }
 
                 // If click fails for other reasons, check if we entered battle
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.info('[Bot] Transitioned to battle. Ignoring click error');
+                    this.logger.info('[Bot] Transitioned to battle. Ignoring click error');
                     return 'success';
                 }
                 throw error;
@@ -329,12 +344,32 @@ class QuestBot {
 
 
             // Check for another confirmation popup after clicking summon (Start Quest)
-            // Optimization: Reduced timeout from 2000ms to 200ms
-            if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
-                logger.info('[Wait] Clicking start confirmation');
-                await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
-                    logger.debug('[Wait] Start confirmation vanished before click');
-                });
+            // Optimization: Increased timeout to 1500ms to ensure we catch slow transitions
+            if (await this.controller.elementExists('.btn-usual-ok', 1500, true)) {
+                this.logger.info('[Wait] Clicking start confirmation');
+
+                // Robust Click with State Verification
+                let clickSuccess = false;
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+                        clickSuccess = true;
+                    } catch (e) {
+                        // Ignore click error and retry logic handles it
+                    }
+
+                    // Check if popup is still there
+                    if (!await this.controller.elementExists('.btn-usual-ok', 200, true)) {
+                        clickSuccess = true; // Popup gone, assume success
+                        break;
+                    }
+                    await sleep(300);
+                }
+
+                if (!clickSuccess) {
+                    this.logger.warn('[Wait] Failed to click start confirmation properly');
+                }
+
                 await sleep(800);
 
                 return await this.validatePostClick();
@@ -353,13 +388,13 @@ class QuestBot {
         for (const selector of summonSelectors) {
             if (await this.controller.elementExists(selector, 1000)) {
                 await this.controller.clickSafe(selector);
-                logger.info('[Summon] Supporter selected (fallback)');
+                this.logger.info('[Summon] Supporter selected (fallback)');
                 await sleep(500);
 
                 // Check confirmation again
                 if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
                     await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
-                        logger.debug('[Wait] Fallback confirmation vanished before click');
+                        this.logger.debug('[Wait] Fallback confirmation vanished before click');
                     });
                     await sleep(800);
 
@@ -376,6 +411,13 @@ class QuestBot {
         // 1. Check for captcha (Highest priority)
         if (await this.checkCaptcha()) return 'captcha';
 
+        // 1.5. Safety: Check if we are stuck on Deck Selection (Party Pick)
+        if (await this.controller.elementExists('.pop-deck.pop-show', 300, true)) {
+            this.logger.warn('[Wait] Stuck on Deck Selection. Clicking OK directly.');
+            await this.controller.clickSafe('.pop-deck.pop-show .btn-usual-ok', { silent: true });
+            await sleep(800);
+        }
+
         // 2. Detect "already ended" or other errors with proactive polling
         // Optimization: Poll for up to 1.5 seconds (3x500ms) but exit EARLY if URL changes
         for (let i = 0; i < 3; i++) {
@@ -388,7 +430,7 @@ class QuestBot {
             const error = await this.handleErrorPopup();
             if (error.detected) {
                 if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
-                    logger.info('[Quest] Quest already ended popup detected. Returning to quest page');
+                    this.logger.info('[Quest] Quest already ended popup detected. Returning to quest page');
                     return 'ended';
                 }
                 if (error.text.includes('pending battles')) {
@@ -413,14 +455,14 @@ class QuestBot {
         });
 
         if (isLoggedOut) {
-            logger.error('[Safety] Session expired or Redirected to landing. Stopping');
+            this.logger.error('[Safety] Session expired or Redirected to landing. Stopping');
             this.stop();
             return 'ended';
         }
 
         const finalUrl = this.controller.page.url();
         if (!finalUrl.includes('#raid') && !finalUrl.includes('_raid') && !finalUrl.includes('#result')) {
-            logger.warn('[Wait] URL did not transition to battle. Potential error');
+            this.logger.warn('[Wait] URL did not transition to battle. Potential error');
             return 'ended';
         }
 
@@ -439,13 +481,13 @@ class QuestBot {
 
             if (!errorText) return { detected: false, text: '' };
 
-            logger.info(`[Wait] Error alert detected: ${errorText.trim()}`);
+            this.logger.info(`[Wait] Error alert detected: ${errorText.trim()}`);
 
             try {
                 await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
                 await sleep(500);
             } catch (error) {
-                logger.warn('[Wait] Failed to click error popup OK button:', error.message);
+                this.logger.warn('[Wait] Failed to click error popup OK button:', error.message);
             }
             return { detected: true, text: errorText.toLowerCase() };
         }
@@ -458,8 +500,8 @@ class QuestBot {
         if (await this.controller.elementExists(selectors.captchaPopup, 1000, true)) {
             const headerText = await this.controller.getText(selectors.captchaHeader);
             if (headerText.includes('Access Verification')) {
-                logger.error('[Safety] Captcha detected. Human intervention required');
-                notifier.notifyCaptcha(this.profileId || 'p1').catch(e => logger.debug('[Notifier] Failed to notify captcha', e));
+                this.logger.error('[Safety] Captcha detected. Human intervention required');
+                notifier.notifyCaptcha(this.profileId || 'p1').catch(e => this.logger.debug('[Notifier] Failed to notify captcha', e));
                 this.stop();
                 return true;
             }
@@ -469,12 +511,12 @@ class QuestBot {
 
     pause() {
         this.isPaused = true;
-        logger.info('[Status] Bot paused');
+        this.logger.info('[Status] Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        logger.info('[Status] Bot resumed');
+        this.logger.info('[Status] Bot resumed');
     }
 
     stop() {
@@ -483,11 +525,11 @@ class QuestBot {
             this.battle.stop();
         }
         // Cleanup resources
-        this.controller.stop().catch(e => logger.warn('[Performance] Failed to stop controller', e));
-        logger.info('[System] Shutdown requested');
+        this.controller.stop().catch(e => this.logger.warn('[Performance] Failed to stop controller', e));
+        this.logger.info('[System] Shutdown requested');
 
         // Notify session completion
-        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(e => logger.debug('[Notifier] Failed to notify completion', e));
+        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(e => this.logger.debug('[Notifier] Failed to notify completion', e));
     }
 
     updateDetailStats(result) {

@@ -33,4 +33,14 @@ const logger = winston.createLogger({
     ]
 });
 
+// Helper to create profile-scoped logger
+export const createScopedLogger = (profileId) => {
+    return {
+        debug: (msg, ...args) => logger.debug(`${msg}`, ...args),
+        info: (msg, ...args) => logger.info(`${msg}`, ...args),
+        warn: (msg, ...args) => logger.warn(`${msg}`, ...args),
+        error: (msg, ...args) => logger.error(`${msg}`, ...args)
+    };
+};
+
 export default logger;

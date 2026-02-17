@@ -12,6 +12,7 @@ class BattleHandler {
         this.lastBattleDuration = 0;
         this.lastHonors = 0;
         this.fastRefresh = options.fastRefresh || false;
+        this.logger = options.logger || logger;
     }
 
     formatTime(milliseconds) {
@@ -74,7 +75,7 @@ class BattleHandler {
         this.lastHonors = 0; // Reset honor for new battle
         // Start timing
         this.battleStartTime = Date.now();
-        logger.info(`[Battle] Engaging encounter (${mode})`);
+        this.logger.info(`[Battle] Engaging encounter (${mode})`);
 
         // Enable Network Listener
         if (this.controller.network) {
@@ -90,7 +91,7 @@ class BattleHandler {
 
             // User Optimization: Refresh on start to skip entrance animations
             if (options.refreshOnStart) {
-                logger.info('[Battle] Refreshing to skip animations');
+                this.logger.info('[Battle] Refreshing to skip animations');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                 await sleep(500);
             }
@@ -101,16 +102,25 @@ class BattleHandler {
 
             // Wait for battle screen to load (look for Auto button in FA, Attack button in SA)
             const loadSelector = mode === 'semi_auto' ? this.selectors.attackButton : '.btn-auto';
-            const battleLoaded = await this.controller.waitForElement(loadSelector, 20000);
+            // Optimization: Wait 10s initially as requested by user
+            let battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
 
             if (!battleLoaded) {
                 if (!this.controller.isAlive()) {
                     throw new Error('Battle failed: Page crashed during load');
                 }
                 const currentUrl = this.controller.page.url();
-                // Check if we are actually in battle but maybe button is different or obscured
+
+                // If we are on a raid page but button is missing, refresh to fix UI glitches
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    logger.warn('[Wait] Auto button missing. Attempting recovery');
+                    this.logger.warn('[Wait] Auto button missing for 10s. Refreshing page...');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    // Wait another 10s after refresh
+                    battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
+
+                    if (!battleLoaded) {
+                        this.logger.warn('[Wait] Auto button still missing after refresh. Attempting recovery based on URL check');
+                    }
                 } else if (!currentUrl.includes('#result')) {
                     throw new Error(`Battle failed to load. URL: ${currentUrl}`);
                 }
@@ -130,21 +140,27 @@ class BattleHandler {
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
-            logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
+            this.logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
+
+            // Calculate final honor difference
+            const honorDiff = result.honors - this.lastHonors;
+            if (honorDiff > 0) {
+                this.logger.info(`[Battle] Final Honor: ${result.honors.toLocaleString()} (+${honorDiff.toLocaleString()})`);
+            }
 
             // Attach current honors to result for tracking
-            result.honors = this.lastHonors;
+            this.lastHonors = result.honors; // Update lastHonors to current total
 
             return result;
         } catch (error) {
             if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                logger.debug('[Battle] Interrupted by browser close/stop');
+                this.logger.debug('[Battle] Interrupted by browser close/stop');
             } else {
-                logger.error(`[Error] Battle execution failed: ${error.message}`);
+                this.logger.error(`[Error] Battle execution failed: ${error.message}`);
 
                 // Safety: If battle failed to load because of a redirect, stop the bot
                 if (error.message.includes('Battle failed to load')) {
-                    logger.warn('[Safety] Battle failed to load. Halting bot for safety');
+                    this.logger.warn('[Safety] Battle failed to load. Halting bot for safety');
                     this.stop();
                 } else {
                     await this.controller.takeScreenshot('error_battle');
@@ -164,21 +180,41 @@ class BattleHandler {
         const url = this.controller.page.url();
         if (url.includes('#result') || url.includes('#quest/index')) return;
 
-        logger.info('[Battle] Initializing Full Auto (Skill Rail Check)');
+        this.logger.info('[Battle] Initializing Full Auto (Skill Rail Check)');
 
         // 1. Press Auto Button
         await this.controller.clickSafe(this.selectors.fullAutoButton, {
             silent: true,
-            preDelay: 50,
+            preDelay: randomDelay(100, 150),
             delay: 100,
             waitAfter: false
         });
 
-        // 2. Monitor for Skill Rail Overlayer (Max 10s)
+        // 1.5 Handle "Waiting for last turn" popup
+        // This appears if FA is clicked too quickly while previous turn is processing
+        if (await this.controller.elementExists('.pop-usual.common-pop-error.pop-show', 500)) {
+            const errorText = await this.controller.getText('.pop-usual.common-pop-error.pop-show .txt-popup-body');
+            if (errorText.includes('Waiting for last turn')) {
+                this.logger.warn('[Battle] "Waiting for turn" popup detected. Refreshing...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(800);
+                return this.checkStateAndResume('full_auto');
+            }
+        }
+
+        // 1.6 Handle "Battle Concluded" popup (Race condition on join)
+        if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 500)) {
+            this.logger.info('[Battle] Battle concluded popup detected. Refreshing...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await sleep(800);
+            return this.checkStateAndResume('full_auto');
+        }
+
+        // 2. Monitor for Skill Rail Overlayer (Max 12s)
         const checkResult = await this.controller.page.evaluate(async (selectors) => {
             const startTime = Date.now();
 
-            while (Date.now() - startTime < 10000) { // 10s timeout
+            while (Date.now() - startTime < 12000) { // 12s timeout
                 // Check Overlayer (Goal: It should NOT have 'hide' class)
                 const overlayer = document.querySelector('.prt-ability-rail-overlayer');
                 const isOverlayerVisible = overlayer && !overlayer.classList.contains('hide');
@@ -205,7 +241,7 @@ class BattleHandler {
 
         // Handle Check Results
         if (checkResult.status === 'success') {
-            logger.info('[FA] Skill Rail detected. Waiting for turn processing...');
+            this.logger.info('[FA] Skill Rail detected. Waiting for turn processing...');
 
             // 3. Wait for Attack Button to disappear (Max 45s)
             // Implementation: Wait for the attack button to definitely be gone
@@ -214,9 +250,9 @@ class BattleHandler {
                     const btn = document.querySelector(sel);
                     return !btn || btn.classList.contains('display-off') || btn.offsetHeight === 0;
                 }, { timeout: 45000 }, this.selectors.attackButton);
-                logger.info('[FA] Turn processing confirmed');
+                this.logger.info('[FA] Turn processing confirmed');
             } catch (e) {
-                logger.warn('[FA] Timeout waiting for attack button to clear (45s)');
+                this.logger.warn('[FA] Timeout waiting for attack button to clear (45s)');
                 // Optional: Refresh here? Or just let the loop continue? User didn't specify, assuming continue check.
             }
             return;
@@ -224,11 +260,11 @@ class BattleHandler {
 
         // Failure Cases -> Refresh
         if (checkResult.status === 'timeout') {
-            logger.warn('[FA] Activation timed out (Skill Rail not visible after 10s). Refreshing');
+            this.logger.warn('[FA] Activation timed out (Skill Rail not visible after 10s). Refreshing');
         } else if (checkResult.status === 'refresh_attack_gone') {
-            logger.warn('[FA] Attack button disappeared without Skill Rail. Refreshing');
+            this.logger.warn('[FA] Attack button disappeared without Skill Rail. Refreshing');
         } else {
-            logger.warn(`[FA] Unexpected status: ${checkResult.status}. Refreshing`);
+            this.logger.warn(`[FA] Unexpected status: ${checkResult.status}. Refreshing`);
         }
 
         // Perform Refresh Verification
@@ -271,11 +307,11 @@ class BattleHandler {
         const selCancel = this.selectors.attackCancel;
 
         // 1. Wait for attack button
-        logger.debug('[SA] Waiting for attack button');
+        this.logger.debug('[SA] Waiting for attack button');
         const attackReady = await this.controller.waitForElement(selAttack, 10000);
 
         if (!attackReady) {
-            logger.warn('[SA] Attack button timeout. Refreshing');
+            this.logger.warn('[SA] Attack button timeout. Refreshing');
             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
             return;
         }
@@ -286,10 +322,19 @@ class BattleHandler {
             delay: randomDelay(50, 100),
             waitAfter: false
         });
-        logger.info('[SA] Attack pressed');
+        this.logger.info('[SA] Attack pressed');
+
+        // 2.5 Handle "Battle Concluded" popup
+        if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 500)) {
+            this.logger.info('[Battle] Battle concluded popup detected. Refreshing...');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await sleep(800);
+            // After refresh, the main loop will catch the result state
+            return;
+        }
 
         // 3. Wait for attack button and cancel button disappear
-        logger.debug('[SA] Waiting for buttons to disappear');
+        this.logger.debug('[SA] Waiting for buttons to disappear');
         await this.controller.page.waitForFunction((sAtt, sCan) => {
             const att = document.querySelector(sAtt);
             const can = document.querySelector(sCan);
@@ -297,11 +342,11 @@ class BattleHandler {
             const canGone = !can || can.classList.contains('display-off') || can.offsetHeight === 0;
             return attGone && canGone;
         }, { timeout: 5000 }, selAttack, selCancel).catch(() => {
-            logger.debug('[SA] Disappearance wait timed out');
+            this.logger.debug('[SA] Disappearance wait timed out');
         });
 
         // 4. Refresh
-        logger.info('[SA] Refreshing');
+        this.logger.info('[SA] Refreshing');
         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
         // Optimization: Reduced wait to 200ms (was implicit or longer via loop)
         await sleep(200);
@@ -319,14 +364,16 @@ class BattleHandler {
         let turnCount = await this.getTurnNumber();
         let lastTurn = turnCount;
         let lastTurnChangeTime = Date.now();
+        let previousHonors = 0; // Initialize previous honors
 
-        logger.info('[Wait] Resolving turn');
+        this.logger.info('[Wait] Resolving turn');
         if (turnCount > 0) {
             const honors = await this.getHonors();
-            logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
+            previousHonors = honors; // Set initial baseline
+            this.logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
 
             if (honorTarget > 0 && honors >= honorTarget) {
-                logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                this.logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
             }
         }
@@ -334,7 +381,7 @@ class BattleHandler {
         // Network Event Promise
         let networkFinished = false;
         const onBattleResult = () => {
-            logger.info('[Network] Battle end detected');
+            this.logger.info('[Network] Battle end detected');
             networkFinished = true;
         };
 
@@ -345,7 +392,7 @@ class BattleHandler {
         try {
             while (Date.now() - startTime < maxWaitMs) {
                 if (this.stopped) {
-                    logger.info('[Wait] Cancelled (Bot stopped)');
+                    this.logger.info('[Wait] Cancelled (Bot stopped)');
                     const duration = (Date.now() - startTime) / 1000;
                     return { duration, turns: turnCount };
                 }
@@ -357,10 +404,11 @@ class BattleHandler {
                 }
 
                 // 1. Check turn number (safely)
-                const context = { lastTurn, turnCount };
+                const context = { lastTurn, turnCount, previousHonors };
                 const turnChanged = await this.updateTurnCount(context, honorTarget);
                 lastTurn = context.lastTurn;
                 turnCount = context.turnCount;
+                previousHonors = context.previousHonors || previousHonors;
 
                 if (turnChanged) {
                     lastTurnChangeTime = Date.now();
@@ -377,7 +425,7 @@ class BattleHandler {
                     if (isRaid && honorTarget > 0) {
                         const h = await this.getHonors();
                         if (h >= honorTarget) {
-                            logger.info(`[Target] Honor goal reached periodically: ${h.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                            this.logger.info(`[Target] Honor goal reached periodically: ${h.toLocaleString()} / ${honorTarget.toLocaleString()}`);
                             return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
                         }
                     }
@@ -385,7 +433,7 @@ class BattleHandler {
                     // Stuck UI Watchdog: Reduced to 4s from 10s
                     const idleTime = Date.now() - lastTurnChangeTime;
                     if (idleTime > 4000) {
-                        logger.warn(`[Watchdog] UI stuck for ${Math.round(idleTime / 1000)}s. Refreshing`);
+                        this.logger.warn(`[Watchdog] UI stuck for ${Math.round(idleTime / 1000)}s. Refreshing`);
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                         await sleep(800);
 
@@ -405,7 +453,7 @@ class BattleHandler {
                         }, this.selectors.fullAutoButton);
 
                         if (!isActive && !this.stopped) {
-                            logger.warn('[Wait] FA dropped during idle. Re-activating');
+                            this.logger.warn('[Wait] FA dropped during idle. Re-activating');
                             await this.handleFullAuto();
                         }
                     }
@@ -419,13 +467,13 @@ class BattleHandler {
                 }
 
                 if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                    logger.info('[Wait] Empty result screen detected');
+                    this.logger.info('[Wait] Empty result screen detected');
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
                 }
 
                 // 2. Rematch fail popup
                 if (await this.controller.elementExists('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2', 100)) {
-                    logger.info('[Wait] Rematch failure detected. Refreshing');
+                    this.logger.info('[Wait] Rematch failure detected. Refreshing');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                     await sleep(800); // Standardized fast reload
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
@@ -433,7 +481,7 @@ class BattleHandler {
 
                 // 3. Character death (Wipe)
                 if (await this.isWiped()) {
-                    logger.info('[Raid] Party wiped (Death popup detected)');
+                    this.logger.info('[Raid] Party wiped (Death popup detected)');
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                     await sleep(800); // Standardized fast reload
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount };
@@ -441,7 +489,7 @@ class BattleHandler {
 
                 // 4. Raid Ended popup (Join phase race condition)
                 if (await this.controller.elementExists(this.selectors.raidEndedPopup, 100)) {
-                    logger.info('[Raid] Battle already ended');
+                    this.logger.info('[Raid] Battle already ended');
                     await this.controller.clickSafe(this.selectors.raidEndedOkButton);
                     await sleep(1000);
                     return { duration: 0, turns: 0, raidEnded: true };
@@ -461,16 +509,17 @@ class BattleHandler {
                     // Animation Skipping (Immediate Reload)
                     // Aggressive check: 100ms timeout for faster detection
                     if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
-                        logger.info('[Reload] Skipping animations');
+                        this.logger.info('[Reload] Skipping animations');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                         // Optimization: Even faster follow-up delay if fastRefresh is enabled
                         await sleep(this.fastRefresh ? 400 : 800);
 
                         // Proactively check turn after reload but before FA enable
-                        const reloadContext = { lastTurn, turnCount };
+                        const reloadContext = { lastTurn, turnCount, previousHonors };
                         const reloadResult = await this.updateTurnCount(reloadContext, honorTarget);
                         lastTurn = reloadContext.lastTurn;
                         turnCount = reloadContext.turnCount;
+                        previousHonors = reloadContext.previousHonors || previousHonors;
 
                         if (reloadResult?.honorReached) {
                             return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
@@ -497,15 +546,16 @@ class BattleHandler {
                     } else {
                         missingUiCount++;
                         if (missingUiCount >= 4) { // 4-second stuck detection
-                            logger.warn('[Wait] UI missing (Stuck). Refreshing');
+                            this.logger.warn('[Wait] UI missing (Stuck). Refreshing');
                             await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                             await sleep(800); // Reduced from 1200ms
 
                             // Proactively check turn after reload but before FA enable
-                            const stuckContext = { lastTurn, turnCount };
+                            const stuckContext = { lastTurn, turnCount, previousHonors };
                             const stuckResult = await this.updateTurnCount(stuckContext, honorTarget);
                             lastTurn = stuckContext.lastTurn;
                             turnCount = stuckContext.turnCount;
+                            previousHonors = stuckContext.previousHonors || previousHonors;
 
                             if (stuckResult?.honorReached) {
                                 return { duration: (Date.now() - startTime) / 1000, turns: turnCount, honorReached: true };
@@ -571,7 +621,7 @@ class BattleHandler {
         });
 
         if (isLoggedOut) {
-            logger.error(`[Safety] Session expired or Redirected to landing (${url}). Stopping`);
+            this.logger.error(`[Safety] Session expired or Redirected to landing (${url}). Stopping`);
             this.stop();
             return true; // Stop execution
         }
@@ -585,7 +635,7 @@ class BattleHandler {
         if (await this.controller.elementExists(this.selectors.okButton, 300) ||
             await this.controller.elementExists(this.selectors.emptyResultNotice, 300) ||
             await this.isWiped()) {
-            logger.info(await this.isWiped() ? '[Cleared] Party wiped' : '[Cleared] Battle finished');
+            this.logger.info(await this.isWiped() ? '[Cleared] Party wiped' : '[Cleared] Battle finished');
             return true;
         }
 
@@ -629,15 +679,19 @@ class BattleHandler {
 
                 if (isRaid) {
                     const honors = await this.getHonors();
-                    logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor`);
+                    const diff = honors - (context.previousHonors || 0);
+                    this.logger.info(`[Turn ${currentTurn}] ${honors.toLocaleString()} honor (+${diff.toLocaleString()})`);
+
+                    // Update context for next call
+                    context.previousHonors = honors;
 
                     const honorReached = honorTarget > 0 && honors >= honorTarget;
                     if (honorReached) {
-                        logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                        this.logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
                     }
                     return { turnChanged: true, honorReached, honors };
                 } else {
-                    logger.info(`[Turn ${currentTurn}]`);
+                    this.logger.info(`[Turn ${currentTurn}]`);
                     return { turnChanged: true, honorReached: false, honors: 0 };
                 }
             }
