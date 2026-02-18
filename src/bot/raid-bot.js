@@ -216,8 +216,8 @@ class RaidBot {
 
                 try {
                     await this.controller.clickSafe(raidSelector);
-                    // Optimization: Reduced sleep from 1.5-2.5s to 500ms
-                    await sleep(500);
+                    // Optimization: Adjusted sleep to 800ms (User request)
+                    await sleep(800);
 
                     // fast check for result/summon screen immediately
                     if (await this.controller.elementExists('.prt-supporter-list', 200) ||
