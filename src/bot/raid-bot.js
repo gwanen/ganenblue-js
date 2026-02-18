@@ -216,7 +216,15 @@ class RaidBot {
 
                 try {
                     await this.controller.clickSafe(raidSelector);
-                    await sleep(randomDelay(1500, 2500));
+                    // Optimization: Reduced sleep from 1.5-2.5s to 500ms
+                    await sleep(500);
+
+                    // fast check for result/summon screen immediately
+                    if (await this.controller.elementExists('.prt-supporter-list', 200) ||
+                        await this.controller.elementExists('.btn-usual-ok', 100, true)) {
+                        this.logger.info('[Raid] Click successful (Summon/OK detected)');
+                        return true;
+                    }
 
                     // Check if we successfully joined (moved to summon screen or battle)
                     const currentUrl = this.controller.page.url();
@@ -231,6 +239,18 @@ class RaidBot {
                     // Check for error popup after clicking
                     const clickError = await this.handleErrorPopup();
                     if (clickError.detected) {
+                        // Check if the "error" was actually a confirmation that led to success
+                        // (Sometimes user clicks raid -> "You joined!" popup -> Battle)
+                        // But usually "You joined" is just a transition.
+                        // If it's battle full/ended, we handle it.
+
+                        // Re-check URL after clicking OK on popup
+                        const urlAfterPopup = this.controller.page.url();
+                        if (urlAfterPopup.includes('#raid') || urlAfterPopup.includes('_raid') || await this.controller.elementExists('.prt-supporter-list', 100)) {
+                            this.logger.info('[Raid] Joined after popup confirmation');
+                            return true;
+                        }
+
                         if (clickError.text === 'max_raids_limit') {
                             this.logger.warn('[Raid] Concurrent limit reached. Restarting cycle');
                             return false;
@@ -372,11 +392,8 @@ class RaidBot {
             const instantBattle = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
                 const att = document.querySelector('.btn-attack-start');
-
-                // Explicitly check for battle hashes, avoiding quest/supporter_raid
                 const isBattleHash = hash.startsWith('#raid') || hash.startsWith('#raid_multi');
                 const hasAttackBtn = att && (att.offsetWidth > 0 || att.classList.contains('display-on'));
-
                 return isBattleHash || hasAttackBtn;
             });
 
@@ -388,6 +405,13 @@ class RaidBot {
             if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
+
+            // Optimization: Check for OK confirmation popup INSIDE the loop for faster reaction
+            if (await this.controller.elementExists('.btn-usual-ok', 50, true)) {
+                this.logger.info('[Summon] OK button detected during wait. Breaking loop');
+                break;
+            }
+
             retryCount++;
             await sleep(200);
         }

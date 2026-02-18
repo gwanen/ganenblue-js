@@ -284,6 +284,13 @@ class QuestBot {
             if (await this.controller.elementExists('.prt-supporter-list', 100)) {
                 break;
             }
+
+            // Optimization: Check for OK confirmation popup INSIDE the loop for faster reaction
+            if (await this.controller.elementExists('.btn-usual-ok', 50, true)) {
+                this.logger.info('[Summon] OK button detected during wait. Breaking loop');
+                break;
+            }
+
             retryCount++;
             await sleep(200);
         }

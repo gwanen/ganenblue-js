@@ -224,6 +224,12 @@ class BattleHandler {
                 const attackBtn = document.querySelector(selectors.attackButton);
                 const isAttackGone = !attackBtn || attackBtn.classList.contains('display-off') || attackBtn.offsetHeight === 0;
 
+                // Check for "Battle Concluded" popup immediately
+                const failPopup = document.querySelector('.pop-rematch-fail.pop-show'); // or .prt-popup-header containing "Battle Concluded"
+                if (failPopup && failPopup.offsetWidth > 0) {
+                    return { status: 'battle_ended' };
+                }
+
                 if (isOverlayerVisible) {
                     return { status: 'success' };
                 }
@@ -240,6 +246,13 @@ class BattleHandler {
         }, this.selectors);
 
         // Handle Check Results
+        if (checkResult.status === 'battle_ended') {
+            this.logger.info('[FA] Battle ended during skill check. Refreshing to finish.');
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await sleep(800);
+            return this.checkStateAndResume('full_auto');
+        }
+
         if (checkResult.status === 'success') {
             this.logger.info('[FA] Skill Rail detected. Waiting for turn processing...');
 
@@ -248,6 +261,8 @@ class BattleHandler {
             try {
                 await this.controller.page.waitForFunction((sel) => {
                     const btn = document.querySelector(sel);
+                    const failPopup = document.querySelector('.pop-rematch-fail.pop-show');
+                    if (failPopup && failPopup.offsetWidth > 0) return true; // Exit immediately if battle ended
                     return !btn || btn.classList.contains('display-off') || btn.offsetHeight === 0;
                 }, { timeout: 45000 }, this.selectors.attackButton);
                 this.logger.info('[FA] Turn processing confirmed');
@@ -338,6 +353,8 @@ class BattleHandler {
         await this.controller.page.waitForFunction((sAtt, sCan) => {
             const att = document.querySelector(sAtt);
             const can = document.querySelector(sCan);
+            const failPopup = document.querySelector('.pop-rematch-fail.pop-show');
+            if (failPopup && failPopup.offsetWidth > 0) return true; // Exit immediately
             const attGone = !att || att.classList.contains('display-off') || att.offsetHeight === 0;
             const canGone = !can || can.classList.contains('display-off') || can.offsetHeight === 0;
             return attGone && canGone;
