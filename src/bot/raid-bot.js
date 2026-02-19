@@ -43,9 +43,7 @@ class RaidBot {
         this.battleTurns = []; // Reset battle turns on start
         this.startTime = Date.now();
 
-        // Set viewport to optimal resolution for farming
-        await this.controller.page.setViewport({ width: 1000, height: 1799 });
-        this.logger.debug('[Core] Set viewport to 1000x1799');
+        this.startTime = Date.now();
 
         this.logger.info('[Bot] Session started');
         this.logger.info(`[Bot] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);

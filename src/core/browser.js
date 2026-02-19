@@ -50,11 +50,11 @@ class BrowserManager {
 
         // Default window size
         let windowWidth = 600;
-        let windowHeight = 900;
+        let windowHeight = 850;
         // Configure Window Size
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
-            windowHeight = emulation.height || 900;
+            windowHeight = emulation.height || 850;
             logger.info(`[Core] Using custom window size: ${windowWidth}x${windowHeight}`);
         } else {
             logger.info('[Core] Using default desktop mode');
@@ -119,9 +119,6 @@ class BrowserManager {
         // Reuse the initial blank page if available, otherwise create one
         const pages = await this.browser.pages();
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
-
-        // Set viewport size
-        await this.page.setViewport({ width: windowWidth, height: windowHeight });
 
         // Additional stealth measures
         await this.applyStealth();
