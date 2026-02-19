@@ -12,6 +12,7 @@ class RaidBot {
         this.maxRaids = options.maxRaids || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
         this.honorTarget = options.honorTarget || 0;
+        this.targetUser = options.targetUser || null;
         this.profileId = options.profileId || config.get('profile_id') || 'p1';
         this.logger = createScopedLogger(this.profileId);
         this.onBattleEnd = options.onBattleEnd || null;
@@ -206,10 +207,94 @@ class RaidBot {
                 continue;
             }
 
-            // Look for raid entries with class "btn-multi-raid lis-raid search"
-            const raidSelector = '.btn-multi-raid.lis-raid.search';
+            // Look for raid entries with class "btn-multi-raid lis-raid" (broadened from .search)
+            const raidSelector = '.btn-multi-raid.lis-raid';
 
-            if (await this.controller.elementExists(raidSelector, 2000)) {
+            // Target User Logic - Use "this.targetUser"
+            if (this.targetUser) {
+                this.logger.info(`[Raid] Scanning for target: "${this.targetUser}"`);
+
+                // Find all raid elements and check their host name
+                const targetElementHandle = await this.controller.page.evaluateHandle((user, selector) => {
+                    // Try to be broad to catch all raid types (search, guild-member, friend, etc)
+                    const raids = document.querySelectorAll(selector);
+                    const targetName = user.toLowerCase();
+
+                    for (const raid of raids) {
+                        const nameEl = raid.querySelector('.txt-request-name');
+                        // Also check data-user-id if needed, but name is safer for case-insensitive
+                        if (nameEl && nameEl.textContent.trim().toLowerCase().includes(targetName)) {
+                            return raid;
+                        }
+                    }
+                    return null;
+                }, this.targetUser, raidSelector);
+
+                if (targetElementHandle && targetElementHandle.asElement()) {
+                    this.logger.info(`[Raid] Found target user: "${this.targetUser}". Joining`);
+                    try {
+                        await targetElementHandle.click();
+                        // Optimization: Adjusted sleep to 800ms (User request)
+                        await sleep(800);
+
+                        // ... fast check logic (copied from below) ...
+                        if (await this.controller.elementExists('.prt-supporter-list', 200) ||
+                            await this.controller.elementExists('.btn-usual-ok', 100, true)) {
+                            this.logger.info('[Raid] Click successful (Summon/OK detected)');
+                            return true;
+                        }
+                        // Check if we successfully joined (moved to summon screen or battle)
+                        const currentUrl = this.controller.page.url();
+                        const onSummonScreen = await this.controller.elementExists('.prt-supporter-list', 500);
+                        const inBattle = currentUrl.includes('#raid') || currentUrl.includes('_raid');
+
+                        if (onSummonScreen || inBattle) {
+                            this.logger.info('[Raid] Successfully joined raid');
+                            return true;
+                        }
+
+                        // Check for error popup after clicking
+                        const clickError = await this.handleErrorPopup();
+                        if (clickError.detected) {
+                            // Re-check URL after clicking OK on popup
+                            const urlAfterPopup = this.controller.page.url();
+                            if (urlAfterPopup.includes('#raid') || urlAfterPopup.includes('_raid') || await this.controller.elementExists('.prt-supporter-list', 100)) {
+                                this.logger.info('[Raid] Joined after popup confirmation');
+                                return true;
+                            }
+
+                            if (clickError.text === 'max_raids_limit') {
+                                this.logger.warn('[Raid] Concurrent limit reached. Restarting cycle');
+                                return false;
+                            }
+
+                            if (clickError.text.includes('pending battles')) {
+                                this.logger.info('[Wait] Pending battles detected after join. Clearing');
+                                await this.clearPendingBattles();
+                                await this.controller.goto(this.raidBackupUrl);
+                                await sleep(randomDelay(1500, 2500));
+                                continue;
+                            }
+                            this.logger.warn('[Wait] Raid was full or unavailable. Refreshing');
+                            // Don't refresh here, just continue loop to refresh at end if no other match found? 
+                            // Actually refresh is safer to get new list
+                        }
+
+                    } catch (error) {
+                        this.logger.error('[Error] [Raid] Error clicking target raid:', error);
+                    }
+                } else {
+                    this.logger.info(`[Raid] Target "${this.targetUser}" not found. Re-checking...`);
+                    // Wait a bit to avoid spamming checks on the same page state
+                    await sleep(2000);
+
+                    // Refreshing is necessary for new raids to appear on Assist tab
+                    this.logger.debug('[Raid] Refreshing page for new list');
+                    await this.controller.page.reload();
+                    await sleep(randomDelay(1500, 2500));
+                }
+            }
+            else if (await this.controller.elementExists(raidSelector, 2000)) {
                 this.logger.info('[Raid] Found raid entry. Joining');
 
                 try {

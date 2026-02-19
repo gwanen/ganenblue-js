@@ -58,6 +58,8 @@ function getProfileElements(pid) {
         questUrlError: document.getElementById(`quest-url-error-${pid}`),
         honorTarget: document.getElementById(`honor-target-${pid}`),
         honorGroup: document.getElementById(`honor-target-group-${pid}`),
+        raidTarget: document.getElementById(`raid-target-${pid}`),
+        raidTargetGroup: document.getElementById(`raid-target-group-${pid}`),
         maxRuns: document.getElementById(`max-runs-${pid}`),
         maxRunsLabel: document.getElementById(`max-runs-label-${pid}`),
         // Zone (Xeno)
@@ -153,6 +155,7 @@ function setupProfileListeners(pid) {
             maxRuns: els.maxRuns.value,
             battleMode: els.battleMode.value,
             honorTarget: els.honorTarget.value,
+            raidTargetUser: els.raidTarget ? els.raidTarget.value.trim() : '',
             zoneId: els.zone ? els.zone.value : null,
             blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
             fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
@@ -205,7 +208,7 @@ function setupProfileListeners(pid) {
     // Auto-save settings on change
     const inputs = [
         els.nameInput,
-        els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget,
+        els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget, els.raidTarget,
         els.zone,
         els.browserType, els.disableSandbox
     ];
@@ -251,6 +254,7 @@ function updateFormVisibility(pid) {
 
     els.questUrlGroup.style.display = isQuestOrReplicard ? 'block' : 'none';
     els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
+    els.raidTargetGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.zoneGroup.style.display = mode === 'xeno_replicard' ? 'block' : 'none';
 
     const label = els.maxRunsLabel;
@@ -508,6 +512,7 @@ async function loadProfileSettings(pid) {
         if (s.questUrl) els.questUrl.value = s.questUrl;
         if (s.maxRuns) els.maxRuns.value = s.maxRuns;
         if (s.battleMode) els.battleMode.value = s.battleMode;
+        if (s.raidTarget && els.raidTarget) els.raidTarget.value = s.raidTarget;
         if (s.zoneId && els.zone) els.zone.value = s.zoneId;
         // Browser Settings
         if (s.browserType && els.browserType) els.browserType.value = s.browserType;
@@ -527,6 +532,7 @@ function saveProfileSettings(pid) {
         questUrl: els.questUrl.value,
         maxRuns: els.maxRuns.value,
         battleMode: els.battleMode.value,
+        raidTarget: els.raidTarget ? els.raidTarget.value : '',
         zoneId: els.zone ? els.zone.value : null,
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',

@@ -289,6 +289,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 initialUrl: settings.questUrl || config.get('bot.quest_url'),
                 maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
                 honorTarget: parseInt(settings.honorTarget) || 0,
+                targetUser: settings.raidTargetUser || null,
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
