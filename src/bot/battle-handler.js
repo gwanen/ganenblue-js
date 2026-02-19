@@ -185,7 +185,7 @@ class BattleHandler {
         // 1. Press Auto Button
         await this.controller.clickSafe(this.selectors.fullAutoButton, {
             silent: true,
-            preDelay: randomDelay(100, 150),
+            preDelay: randomDelay(50, 80),
             delay: 100,
             waitAfter: false
         });
@@ -598,7 +598,7 @@ class BattleHandler {
                 const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
                 // Optimization: Speed up Quest Mode polling (was 800ms)
                 // 100ms for Raid (unchanged), 200ms for Quest (4x faster)
-                const waitTime = isRaid ? 100 : 200;
+                const waitTime = isRaid ? 100 : 100;
                 await sleep(waitTime);
             }
 

@@ -97,7 +97,7 @@ class QuestBot {
         // Navigate to quest
         await this.controller.goto(this.questUrl);
         // Snappy navigation delay
-        await sleep(150);
+        await sleep(50);
 
         // ... rest of the code ...
 
@@ -219,7 +219,7 @@ class QuestBot {
             }
 
             attempts++;
-            await sleep(200);
+            await sleep(100);
         }
 
         this.logger.debug(`[Replicard] Button State: ${JSON.stringify(btnState)}`);
@@ -290,7 +290,7 @@ class QuestBot {
             }
 
             retryCount++;
-            await sleep(200);
+            await sleep(100);
         }
 
         // Check for 'btn-usual-ok' (Confirmation popup)
@@ -308,7 +308,7 @@ class QuestBot {
             await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
                 this.logger.debug('[Wait] Confirmation popup vanished before click');
             });
-            await sleep(400);
+            await sleep(200);
 
             // Double check if we moved to battle
             const currentUrl = this.controller.page.url();
@@ -375,7 +375,7 @@ class QuestBot {
                     this.logger.warn('[Wait] Failed to click start confirmation properly');
                 }
 
-                await sleep(800);
+                await sleep(300);
 
                 return await this.validatePostClick();
             }
@@ -444,7 +444,7 @@ class QuestBot {
                 // Stop polling if we found any error popup
                 break;
             }
-            await sleep(500);
+            await sleep(200);
         }
 
         // 3. URL/Session Validation
