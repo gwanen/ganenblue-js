@@ -9,7 +9,7 @@ quest:
   startQuestButton: '.btn-usual-ok'
 
 battle:
-  battleScreen: '.prt-battle-window'
+  battleScreen: '.cnt-raid'
   attackButton: '.btn-attack-start'
   fullAutoButton: '.btn-auto'
   autoButton: '.btn-auto'

@@ -93,7 +93,7 @@ class BattleHandler {
             if (options.refreshOnStart) {
                 this.logger.info('[Battle] Refreshing to skip animations');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(500);
+                await sleep(this.fastRefresh ? 200 : 500);
             }
 
             if (!this.controller.isAlive()) {
@@ -182,13 +182,28 @@ class BattleHandler {
 
         this.logger.info('[Battle] Initializing Full Auto (Skill Rail Check)');
 
-        // 1. Press Auto Button
-        await this.controller.clickSafe(this.selectors.fullAutoButton, {
-            silent: true,
-            preDelay: randomDelay(50, 80),
-            delay: 100,
-            waitAfter: false
-        });
+        // 1. Press Auto Button (Fast Mode)
+        try {
+            // User Request: Wait 5s for button, if not found -> Refresh
+            const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+
+            if (!btnFound) {
+                this.logger.warn('[Battle] FA button not found in 5s. Refreshing...');
+                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await sleep(800);
+                return this.checkStateAndResume('full_auto');
+            }
+
+            await sleep(randomDelay(20, 40));
+            await this.controller.page.click(this.selectors.fullAutoButton);
+            this.logger.debug('[Battle] Fast-clicked Full Auto');
+        } catch (e) {
+            this.logger.warn(`[Battle] Click failed: ${e.message}`);
+            // If click failed (e.g. detached), try refresh
+            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await sleep(800);
+            return this.checkStateAndResume('full_auto');
+        }
 
         // 1.5 Handle "Waiting for last turn" popup
         // This appears if FA is clicked too quickly while previous turn is processing
@@ -321,9 +336,9 @@ class BattleHandler {
         const selAttack = '.btn-attack-start.display-on';
         const selCancel = this.selectors.attackCancel;
 
-        // 1. Wait for attack button
+        // 1. Wait for attack button (Optimized: Reduced wait to 5s like FA)
         this.logger.debug('[SA] Waiting for attack button');
-        const attackReady = await this.controller.waitForElement(selAttack, 10000);
+        const attackReady = await this.controller.waitForElement(selAttack, 5000);
 
         if (!attackReady) {
             this.logger.warn('[SA] Attack button timeout. Refreshing');
@@ -331,10 +346,10 @@ class BattleHandler {
             return;
         }
 
-        // 2. Press
+        // 2. Press (Optimized: Removed arbitrary delay)
         await this.controller.clickSafe(selAttack, {
             preDelay: 0,
-            delay: randomDelay(50, 100),
+            delay: 0,
             waitAfter: false
         });
         this.logger.info('[SA] Attack pressed');
@@ -348,7 +363,9 @@ class BattleHandler {
             return;
         }
 
-        // 3. Wait for attack button and cancel button disappear
+        // 3. Wait for attack button and cancel button to disappear
+        // Optimized: Reduced maximum timeout to 1s instead of 5s. 
+        // Semi-auto is deterministic, once requested it either goes or we should refresh.
         this.logger.debug('[SA] Waiting for buttons to disappear');
         await this.controller.page.waitForFunction((sAtt, sCan) => {
             const att = document.querySelector(sAtt);
@@ -358,7 +375,7 @@ class BattleHandler {
             const attGone = !att || att.classList.contains('display-off') || att.offsetHeight === 0;
             const canGone = !can || can.classList.contains('display-off') || can.offsetHeight === 0;
             return attGone && canGone;
-        }, { timeout: 5000 }, selAttack, selCancel).catch(() => {
+        }, { timeout: 1000 }, selAttack, selCancel).catch(() => {
             this.logger.debug('[SA] Disappearance wait timed out');
         });
 
@@ -416,7 +433,7 @@ class BattleHandler {
 
                 if (networkFinished) {
                     // Short sleep to allow UI to update slightly (optional, but good for safety)
-                    await sleep(500);
+                    await sleep(200);
                     return { duration: (Date.now() - startTime) / 1000, turns: turnCount + 1 };
                 }
 
@@ -549,14 +566,9 @@ class BattleHandler {
                     }
 
                     // Stuck detection
-                    const uiElements = ['.btn-attack-start.display-on', '.btn-usual-cancel', '.btn-auto', '.btn-cheer', '.btn-salute'];
-                    let uiFound = false;
-                    for (const sel of uiElements) {
-                        if (await this.controller.elementExists(sel, 200)) {
-                            uiFound = true;
-                            break;
-                        }
-                    }
+                    // Optimization: Unified selector checks all elements concurrently without sequential timeout delays
+                    const uiSelector = '.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-cheer, .btn-salute';
+                    const uiFound = await this.controller.elementExists(uiSelector, 200);
 
                     if (uiFound) {
                         missingUiCount = 0;

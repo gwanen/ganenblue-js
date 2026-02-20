@@ -71,10 +71,8 @@ class QuestBot {
 
                 await this.runSingleQuest();
                 this.questsCompleted++;
-
-
                 // Minimum delay for snappiness
-                await sleep(500);
+                await sleep(200);
             }
         } catch (error) {
             // Graceful exit on browser close/disconnect
@@ -229,7 +227,7 @@ class QuestBot {
 
             try {
                 await this.controller.clickSafe(this.replicardSelectors.startButton, { timeout: 2000, maxRetries: 1 });
-                await sleep(500);
+                await sleep(200);
 
                 // Verify we moved to battle
                 return await this.validatePostClick();
@@ -424,8 +422,8 @@ class QuestBot {
         }
 
         // 2. Detect "already ended" or other errors with proactive polling
-        // Optimization: Poll for up to 1.5 seconds (3x500ms) but exit EARLY if URL changes
-        for (let i = 0; i < 3; i++) {
+        // Optimization: Poll for up to 1.5 seconds (5x200ms + network offset) but exit EARLY if URL changes
+        for (let i = 0; i < 5; i++) {
             // Check for success transition first
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid') || currentUrl.includes('#result')) {
@@ -478,7 +476,7 @@ class QuestBot {
         const errorPopupSelector = '.prt-popup-footer .btn-usual-ok';
         const bodySelector = '.txt-popup-body';
 
-        if (await this.controller.elementExists(errorPopupSelector, 1000, true)) {
+        if (await this.controller.elementExists(errorPopupSelector, 200, true)) {
             const errorText = await this.controller.page.evaluate((sel) => {
                 const el = document.querySelector(sel);
                 return el && (el.offsetWidth > 0 || el.offsetHeight > 0) ? el.innerText : '';
