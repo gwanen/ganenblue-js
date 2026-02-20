@@ -87,6 +87,12 @@ class BrowserManager {
             '--disk-cache-size=0',
             '--media-cache-size=0',
             '--disable-application-cache',
+
+            // Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-background-networking',
         ];
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
