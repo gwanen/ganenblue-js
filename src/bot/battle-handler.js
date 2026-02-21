@@ -541,12 +541,11 @@ class BattleHandler {
                     }
 
                     // Animation Skipping (Immediate Reload)
-                    // Aggressive check: 100ms timeout for faster detection
-                    if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
+                    // Toned down check: Wait slightly longer to confirm it's actually an animation
+                    if (await this.controller.elementExists('.btn-attack-start.display-off', 1500)) {
                         this.logger.info('[Reload] Skipping animations');
                         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        // Optimization: Even faster follow-up delay if fastRefresh is enabled
-                        await sleep(this.fastRefresh ? 400 : 800);
+                        await sleep(this.fastRefresh ? 400 : 1000);
 
                         // Proactively check turn after reload but before FA enable
                         const reloadContext = { lastTurn, turnCount, previousHonors };
@@ -669,8 +668,8 @@ class BattleHandler {
         }
 
         // 3. Still in battle? Wait for UI components to appear
-        // Optimized: Reduced to 200ms for faster re-engagement (was 500ms)
-        const found = await this.controller.waitForElement('.btn-attack-start', 200);
+        // Optimized: Increased to 2000ms safety net to prevent 2s watchdog penalty if page loads slow
+        const found = await this.controller.waitForElement('.btn-attack-start', 2000);
         if (found && !this.stopped) {
             if (mode === 'full_auto') {
                 // Re-attempt FA

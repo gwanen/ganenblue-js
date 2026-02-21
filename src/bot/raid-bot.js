@@ -301,10 +301,17 @@ class RaidBot {
                     // Wait a bit to avoid spamming checks on the same page state
                     await sleep(2000);
 
-                    // Refreshing is necessary for new raids to appear on Assist tab
-                    this.logger.debug('[Raid] Refreshing page for new list');
-                    await this.controller.page.reload();
-                    await sleep(randomDelay(1500, 2500));
+                    // Try to click the inner refresh button first
+                    const refreshBtnSelector = '.btn-search-refresh';
+                    if (await this.controller.elementExists(refreshBtnSelector, 3000, true)) {
+                        this.logger.debug('[Raid] Clicking refresh button');
+                        await this.controller.clickSafe(refreshBtnSelector);
+                        await sleep(randomDelay(1500, 2500));
+                    } else {
+                        this.logger.debug('[Raid] Navigating to raid page for new list');
+                        await this.controller.goto(this.raidBackupUrl);
+                        await sleep(randomDelay(1500, 2500));
+                    }
                 }
             }
             else if (await this.controller.elementExists(raidSelector, 2000)) {
@@ -388,13 +395,20 @@ class RaidBot {
                 }
 
             } else {
-                // No raids available, wait and refresh
+                // No raids available, wait and try to refresh or navigate
                 this.logger.info('[Raid] No raids available. Re-checking');
                 await sleep(5000);
 
-                this.logger.info('[Raid] Refreshing page');
-                await this.controller.page.reload();
-                await sleep(randomDelay(1500, 2500));
+                const refreshBtnSelector = '.btn-search-refresh';
+                if (await this.controller.elementExists(refreshBtnSelector, 3000, true)) {
+                    this.logger.info('[Raid] Clicking refresh button');
+                    await this.controller.clickSafe(refreshBtnSelector);
+                    await sleep(randomDelay(1500, 2500));
+                } else {
+                    this.logger.info('[Raid] Navigating to raid page');
+                    await this.controller.goto(this.raidBackupUrl);
+                    await sleep(randomDelay(1500, 2500));
+                }
             }
         }
 
@@ -561,18 +575,32 @@ class RaidBot {
             }
 
             // Check confirmation after selection
-            if (await this.controller.elementExists('.btn-usual-ok', 1500, true)) {
-                this.logger.info('[Wait] Clicking start confirmation');
+            // Logic: Wait for both OK and Cancel buttons to appear, indicating the popup has fully loaded
+            const startBtnSelector = '.btn-usual-ok, .btn-usual-ok.se-quest-start, .se-quest-start';
+            const cancelBtnSelector = '.btn-usual-cancel';
+
+            const bothButtonsPresent = await this.controller.page.waitForFunction((btnOK, btnCancel) => {
+                const okFound = document.querySelector(btnOK);
+                const cancelFound = document.querySelector(btnCancel);
+
+                // Some states like "Battle Concluded" only have OK button. We shouldn't hang on those.
+                // We use a small timeout for this combined check
+                return (okFound && okFound.offsetHeight > 0) && (cancelFound && cancelFound.offsetHeight > 0);
+            }, { timeout: 1500 }, startBtnSelector, cancelBtnSelector).then(() => true).catch(() => false);
+
+
+            if (bothButtonsPresent) {
+                this.logger.info('[Wait] Confirmation popup fully loaded. Clicking start');
 
                 // Robust Click Loop
                 let clickSuccess = false;
                 for (let i = 0; i < 3; i++) {
                     try {
-                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+                        await this.controller.clickSafe(startBtnSelector, { timeout: 1000, maxRetries: 1 });
                         clickSuccess = true;
                     } catch (e) { }
 
-                    if (!await this.controller.elementExists('.btn-usual-ok', 200, true)) {
+                    if (!await this.controller.elementExists(startBtnSelector, 200, true)) {
                         clickSuccess = true;
                         break;
                     }
@@ -581,6 +609,13 @@ class RaidBot {
 
                 if (!clickSuccess) this.logger.warn('[Wait] Failed to click start confirmation properly');
                 await sleep(300);
+            } else {
+                // Fallback: If cancel never appeared but OK is there (e.g. an error popup instead)
+                if (await this.controller.elementExists(startBtnSelector, 200, true)) {
+                    this.logger.info('[Wait] Only OK button found (no cancel). Clicking anyway');
+                    await this.controller.clickSafe(startBtnSelector, { timeout: 1000, maxRetries: 1 }).catch(() => { });
+                    await sleep(300);
+                }
             }
 
             return await this.validatePostClick();
@@ -600,8 +635,8 @@ class RaidBot {
                 this.logger.info('[Summon] Supporter selected (fallback)');
                 await sleep(200);
 
-                if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
-                    await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
+                if (await this.controller.elementExists(startBtnSelector, 500, true)) {
+                    await this.controller.clickSafe(startBtnSelector, { timeout: 2000, maxRetries: 1 }).catch(() => {
                         this.logger.debug('[Wait] Fallback confirmation vanished before click');
                     });
                     await sleep(300);
