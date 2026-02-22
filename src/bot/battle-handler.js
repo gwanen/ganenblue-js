@@ -899,7 +899,7 @@ class BattleHandler {
      */
     async dismissSalutePopup() {
         return await this.controller.page.evaluate(() => {
-            const saluteBtn = document.querySelector('.btn-salute, .pop-cheer.pop-show .btn-usual-ok');
+            const saluteBtn = document.querySelector('.btn-cheer, .btn-salute, .pop-cheer.pop-show .btn-usual-ok');
             if (saluteBtn && saluteBtn.offsetWidth > 0 && saluteBtn.offsetHeight > 0) {
                 saluteBtn.click();
                 return true;
