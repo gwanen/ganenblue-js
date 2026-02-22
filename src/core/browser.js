@@ -57,16 +57,16 @@ class BrowserManager {
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 850;
-            this.logger.info(`[Core] Using custom window size: ${windowWidth}x${windowHeight}`);
+            this.logger.info(`[System] Custom window size: ${windowWidth}x${windowHeight}`);
         } else {
-            this.logger.info('[Core] Using default desktop mode');
+            this.logger.info('[System] Using default desktop mode');
         }
 
         // Create unique temp directory for this session to avoid file locking collisions
         const tempDir = os.tmpdir();
         const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
-        this.logger.info(`[Core] [${this.profileId}] Launching with temp profile: ${this.userDataDir}`);
+        this.logger.info(`[System] Launching with profile: ${this.userDataDir}`);
 
 
         // Prepare launch options
@@ -117,9 +117,9 @@ class BrowserManager {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
-                this.logger.info(`[Core] Using Microsoft Edge: ${edgePath}`);
+                this.logger.info(`[System] Using Microsoft Edge: ${edgePath}`);
             } else {
-                this.logger.warn('[Wait] Edge not found, falling back to Chromium');
+                this.logger.warn('[Status] Edge not found. Falling back to Chromium...');
             }
         }
 
@@ -185,7 +185,7 @@ class BrowserManager {
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            this.logger.warn(`[Wait] Auto-login skipped: ${error.message}`);
+            this.logger.warn(`[Status] Auto-login skipped: ${error.message}`);
         }
     }
 
@@ -234,9 +234,9 @@ class BrowserManager {
         if (this.userDataDir && existsSync(this.userDataDir)) {
             try {
                 rmSync(this.userDataDir, { recursive: true, force: true });
-                this.logger.info(`[Core] [${this.profileId}] Cleaned up temp profile: ${this.userDataDir}`);
+                this.logger.info(`[System] Cleaned up profile: ${this.userDataDir}`);
             } catch (e) {
-                this.logger.warn(`[Core] [${this.profileId}] Failed to cleanup temp profile (locked?): ${e.message}`);
+                this.logger.warn(`[System] Failed to cleanup profile: ${e.message}`);
             }
         }
     }
@@ -265,14 +265,14 @@ class BrowserManager {
                     const stat = statSync(fullPath);
                     if (stat.mtimeMs < cutoffTime) {
                         rmSync(fullPath, { recursive: true, force: true });
-                        logger.info(`[Core] Cleaned up old profile: ${fullPath}`);
+                        logger.info(`[System] Cleaned up old profile: ${fullPath}`);
                     }
                 } catch (e) {
-                    logger.warn(`[Core] Could not clean ${fullPath}: ${e.message}`);
+                    logger.warn(`[System] Could not clean ${fullPath}: ${e.message}`);
                 }
             }
         } catch (e) {
-            logger.warn(`[Core] Cleanup warning: ${e.message}`);
+            logger.warn(`[System] Cleanup warning: ${e.message}`);
         }
     }
 }

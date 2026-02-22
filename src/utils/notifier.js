@@ -41,10 +41,10 @@ class Notifier {
 
             if (!response.ok) {
                 const text = await response.text();
-                logger.error(`[Notification] Discord Webhook failed: ${response.status} ${text}`);
+                logger.error(`[System] Discord webhook failed: ${response.status} ${text}`);
             }
         } catch (error) {
-            logger.error(`[Notification] Error sending Discord message: ${error.message}`);
+            logger.error(`[System] Error sending Discord message: ${error.message}`);
         }
     }
 
@@ -61,9 +61,9 @@ class Notifier {
         return this.sendDiscordMessage('', [{
             title: `✅ Session Complete - [${profileId}]`,
             fields: [
-                { name: 'Completed', value: stats.completedQuests.toString(), inline: true },
+                { name: 'Completed', value: (stats.completedQuests || stats.raidsCompleted || 0).toString(), inline: true },
                 { name: 'Avg Battle', value: (stats.avgBattleTime / 1000).toFixed(1) + 's', inline: true },
-                { name: 'Avg Turns', value: stats.avgTurns.toString(), inline: true }
+                { name: 'Avg Turns', value: (stats.avgTurns || 0).toString(), inline: true }
             ],
             color: 0x10b981, // Green
             timestamp: new Date().toISOString()

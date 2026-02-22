@@ -50,7 +50,7 @@ class LoginHandler {
 
             await sleep(1000);
             await this.page.click(this.selectors.loginButton);
-            this.logger.info('[Login] ✓ Clicked login button');
+            this.logger.info('[Login] Clicked login button');
 
             await sleep(2000);
         } catch (error) {
@@ -74,7 +74,7 @@ class LoginHandler {
 
             // Click Mobage - this will open a new tab
             await this.page.click(this.selectors.mobageOption);
-            this.logger.info('[Login] ✓ Selected Mobage login');
+            this.logger.info('[Login] Selected Mobage login');
 
             // Wait for new tab to open
             await sleep(3000);
@@ -86,7 +86,7 @@ class LoginHandler {
             if (pages.length > 1) {
                 // Switch to the new tab (last page)
                 this.page = pages[pages.length - 1];
-                this.logger.info('[Login] ✓ Switched to Mobage login tab');
+                this.logger.info('[Login] Switched to Mobage login tab');
             } else {
                 this.logger.info('[Login] Page opened in same tab');
             }
@@ -118,21 +118,21 @@ class LoginHandler {
             await this.page.click(this.selectors.emailField);
             await sleep(500);
             await this.page.type(this.selectors.emailField, credentials.email, { delay: 100 });
-            this.logger.info('[Login] ✓ Filled email');
+            this.logger.info('[Login] Filled email');
             await sleep(1000);
 
             // Fill password - click first to focus
             await this.page.click(this.selectors.passwordField);
             await sleep(500);
             await this.page.type(this.selectors.passwordField, credentials.password, { delay: 100 });
-            this.logger.info('[Login] ✓ Filled password');
+            this.logger.info('[Login] Filled password');
             await sleep(1500);
 
             // Click login button
             const loginButton = await this.page.$(this.selectors.submitButton);
             if (loginButton) {
                 await loginButton.click();
-                this.logger.info('[Login] ✓ Clicked login button');
+                this.logger.info('[Login] Clicked login button');
 
                 // Wait for login to process
                 this.logger.info('[Login] Waiting for login to process (may require reCAPTCHA)...');
@@ -166,7 +166,7 @@ class LoginHandler {
 
             this.logger.info('[Login] ✓ Returned to GBF page');
         } catch (error) {
-            this.logger.warn('[Wait] [Login] Close button not found - login may have completed already');
+            this.logger.warn('[Status] [Login] Close button not found - login may have completed already');
         }
     }
 }

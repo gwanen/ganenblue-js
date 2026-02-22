@@ -27,10 +27,10 @@ class RaidBot {
 
         // Enable performance optimizations
         if (options.blockResources) {
-            this.logger.info('[Performance] Image blocking: ENABLED');
-            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[Performance] Failed to enable resource blocking', e));
+            this.logger.info('[System] Image blocking: ENABLED');
+            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable resource blocking', e));
         } else {
-            this.logger.info('[Performance] Image blocking: DISABLED');
+            this.logger.info('[System] Image blocking: DISABLED');
         }
 
         this.raidsCompleted = 0;
@@ -47,8 +47,8 @@ class RaidBot {
         this.battleTurns = []; // Reset battle turns on start
         this.startTime = Date.now(); // Fix #5: Remove duplicate startTime assignment
 
-        this.logger.info('[Bot] Session started');
-        this.logger.info(`[Bot] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
+        this.logger.info('[System] Session started');
+        this.logger.info(`[Status] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
 
         // Notify session start
         notifier.notifySessionStart(this.profileId || 'p1', 'raid').catch(e => this.logger.debug('[Notifier] Failed to notify start', e));
@@ -77,7 +77,7 @@ class RaidBot {
         } catch (error) {
             // Graceful exit on browser close/disconnect
             if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                this.logger.info('[Bot] Session terminated (Browser closed)');
+                this.logger.info('[System] Session terminated (Browser closed)');
             } else {
                 this.logger.error('[Error] [Bot] Raid bot error:', error);
                 notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
@@ -90,7 +90,7 @@ class RaidBot {
     }
 
     async runSingleRaid() {
-        this.logger.info(`[Raid] Searching for backups (${this.raidsCompleted + 1})`);
+        this.logger.info(`[Raid] Searching for raids (${this.raidsCompleted + 1})`);
 
         // Try to find and join a raid
         const joined = await this.findAndJoinRaid();
@@ -114,7 +114,7 @@ class RaidBot {
         });
 
         if (isResult || okButton) {
-            this.logger.info('[Wait] Battle result state detected. Proceeding to battle handler');
+            this.logger.info('[Raid] Already in result state. Proceeding...');
         } else {
             const summonStatus = await this.selectSummon();
 
@@ -128,7 +128,7 @@ class RaidBot {
             }
 
             if (summonStatus === 'pending') {
-                this.logger.info('[Bot] Pending battles detected. Clearing');
+                this.logger.info('[System] Pending battles detected. Clearing...');
                 await this.clearPendingBattles();
                 return false; // Restart cycle
             }
@@ -136,7 +136,7 @@ class RaidBot {
 
         // Check if bot was stopped before starting battle
         if (!this.isRunning) {
-            this.logger.debug('[System] Operation cancelled before battle initiation');
+            this.logger.debug('[System] Operation cancelled before combat initiation');
             return;
         }
 
@@ -175,7 +175,7 @@ class RaidBot {
             await this.controller.goto(this.raidBackupUrl);
             await sleep(800);
         } else {
-            this.logger.info('[Cleared] Battle completed');
+            this.logger.info('[Battle] Combat concluded');
         }
 
         return true;
@@ -183,7 +183,7 @@ class RaidBot {
 
     async findAndJoinRaid() {
         // Navigate to raid backup page
-        this.logger.info('[Raid] Navigating to backup page');
+        this.logger.info('[Raid] Navigating to backup page...');
         await this.controller.goto(this.raidBackupUrl);
         // Snappy navigation delay
         await sleep(100);
@@ -198,7 +198,7 @@ class RaidBot {
             const errorResult = await this.handleErrorPopup();
             if (errorResult.detected) {
                 if (errorResult.text.includes('pending battles')) {
-                    this.logger.info('[Wait] Pending battles detected. Clearing');
+                    this.logger.info('[System] Pending battles detected. Clearing...');
                     await this.clearPendingBattles();
                     // After clearing, return to backup page
                     await this.controller.goto(this.raidBackupUrl);
@@ -206,8 +206,8 @@ class RaidBot {
                     continue;
                 }
 
-                this.logger.info('[Wait] Error popup detected. Refreshing page');
-                await this.controller.page.reload();
+                this.logger.info('[Status] Error popup detected. Returning to assist page...');
+                await this.refreshRaidSearch();
                 await sleep(randomDelay(1500, 2500));
                 continue;
             }
@@ -217,7 +217,7 @@ class RaidBot {
 
             // Target User Logic - Use "this.targetUser"
             if (this.targetUser) {
-                this.logger.info(`[Raid] Scanning for target: "${this.targetUser}"`);
+                this.logger.info(`[Raid] Scanning for target: "${this.targetUser}"...`);
 
                 // Find all raid elements and check their host name
                 const targetElementHandle = await this.controller.page.evaluateHandle((user, selector) => {
@@ -236,7 +236,7 @@ class RaidBot {
                 }, this.targetUser, raidSelector);
 
                 if (targetElementHandle && targetElementHandle.asElement()) {
-                    this.logger.info(`[Raid] Found target user: "${this.targetUser}". Joining`);
+                    this.logger.info(`[Raid] Found target user: "${this.targetUser}". Joining...`);
                     try {
                         await targetElementHandle.click();
 
@@ -281,7 +281,7 @@ class RaidBot {
                                 }
 
                                 if (clickError.text.includes('pending battles')) {
-                                    this.logger.info('[Wait] Pending battles detected after join. Clearing');
+                                    this.logger.info('[System] Pending battles detected after join. Clearing...');
                                     await this.clearPendingBattles();
                                     await this.controller.goto(this.raidBackupUrl);
                                     // Use small random delay to avoid bot detection on rapid retries
@@ -312,7 +312,7 @@ class RaidBot {
                 }
             }
             else if (await this.controller.elementExists(raidSelector, 2000)) {
-                this.logger.info('[Raid] Found raid entry. Joining');
+                this.logger.info('[Raid] Raid detected. Joining...');
 
                 try {
                     await this.controller.clickSafe(raidSelector);
@@ -342,7 +342,7 @@ class RaidBot {
                     const inBattle = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
                     if (onSummonScreen || inBattle) {
-                        this.logger.info('[Raid] Successfully joined raid');
+                        this.logger.info('[Raid] Joing successful');
                         return true;
                     }
 
@@ -367,21 +367,21 @@ class RaidBot {
                         }
 
                         if (clickError.text.includes('pending battles')) {
-                            this.logger.info('[Wait] Pending battles detected after join. Clearing');
+                            this.logger.info('[System] Pending battles detected after join. Clearing...');
                             await this.clearPendingBattles();
                             await this.controller.goto(this.raidBackupUrl);
                             await sleep(randomDelay(1500, 2500));
                             continue;
                         }
 
-                        this.logger.warn('[Wait] Raid was full or unavailable. Refreshing');
+                        this.logger.warn('[Raid] Raid was full or unavailable. Refreshing...');
                         await this.refreshRaidSearch();
                         await sleep(randomDelay(800, 1200));
                         continue;
                     }
 
                     // Unknown state, refresh and retry
-                    this.logger.warn('[Wait] Unknown state after join attempt. Refreshing');
+                    this.logger.warn('[Raid] Unknown state after join attempt. Refreshing...');
                     await this.refreshRaidSearch();
                     await sleep(randomDelay(800, 1200));
 
@@ -393,7 +393,7 @@ class RaidBot {
 
             } else {
                 // No raids available, wait and refresh
-                this.logger.info('[Raid] No raids available. Re-checking');
+                this.logger.info('[Raid] No raids available. Re-checking...');
                 await sleep(2000);
 
                 await this.refreshRaidSearch();
@@ -401,7 +401,7 @@ class RaidBot {
             }
         }
 
-        this.logger.warn(`[Wait] Failed to join raid after ${attempts} attempts`);
+        this.logger.warn(`[Raid] Failed to join raid after ${attempts} attempts`);
         return false;
     }
 
@@ -423,7 +423,7 @@ class RaidBot {
             this.logger.info(`[Wait] Error alert detected: ${errorText.trim()}`);
 
             if (errorText.toLowerCase().includes('three raid battles')) {
-                this.logger.warn('[Wait] Concurrent raid limit reached (Max 3). Waiting');
+                this.logger.warn('[Status] Concurrent raid limit reached (max 3). Waiting...');
                 try {
                     await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
                 } catch (e) { }
@@ -436,7 +436,7 @@ class RaidBot {
                 await this.controller.clickSafe(errorPopupSelector, { timeout: 2000, maxRetries: 1 });
                 await sleep(500);
             } catch (error) {
-                this.logger.warn('[Wait] Failed to click error popup OK button (might have closed):', error.message);
+                this.logger.warn('[Status] Failed to click error popup OK button:', error.message);
             }
             return { detected: true, text: errorText.toLowerCase() };
         }
@@ -448,7 +448,7 @@ class RaidBot {
         const unclaimedUrl = this.selectors.unclaimedRaidUrl || 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0';
         const entrySelector = this.selectors.unclaimedRaidEntry || '.btn-multi-raid.lis-raid';
 
-        this.logger.info('[Raid] Initializing pending battle clearance');
+        this.logger.info('[System] Initializing pending battle clearance...');
 
         let clearedCount = 0;
         const maxToClear = 10; // safety limit
@@ -478,7 +478,7 @@ class RaidBot {
                     // Optional: tiny delay to ensure state is saved
                     await sleep(500);
                 } else {
-                    this.logger.warn('[Wait] OK button timeout. Proceeding');
+                    this.logger.warn('[System] OK button timeout. Proceeding...');
                 }
 
                 clearedCount++;
@@ -507,7 +507,7 @@ class RaidBot {
             });
 
             if (instantBattle) {
-                this.logger.info('[Bot] Transitioned to battle. Skipping summon search');
+                this.logger.info('[Status] Transitioned to battle. Skipping summon search');
                 return 'success';
             }
 
@@ -555,7 +555,7 @@ class RaidBot {
             } catch (error) {
                 const currentUrl = this.controller.page.url();
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                    this.logger.info('[Bot] Transitioned to battle. Ignoring click error');
+                    this.logger.info('[Status] Transitioned to battle. Ignoring click error');
                     return 'success';
                 }
                 throw error;
@@ -563,7 +563,7 @@ class RaidBot {
 
             // Check confirmation after selection
             if (await this.controller.elementExists('.btn-usual-ok', 1500, true)) {
-                this.logger.info('[Wait] Clicking start confirmation');
+                this.logger.info('[Summon] Clicking start confirmation...');
 
                 // Robust Click Loop
                 let clickSuccess = false;
@@ -603,7 +603,7 @@ class RaidBot {
 
                 if (await this.controller.elementExists('.btn-usual-ok', 500, true)) {
                     await this.controller.clickSafe('.btn-usual-ok', { timeout: 2000, maxRetries: 1 }).catch(() => {
-                        this.logger.debug('[Wait] Fallback confirmation vanished before click');
+                        this.logger.debug('[Summon] Fallback confirmation vanished before click');
                     });
                     await sleep(300);
 
@@ -622,7 +622,7 @@ class RaidBot {
 
         // 1.5. Safety: Check if we are stuck on Deck Selection
         if (await this.controller.elementExists('.pop-deck.pop-show', 300, true)) {
-            this.logger.warn('[Wait] Stuck on Deck Selection. Clicking OK directly.');
+            this.logger.warn('[Summon] Stuck on Deck Selection. Clicking OK directly.');
             await this.controller.clickSafe('.pop-deck.pop-show .btn-usual-ok', { silent: true });
             await sleep(800);
         }
@@ -639,7 +639,7 @@ class RaidBot {
             const error = await this.handleErrorPopup();
             if (error.detected) {
                 if (error.text.includes('already ended') || error.text.includes('home screen will now appear')) {
-                    this.logger.info('[Raid] Raid already ended popup detected. Returning to backup page');
+                    this.logger.info('[Raid] Raid already ended. Returning to backup page...');
                     return 'ended';
                 }
                 if (error.text.includes('pending battles')) {
@@ -671,7 +671,7 @@ class RaidBot {
 
         const finalUrl = this.controller.page.url();
         if (!finalUrl.includes('#raid') && !finalUrl.includes('_raid') && !finalUrl.includes('#result')) {
-            this.logger.warn('[Wait] URL did not transition to battle. Potential error');
+            this.logger.warn('[Status] URL did not transition to battle. Potential error');
             return 'ended';
         }
 
@@ -767,6 +767,7 @@ class RaidBot {
         }
 
         return {
+            completedQuests: this.raidsCompleted, // Consistent with QuestBot for Notifier
             raidsCompleted: this.raidsCompleted,
             isRunning: this.isRunning,
             isPaused: this.isPaused,
@@ -786,18 +787,22 @@ class RaidBot {
      * Tries to use the internal UI refresh button before falling back to full navigation
      */
     async refreshRaidSearch() {
+        const currentUrl = this.controller.page.url();
+        const isOnAssistPage = currentUrl.includes('#quest/assist');
         const refreshBtn = '.btn-search-refresh';
-        const hasRefreshBtn = await this.controller.elementExists(refreshBtn, 300, true);
 
-        if (hasRefreshBtn) {
-            this.logger.debug('[Raid] Clicking UI refresh button');
-            await this.controller.clickSafe(refreshBtn);
-            return true;
-        } else {
-            this.logger.debug('[Raid] Refresh button missing. Navigating to backup URL');
-            await this.controller.goto(this.raidBackupUrl, { waitUntil: 'domcontentloaded' });
-            return true;
+        if (isOnAssistPage) {
+            const hasRefreshBtn = await this.controller.elementExists(refreshBtn, 500, true);
+            if (hasRefreshBtn) {
+                this.logger.debug('[Raid] On assist page. Clicking UI refresh button...');
+                await this.controller.clickSafe(refreshBtn);
+                return true;
+            }
         }
+
+        this.logger.info('[Raid] Navigating to assist page...');
+        await this.controller.goto(this.raidBackupUrl, { waitUntil: 'domcontentloaded' });
+        return true;
     }
 }
 
