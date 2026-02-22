@@ -7,19 +7,22 @@ import notifier from '../utils/notifier.js';
 
 class RaidBot {
     constructor(page, options = {}) {
-        this.controller = new PageController(page);
+        // Assign profileId and scoped logger FIRST so they're available to PageController
+        this.profileId = options.profileId || config.get('profile_id') || 'p1';
+        this.logger = createScopedLogger(this.profileId);
+
+        this.controller = new PageController(page, this.logger);
         this.raidBackupUrl = 'https://game.granbluefantasy.jp/#quest/assist';
         this.maxRaids = options.maxRaids || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
         this.honorTarget = options.honorTarget || 0;
         this.targetUser = options.targetUser || null;
-        this.profileId = options.profileId || config.get('profile_id') || 'p1';
-        this.logger = createScopedLogger(this.profileId);
         this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.raid;
         this.battle = new BattleHandler(page, {
             fastRefresh: options.fastRefresh || false,
-            logger: this.logger
+            logger: this.logger,
+            controller: this.controller // Fix #4: Reuse the same PageController (eliminates duplicate NetworkListener)
         });
 
         // Enable performance optimizations
@@ -42,9 +45,7 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
-        this.startTime = Date.now();
-
-        this.startTime = Date.now();
+        this.startTime = Date.now(); // Fix #5: Remove duplicate startTime assignment
 
         this.logger.info('[Bot] Session started');
         this.logger.info(`[Bot] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
@@ -139,11 +140,22 @@ class RaidBot {
             return;
         }
 
+        // Capture initial honors for summary calculation
+        const initialHonors = await this.battle.getHonors();
+
         // Handle battle
         const result = await this.battle.executeBattle(this.battleMode, {
             honorTarget: this.honorTarget,
+            initialHonors,
             refreshOnStart: true // User requested refresh after join to skip animations
         });
+
+        if (result?.raidFull) {
+            this.logger.info('[Raid] Raid was full. Navigating back to backup page');
+            await this.controller.goto(this.raidBackupUrl);
+            await sleep(300);
+            return false; // Restart cycle to find another raid
+        }
 
         if (result?.raidEnded) {
             return false;
@@ -154,16 +166,8 @@ class RaidBot {
             this.logger.info(`[Target] Honor goal reached: ${this.honorTarget.toLocaleString()}. Skipping rest of battle`);
         }
 
-        this.updateDetailStats(result);
-
-        // Store battle time and turns
-        if (this.battle.lastBattleDuration > 0) {
-            this.battleTimes.push(this.battle.lastBattleDuration);
-            this.battleTurns.push(result.turns || 0);
-
-            // Memory Optimization: keep only last 50 entries
-            if (this.battleTimes.length > 50) this.battleTimes.shift();
-            if (this.battleTurns.length > 50) this.battleTurns.shift();
+        if (result && result.duration > 0) {
+            this.updateDetailStats(result);
         }
 
         if (honorReached) {
@@ -299,12 +303,12 @@ class RaidBot {
                 } else {
                     this.logger.info(`[Raid] Target "${this.targetUser}" not found. Re-checking...`);
                     // Wait a bit to avoid spamming checks on the same page state
-                    await sleep(2000);
+                    await sleep(800);
 
                     // Refreshing is necessary for new raids to appear on Assist tab
-                    this.logger.debug('[Raid] Refreshing page for new list');
-                    await this.controller.page.reload();
-                    await sleep(randomDelay(1500, 2500));
+                    this.logger.debug('[Raid] Refreshing list for target');
+                    await this.refreshRaidSearch();
+                    await sleep(randomDelay(800, 1200));
                 }
             }
             else if (await this.controller.elementExists(raidSelector, 2000)) {
@@ -371,30 +375,29 @@ class RaidBot {
                         }
 
                         this.logger.warn('[Wait] Raid was full or unavailable. Refreshing');
-                        await this.controller.page.reload();
-                        await sleep(randomDelay(1500, 2500));
+                        await this.refreshRaidSearch();
+                        await sleep(randomDelay(800, 1200));
                         continue;
                     }
 
                     // Unknown state, refresh and retry
                     this.logger.warn('[Wait] Unknown state after join attempt. Refreshing');
-                    await this.controller.page.reload();
-                    await sleep(randomDelay(1500, 2500));
+                    await this.refreshRaidSearch();
+                    await sleep(randomDelay(800, 1200));
 
                 } catch (error) {
                     this.logger.error('[Error] [Raid] Error clicking raid entry:', error);
-                    await this.controller.page.reload();
-                    await sleep(randomDelay(1500, 2500));
+                    await this.refreshRaidSearch();
+                    await sleep(randomDelay(800, 1200));
                 }
 
             } else {
                 // No raids available, wait and refresh
                 this.logger.info('[Raid] No raids available. Re-checking');
-                await sleep(5000);
+                await sleep(2000);
 
-                this.logger.info('[Raid] Refreshing page');
-                await this.controller.page.reload();
-                await sleep(randomDelay(1500, 2500));
+                await this.refreshRaidSearch();
+                await sleep(randomDelay(800, 1200));
             }
         }
 
@@ -533,16 +536,14 @@ class RaidBot {
             }
 
             this.logger.info('[Bot] Clicking confirmation popup');
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true }).catch(() => {
                 this.logger.debug('[Wait] Confirmation popup vanished before click');
             });
             await sleep(200);
 
             // Double check transition
-            const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                return 'success';
-            }
+            // Optimization: Instead of an instantaneous check that easily results in a false-negative, call validatePostClick to securely wait for the transition.
+            return await this.validatePostClick();
         }
 
         const summonSelector = '.prt-supporter-detail';
@@ -568,7 +569,7 @@ class RaidBot {
                 let clickSuccess = false;
                 for (let i = 0; i < 3; i++) {
                     try {
-                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true });
                         clickSuccess = true;
                     } catch (e) { }
 
@@ -627,8 +628,8 @@ class RaidBot {
         }
 
         // 2. Detect "Raid already ended" or other errors with proactive polling
-        // Optimization: Poll for up to 1.5 seconds (5x300ms) but exit EARLY if URL changes
-        for (let i = 0; i < 5; i++) {
+        // Optimization: Poll for up to 1.5 seconds (15x100ms) but exit EARLY if URL changes
+        for (let i = 0; i < 15; i++) {
             // Check for success transition first
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid') || currentUrl.includes('#result')) {
@@ -647,7 +648,7 @@ class RaidBot {
                 // Stop polling if we found any error popup
                 break;
             }
-            await sleep(300);
+            await sleep(100);
         }
 
         // 3. URL/Session Validation
@@ -727,11 +728,16 @@ class RaidBot {
             this.totalTurns += result.turns;
         }
         if (result.duration) {
-            // Convert seconds to ms
-            const ms = Math.floor(result.duration * 1000);
+            const ms = Math.floor(result.duration);
             this.battleTimes.push(ms);
             // Keep only last 50
             if (this.battleTimes.length > 50) this.battleTimes.shift();
+
+            if (result.turns !== undefined) {
+                if (!this.battleTurns) this.battleTurns = [];
+                this.battleTurns.push(result.turns);
+                if (this.battleTurns.length > 50) this.battleTurns.shift();
+            }
 
             // Trigger callback if provided
             if (this.onBattleEnd) this.onBattleEnd(this.getStats());
@@ -773,6 +779,25 @@ class RaidBot {
             lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
             rate: rate
         };
+    }
+
+    /**
+     * Optimized raid list refresh
+     * Tries to use the internal UI refresh button before falling back to full navigation
+     */
+    async refreshRaidSearch() {
+        const refreshBtn = '.btn-search-refresh';
+        const hasRefreshBtn = await this.controller.elementExists(refreshBtn, 300, true);
+
+        if (hasRefreshBtn) {
+            this.logger.debug('[Raid] Clicking UI refresh button');
+            await this.controller.clickSafe(refreshBtn);
+            return true;
+        } else {
+            this.logger.debug('[Raid] Refresh button missing. Navigating to backup URL');
+            await this.controller.goto(this.raidBackupUrl, { waitUntil: 'domcontentloaded' });
+            return true;
+        }
     }
 }
 

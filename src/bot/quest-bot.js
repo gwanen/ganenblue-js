@@ -7,22 +7,25 @@ import notifier from '../utils/notifier.js';
 
 class QuestBot {
     constructor(page, options = {}) {
-        this.controller = new PageController(page);
+        // Assign profileId and scoped logger FIRST so they're available to PageController
+        this.profileId = options.profileId || config.get('profile_id') || 'p1';
+        this.logger = createScopedLogger(this.profileId);
+
+        this.controller = new PageController(page, this.logger);
         this.questUrl = options.questUrl;
         this.maxQuests = options.maxQuests || 0; // 0 = unlimited
         this.battleMode = options.battleMode || 'full_auto';
         this.isReplicard = options.isReplicard || false;
         this.isXeno = options.isXeno || false;
         this.zoneId = options.zoneId || null;
-        this.profileId = options.profileId || config.get('profile_id') || 'p1';
-        this.logger = createScopedLogger(this.profileId);
         this.replicardZoneUrl = 'https://game.granbluefantasy.jp/#replicard/stage/';
         this.onBattleEnd = options.onBattleEnd || null;
         this.selectors = config.selectors.quest;
         this.replicardSelectors = config.selectors.replicard;
         this.battle = new BattleHandler(page, {
             fastRefresh: options.fastRefresh || false,
-            logger: this.logger
+            logger: this.logger,
+            controller: this.controller // Fix #4: Reuse the same PageController (eliminates duplicate NetworkListener)
         });
 
         // Enable performance optimizations
@@ -46,9 +49,7 @@ class QuestBot {
         this.questsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
-        this.startTime = Date.now();
-
-        this.startTime = Date.now();
+        this.startTime = Date.now(); // Fix #5: Remove duplicate startTime assignment
 
         this.logger.info('[Bot] Session started');
         this.logger.info(`[Bot] Target: ${this.maxQuests === 0 ? 'Unlimited' : this.maxQuests} ${this.isReplicard ? 'runs' : 'quests'}`);
@@ -69,9 +70,11 @@ class QuestBot {
                     break;
                 }
 
-                await this.runSingleQuest();
-                this.questsCompleted++;
-                // Minimum delay for snappiness
+                const success = await this.runSingleQuest();
+                // Fix #1: Only increment on confirmed successful completion
+                if (success) {
+                    this.questsCompleted++;
+                }
                 await sleep(200);
             }
         } catch (error) {
@@ -117,23 +120,20 @@ class QuestBot {
         if (isBattle) {
             this.logger.info('[Wait] Battle or results detected. Resuming');
 
-            // Check if bot was stopped before starting battle
-            if (!this.isRunning) {
-                this.logger.debug('[System] Operation cancelled before battle initiation');
-                return;
+            if (!this.isRunning) return false; // Fix #5: isRunning guard
+
+            // Fix #2: Capture initial honors for summary calculation in the resume path
+            const initialHonors = await this.battle.getHonors();
+
+            const result = await this.battle.executeBattle(this.battleMode, {
+                initialHonors
+            });
+            if (result && result.duration > 0) {
+                result.initialHonors = initialHonors;
+                this.updateDetailStats(result);
             }
 
-            const result = await this.battle.executeBattle(this.battleMode);
-            this.updateDetailStats(result);
-
-            // Store battle time and turns
-            if (this.battle.lastBattleDuration > 0) {
-                this.battleTimes.push(this.battle.lastBattleDuration);
-                this.battleTurns.push(result.turns || 0);
-            }
-
-            // User Optimization: Skip clicking OK button. Just return to loop (which navigates to Quest URL)
-            return; // Skip the rest of runSingleQuest (summon selection etc)
+            return true; // Success - quest completed via resume path
         }
 
         // Start Battle Sequence
@@ -160,26 +160,18 @@ class QuestBot {
             return;
         }
 
+        // Fix #2: Capture initialHonors before battle in the primary (non-resume) path
+        const initialHonors = await this.battle.getHonors();
+
         // Handle battle
-        const result = await this.battle.executeBattle(this.battleMode);
-        this.updateDetailStats(result);
-
-        // Store battle time and turns
-        if (this.battle.lastBattleDuration > 0) {
-            this.battleTimes.push(this.battle.lastBattleDuration);
-            this.battleTurns.push(result.turns || 0);
-
-            // Memory Optimization: keep only last 50 entries
-            if (this.battleTimes.length > 50) this.battleTimes.shift();
-            if (this.battleTurns.length > 50) this.battleTurns.shift();
+        const result = await this.battle.executeBattle(this.battleMode, { initialHonors });
+        if (result && result.duration > 0) {
+            this.updateDetailStats(result); // Fix #3: updateDetailStats handles battleTimes; don't push again
         }
-
-        // User Optimization: Skip clicking OK button.
-        // await this.battle.handleResult();
 
         this.logger.info('[Cleared] Battle completed');
 
-        // Xeno Replicard Logic: Redirect -> Wait
+        // Xeno Replicard Logic: Redirect -> Wait (Fix #2: was dead code, moved before return)
         if (this.isXeno && this.zoneId) {
             const redirectUrl = `${this.replicardZoneUrl}${this.zoneId}`;
             this.logger.info(`[Xeno] Redirecting to Zone ${this.zoneId}: ${redirectUrl}`);
@@ -187,6 +179,8 @@ class QuestBot {
             this.logger.info('[Xeno] Waiting for 3 seconds...');
             await sleep(3000);
         }
+
+        return true; // Success
     }
 
     async startReplicardBattle() {
@@ -303,17 +297,14 @@ class QuestBot {
 
             this.logger.info('[Bot] Clicking confirmation popup');
             // Use 1 retry and short timeout to avoid getting stuck if the popup vanishes
-            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => {
+            await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true }).catch(() => {
                 this.logger.debug('[Wait] Confirmation popup vanished before click');
             });
             await sleep(200);
 
             // Double check if we moved to battle
-            const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
-                this.logger.info('[Bot] Transitioned to battle. Skipping supporter selection');
-                return 'success';
-            }
+            // Optimization: Instead of waiting 200ms and risking a false-negative, call validatePostClick to securely monitor the transition.
+            return await this.validatePostClick();
         }
 
         // Try to select ANY available summon in the list
@@ -355,7 +346,7 @@ class QuestBot {
                 let clickSuccess = false;
                 for (let i = 0; i < 3; i++) {
                     try {
-                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 });
+                        await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true });
                         clickSuccess = true;
                     } catch (e) {
                         // Ignore click error and retry logic handles it
@@ -422,8 +413,8 @@ class QuestBot {
         }
 
         // 2. Detect "already ended" or other errors with proactive polling
-        // Optimization: Poll for up to 1.5 seconds (5x200ms + network offset) but exit EARLY if URL changes
-        for (let i = 0; i < 5; i++) {
+        // Optimization: Poll for up to 1.5 seconds (15x100ms) but exit EARLY if URL changes
+        for (let i = 0; i < 15; i++) {
             // Check for success transition first
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#raid') || currentUrl.includes('_raid') || currentUrl.includes('#result')) {
@@ -442,7 +433,7 @@ class QuestBot {
                 // Stop polling if we found any error popup
                 break;
             }
-            await sleep(200);
+            await sleep(100);
         }
 
         // 3. URL/Session Validation
@@ -548,14 +539,18 @@ class QuestBot {
             this.totalTurns += result.turns;
         }
         if (result.duration) {
-            // Convert seconds to ms for consistency with RaidBot/storage
-            const ms = Math.floor(result.duration * 1000);
+            const ms = Math.floor(result.duration);
             this.battleTimes.push(ms);
             if (this.battleTimes.length > 50) this.battleTimes.shift();
 
+            if (result.turns !== undefined) {
+                if (!this.battleTurns) this.battleTurns = [];
+                this.battleTurns.push(result.turns);
+                if (this.battleTurns.length > 50) this.battleTurns.shift();
+            }
+
             // Trigger callback if provided
             if (this.onBattleEnd) this.onBattleEnd(this.getStats());
-
         }
     }
 

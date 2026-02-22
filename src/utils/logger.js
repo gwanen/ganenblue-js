@@ -34,13 +34,10 @@ const logger = winston.createLogger({
 });
 
 // Helper to create profile-scoped logger
+// Uses Winston's child() so every log entry auto-carries { profileId } as metadata
 export const createScopedLogger = (profileId) => {
-    return {
-        debug: (msg, ...args) => logger.debug(`${msg}`, ...args),
-        info: (msg, ...args) => logger.info(`${msg}`, ...args),
-        warn: (msg, ...args) => logger.warn(`${msg}`, ...args),
-        error: (msg, ...args) => logger.error(`${msg}`, ...args)
-    };
+    return logger.child({ profileId });
 };
+
 
 export default logger;

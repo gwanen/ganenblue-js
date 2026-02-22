@@ -343,6 +343,10 @@ ipcMain.handle('bot:stop', async (event, profileId) => {
     const instance = getInstance(profileId);
     if (instance.bot) {
         instance.bot.stop();
+        // Fix #8: Ensure the NetworkListener is properly stopped to prevent response handler leak
+        if (instance.bot.battle && instance.bot.battle.controller) {
+            instance.bot.battle.controller.stop().catch(e => logger.debug('[Cleanup] Controller stop error:', e));
+        }
         instance.bot = null;
     }
     logger.info(`[Gui] [${profileId}] Bot stopped`);
@@ -458,7 +462,11 @@ import winston from 'winston';
 class GuiTransport extends winston.Transport {
     log(info, callback) {
         if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('log:update', info);
+            mainWindow.webContents.send('log:update', {
+                level: info.level,
+                message: info.message,
+                profileId: info.profileId || null   // stamped by createScopedLogger's child logger
+            });
 
             // High-priority notification for Captcha/Safety issues
             if (info.level === 'error' && (info.message.includes('Captcha') || info.message.includes('[Safety]'))) {

@@ -5,9 +5,10 @@ import path from 'path';
 import NetworkListener from './network-listener.js';
 
 class PageController {
-    constructor(page) {
+    constructor(page, scopedLogger = null) {
         this.page = page;
-        this.network = new NetworkListener(page);
+        this.logger = scopedLogger || logger; // Use scoped (profile-aware) logger if provided
+        this.network = new NetworkListener(page, this.logger);
         this.network.start(); // Start listening immediately
         this.requestHandler = null;
         this.lastMousePos = { x: 0, y: 0 };
@@ -24,7 +25,7 @@ class PageController {
             const url = req.url();
 
             // Allow essential game assets but block heavy media
-            if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+            if (['image', 'media', 'font'].includes(resourceType)) {
                 // Optimization: Block images for speed, but keep some UI elements if needed
                 // For now, aggressive blocking
                 if (url.includes('assets/img/sp/ui') || url.includes('assets/img/sp/quest')) {
@@ -41,7 +42,7 @@ class PageController {
         };
 
         this.page.on('request', this.requestHandler);
-        logger.info('[Performance] Resource blocking enabled (Images/Media)');
+        this.logger.info('[Performance] Resource blocking enabled (Images/Media)');
     }
 
     async disableResourceBlocking() {
@@ -59,7 +60,7 @@ class PageController {
         }
 
         this.blockingEnabled = false;
-        logger.info('[Performance] Resource blocking disabled');
+        this.logger.info('[Performance] Resource blocking disabled');
     }
 
     /**
@@ -105,7 +106,7 @@ class PageController {
             } catch (error) {
                 if (this.isNetworkError(error) && i < maxRetries - 1) {
                     const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-                    logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    this.logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
                     await sleep(waitTime);
                     continue;
                 }
@@ -126,7 +127,7 @@ class PageController {
             return true;
         } catch (error) {
             const currentUrl = this.page.url();
-            logger.debug(`[Debug] Element not found: ${selector} (URL: ${currentUrl})`);
+            this.logger.debug(`[Debug] Element not found: ${selector} (URL: ${currentUrl})`);
             return false;
         }
     }
@@ -138,10 +139,11 @@ class PageController {
         const {
             waitAfter = true,
             delay = randomDelay(100, 300),
-            preDelay = randomDelay(200, 500), // Default pre-click delay (human-like)
+            preDelay = randomDelay(200, 500),
             maxRetries = 3,
             timeout = 5000,
-            silent = false
+            silent = false,
+            fast = false // New: Skip human-like delays
         } = options;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -152,8 +154,8 @@ class PageController {
                     throw new Error(`Element not found: ${selector}`);
                 }
 
-                // Random delay before click (configurable)
-                if (preDelay > 0) {
+                // Random delay before click
+                if (!fast && preDelay > 0) {
                     await sleep(preDelay);
                 }
 
@@ -181,15 +183,17 @@ class PageController {
                 randomX = Math.max(box.x + marginX, Math.min(box.x + box.width - marginX, randomX));
                 randomY = Math.max(box.y + marginY, Math.min(box.y + box.height - marginY, randomY));
 
-                // Move mouse human-like to target
-                await this.moveMouseHumanLike(randomX, randomY);
+                // Move mouse to target
+                await this.moveMouseHumanLike(randomX, randomY, fast);
 
-                // Tiny hesitation before click (human-like)
-                await sleep(randomDelay(50, 150));
+                // Tiny hesitation before click
+                if (!fast) {
+                    await sleep(randomDelay(50, 150));
+                }
 
                 // Perform randomized click
                 await this.page.mouse.click(randomX, randomY);
-                logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
+                this.logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
                 // Wait after click
                 if (waitAfter) {
@@ -199,7 +203,7 @@ class PageController {
                 return true;
             } catch (error) {
                 if (!silent) {
-                    logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                    this.logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
                 }
                 if (attempt === maxRetries) {
                     throw error;
@@ -212,7 +216,7 @@ class PageController {
     /**
      * Move mouse cursor naturally
      */
-    async moveMouseHumanLike(targetX, targetY) {
+    async moveMouseHumanLike(targetX, targetY, fast = false) {
         try {
             const start = this.lastMousePos;
             const end = { x: targetX, y: targetY };
@@ -229,13 +233,15 @@ class PageController {
 
             for (const point of points) {
                 await this.page.mouse.move(point.x, point.y);
-                // Tiny variable delay between points for human-like speed jitter
-                await sleep(getRandomInRange(2, 8));
+                if (!fast) {
+                    // Tiny variable delay between points for human-like speed jitter
+                    await sleep(getRandomInRange(2, 8));
+                }
             }
 
             this.lastMousePos = end;
         } catch (e) {
-            logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
+            this.logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
         }
     }
 
@@ -263,7 +269,7 @@ class PageController {
      */
     async goto(url, options = {}) {
         return this.retryOnNetworkError(async () => {
-            logger.info(`[Core] Navigating to: ${url}`);
+            this.logger.info(`[Core] Navigating to: ${url}`);
             return await this.page.goto(url, {
                 waitUntil: 'domcontentloaded',
                 timeout: 60000, // 60s timeout
@@ -289,12 +295,12 @@ class PageController {
         try {
             // Check if browser/page is still accessible
             if (this.page.isClosed && this.page.isClosed()) {
-                logger.warn('[Debug] Cannot take screenshot: Page is closed');
+                this.logger.warn('[Debug] Cannot take screenshot: Page is closed');
                 return;
             }
             // Puppeteer specific check if browser is connected
             if (this.page.browser && !this.page.browser().isConnected()) {
-                logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
+                this.logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
                 return;
             }
 
@@ -306,13 +312,13 @@ class PageController {
             const filename = path.join(dir, `${namePrefix}_${timestamp}.png`);
 
             await this.page.screenshot({ path: filename, fullPage: true });
-            logger.info(`[Debug] Screenshot saved: ${filename}`);
+            this.logger.info(`[Debug] Screenshot saved: ${filename}`);
         } catch (error) {
             // Suppress errors during screenshot if they are due to closing
             if (this.isNetworkError(error) || error.message.includes('Target closed')) {
-                logger.debug(`[Debug] Screenshot skipped (browser closed)`);
+                this.logger.debug(`[Debug] Screenshot skipped (browser closed)`);
             } else {
-                logger.error(`[Error] Failed to take screenshot: ${error.message}`);
+                this.logger.error(`[Error] Failed to take screenshot: ${error.message}`);
             }
         }
     }
