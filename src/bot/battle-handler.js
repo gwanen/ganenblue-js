@@ -27,91 +27,29 @@ class BattleHandler {
         this.stopped = true;
     }
 
-    async isWiped() {
-        if (!this.controller.isAlive()) return false;
-
-        return await this.controller.page.evaluate(() => {
-            // 1. Check for party wipe buttons (Cheer/Salute)
-            const wipeSelectors = ['.btn-cheer', '.btn-salute'];
-            for (const sel of wipeSelectors) {
-                const el = document.querySelector(sel);
-                // Note: mid-battle cheer popups also have these buttons. 
-                // We check if it's the "Unable to Continue" screen or just a поддеркa prompt.
-                if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
-                    const header = document.querySelector('.prt-popup-header');
-                    if (header && header.textContent.includes('Unable to Continue')) return true;
-                    // If it's just the 'Salute Participants' (Cheer) popup, it's NOT necessarily a wipe.
-                    const isSalutePopup = !!document.querySelector('.pop-cheer.pop-show');
-                    if (!isSalutePopup) return true;
-                }
-            }
-
-            // 2. Check for "You were defeated" popups/text
-            const bodyText = document.body.innerText.toLowerCase();
-            if (bodyText.includes('you were defeated') || bodyText.includes('battle has ended')) {
-                // Verify it's in a popup or major container, not just random text
-                const visiblePopup = document.querySelector('.pop-show, .prt-popup-body, .prt-result');
-                if (visiblePopup && (visiblePopup.offsetWidth > 0 || visiblePopup.offsetHeight > 0)) {
-                    return true;
-                }
-            }
-
-            // 3. Check for Elixir prompt (appears when team is wiped)
-            const elixirPrompt = document.querySelector('.pop-use-elixir, .img-elixir');
-            if (elixirPrompt && (elixirPrompt.offsetWidth > 0 || elixirPrompt.offsetHeight > 0)) {
-                return true;
-            }
-
-            // 4. Check for End-of-Battle popups (Assist Raid ended, Conclusion, etc.)
-            const conclusionPopups = ['.pop-result-assist-raid.pop-show', '.pop-rematch-fail.pop-show', '.pop-conclusion'];
-            for (const sel of conclusionPopups) {
-                const el = document.querySelector(sel);
-                if (el && (el.offsetWidth > 0 || el.style.display === 'block')) {
-                    const text = el.textContent.toLowerCase();
-                    if (text.includes('ended') || text.includes('defeated') || text.includes('concluded') || text.includes('home screen')) {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        });
-    }
 
     async executeBattle(mode = 'full_auto', options = {}) {
         this.stopped = false;
-        this.options = options; // Store options like honorTarget
+        this.options = options;
         this.battleStartTime = Date.now();
-        this.lastAttackTurn = 0; // Track turn number of last SA attack
-        this.lastReloadTurn = 0; // Track last turn where animation skipping occurred
+        this.lastAttackTurn = 0;
+        this.lastReloadTurn = 0;
         this.logger.info(`[Battle] Engaging combat (${mode})`);
 
         try {
-            // Optimization: Skip wait if already finished
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#result')) {
                 return await this.waitForBattleEnd(mode);
             }
 
-            // User Optimization: Refresh on start to skip entrance animations
             if (options.refreshOnStart) {
                 this.logger.info('[Battle] Refreshing to skip animations');
                 await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                 await sleep(this.fastRefresh ? 200 : 500);
 
-                // Immediately check for "Raid is Full" popup after reload — don't wait 10s for the Auto button
-                const raidFullAfterRefresh = await this.controller.page.evaluate(() => {
-                    const popup = document.querySelector('.pop-usual.common-pop-error.pop-show');
-                    if (!popup || popup.offsetWidth === 0) return false;
-                    const body = popup.querySelector('.txt-popup-body');
-                    return body && body.textContent.includes('raid battle is full');
-                }).catch(() => false);
-
-                if (raidFullAfterRefresh) {
-                    this.logger.info('[Raid] Raid is full (detected post-refresh). Dismissing and skipping');
-                    await this.controller.page.click('.pop-usual.common-pop-error.pop-show .btn-usual-ok').catch(() => { });
-                    await sleep(300);
-                    return { duration: 0, turns: 0, raidFull: true };
+                const earlyStateAfterRefresh = await this.checkEarlyBattleEndPopup();
+                if (earlyStateAfterRefresh) {
+                    return earlyStateAfterRefresh;
                 }
             }
 
@@ -119,9 +57,7 @@ class BattleHandler {
                 throw new Error('Battle failed: Page crashed or disconnected');
             }
 
-            // Wait for battle screen to load (look for Auto button in FA, Attack button in SA)
             const loadSelector = mode === 'semi_auto' ? this.selectors.attackButton : '.btn-auto';
-            // Optimization: Wait 10s initially as requested by user
             let battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
 
             if (!battleLoaded) {
@@ -130,22 +66,11 @@ class BattleHandler {
                 }
                 const currentUrl = this.controller.page.url();
 
-                // Fallback: Check for "Raid is Full" popup (e.g. if it appeared after the 10s wait)
-                const isRaidFull = await this.controller.page.evaluate(() => {
-                    const popup = document.querySelector('.pop-usual.common-pop-error.pop-show');
-                    if (!popup || popup.offsetWidth === 0) return false;
-                    const body = popup.querySelector('.txt-popup-body');
-                    return body && body.textContent.includes('raid battle is full');
-                }).catch(() => false);
-
-                if (isRaidFull) {
-                    this.logger.info('[Raid] Raid is full. Dismissing and skipping');
-                    await this.controller.page.click('.pop-usual.common-pop-error.pop-show .btn-usual-ok').catch(() => { });
-                    await sleep(300);
-                    return { duration: 0, turns: 0, raidFull: true };
+                const earlyStateFallback = await this.checkEarlyBattleEndPopup();
+                if (earlyStateFallback) {
+                    return earlyStateFallback;
                 }
 
-                // If we are on a raid page but button is missing, check for Salute popup before refreshing
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     const dismissed = await this.dismissSalutePopup();
                     if (dismissed) {
@@ -169,9 +94,7 @@ class BattleHandler {
                 }
             }
 
-            // FA Speed Optimization: Removed the 500-1000ms delay here
-
-            // Proactive Turn Fetch: Capture turn count immediately upon entry
+            // Proactive Turn Fetch
             const initialTurns = await this.getTurnNumber();
             if (initialTurns > 0) {
                 this.logger.info(`[Battle] Starting at Turn ${initialTurns}`);
@@ -216,8 +139,6 @@ class BattleHandler {
                 this.logger.debug('[Battle] Interrupted by browser navigation or stop');
             } else {
                 this.logger.error(`[Error] Battle execution failed: ${error.message}`);
-
-                // Safety: If battle failed to load because of a redirect, stop the bot
                 if (error.message.includes('Battle failed to load')) {
                     this.logger.warn('[Safety] Battle failed to load. Halting bot for safety');
                     this.stop();
@@ -225,11 +146,9 @@ class BattleHandler {
                     await this.controller.takeScreenshot('error_battle');
                 }
             }
-            // Return empty result to avoid breaking stats update loop
             return { duration: 0, turns: 0 };
         } finally {
-            // Note: NetworkListener is managed by the shared PageController — do NOT stop it here.
-            // It is stopped only when the bot session fully ends via controller.stop().
+            // NetworkListener is managed by PageController — stopped only when session ends.
         }
     }
 
@@ -906,6 +825,47 @@ class BattleHandler {
             }
             return false;
         }).catch(() => false);
+    }
+    /**
+     * Checks if the battle cannot be played due to "Raid is full" or "Already ended" popups.
+     * Clicks OK and returns early result state if found.
+     */
+    async checkEarlyBattleEndPopup() {
+        const state = await this.controller.page.evaluate(() => {
+            // 1. Specific check: GBF's raid-ended popup (pop-result-assist-raid).
+            //    The btn-usual-ok in this popup is empty (no dimensions), so we can't
+            //    rely on offsetWidth check. Check the container class directly instead.
+            const assistRaidPopup = document.querySelector('.pop-result-assist-raid.pop-show');
+            if (assistRaidPopup && assistRaidPopup.offsetWidth > 0) {
+                const body = assistRaidPopup.querySelector('#popup-body, .txt-popup-body, .prt-popup-body');
+                const text = body ? body.textContent.toLowerCase() : '';
+                if (text.includes('already ended') || text.includes('home screen will now appear')) return 'ended';
+            }
+
+            // 2. Generic check: visible OK button + popup body text
+            const okBtn = document.querySelector('.btn-usual-ok');
+            if (!okBtn || okBtn.offsetWidth === 0) return null;
+
+            const body = document.querySelector('.txt-popup-body') || document.querySelector('.prt-popup-body');
+            if (!body) return null;
+
+            const text = body.textContent.toLowerCase();
+            if (text.includes('raid battle is full')) return 'full';
+            if (text.includes('already ended') || text.includes('home screen will now appear') || text.includes('pending battles')) return 'ended';
+            return null;
+        }).catch(() => null);
+
+        if (state) {
+            this.logger.info(`[Raid] Raid is ${state}. Dismissing and skipping`);
+            await this.controller.page.evaluate(() => {
+                const btn = document.querySelector('.pop-result-assist-raid .btn-usual-ok') ||
+                    document.querySelector('.btn-usual-ok');
+                if (btn) btn.click();
+            }).catch(() => { });
+            await sleep(800);
+            return { duration: 0, turns: 0, raidFull: state === 'full', raidEnded: state === 'ended' };
+        }
+        return null;
     }
 }
 

@@ -58,37 +58,38 @@ class QuestBot {
         notifier.notifySessionStart(this.profileId || 'p1', this.isReplicard ? 'replicard' : 'quest').catch(e => this.logger.debug('[Notifier] Failed to notify start', e));
 
         try {
-            while (this.isRunning) {
-                if (this.isPaused) {
-                    await sleep(1000);
-                    continue;
-                }
+            try {
+                while (this.isRunning) {
+                    if (this.isPaused) {
+                        await sleep(1000);
+                        continue;
+                    }
 
-                // Check quest limit
-                if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    this.logger.info(`[Status] Limit reached: ${this.questsCompleted}/${this.maxQuests}`);
-                    break;
-                }
+                    // Check quest limit
+                    if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
+                        this.logger.info(`[Status] Limit reached: ${this.questsCompleted}/${this.maxQuests}`);
+                        break;
+                    }
 
-                const success = await this.runSingleQuest();
-                // Fix #1: Only increment on confirmed successful completion
-                if (success) {
-                    this.questsCompleted++;
+                    const success = await this.runSingleQuest();
+                    if (success) {
+                        this.questsCompleted++;
+                    }
+                    await sleep(200);
                 }
-                await sleep(200);
-            }
-        } catch (error) {
-            // Graceful exit on browser close/disconnect
-            if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                this.logger.info('[System] Session terminated (Browser closed)');
-            } else {
-                this.logger.error('[Error] [Bot] Bot error:', error);
-                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
-                await this.controller.takeScreenshot('error_bot');
-                throw error;
+            } catch (error) {
+                // Graceful exit on browser close/disconnect
+                if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
+                    this.logger.info('[System] Session terminated (Browser closed)');
+                } else {
+                    this.logger.error('[Error] [Bot] Bot error:', error);
+                    notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
+                    await this.controller.takeScreenshot('error_bot');
+                    throw error;
+                }
             }
         } finally {
-            this.isRunning = false;
+            this.stop();
         }
     }
 
@@ -97,10 +98,7 @@ class QuestBot {
 
         // Navigate to quest
         await this.controller.goto(this.questUrl);
-        // Snappy navigation delay
         await sleep(50);
-
-        // ... rest of the code ...
 
         // Check for existing battle state (Redirected or Resume)
         const currentUrl = this.controller.page.url();
@@ -110,7 +108,6 @@ class QuestBot {
         const okButton = await this.controller.page.evaluate(() => {
             const btn = document.querySelector('.btn-usual-ok');
             if (!btn) return false;
-            // If the button is inside a deck selection popup, it's not a "battle end" state
             const isDeckPopup = !!btn.closest('.pop-deck');
             const isVisible = btn.offsetWidth > 0 && btn.offsetHeight > 0;
             return isVisible && !isDeckPopup;
@@ -120,9 +117,7 @@ class QuestBot {
         if (isBattle) {
             this.logger.info('[Quest] Battle or results detected. Resuming combat...');
 
-            if (!this.isRunning) return false; // Fix #5: isRunning guard
-
-            // Fix #2: Capture initial honors for summary calculation in the resume path
+            if (!this.isRunning) return false;
             const initialHonors = await this.battle.getHonors();
 
             const result = await this.battle.executeBattle(this.battleMode, {

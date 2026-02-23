@@ -54,38 +54,40 @@ class RaidBot {
         notifier.notifySessionStart(this.profileId || 'p1', 'raid').catch(e => this.logger.debug('[Notifier] Failed to notify start', e));
 
         try {
-            while (this.isRunning) {
-                if (this.isPaused) {
-                    await sleep(1000);
-                    continue;
-                }
+            try {
+                while (this.isRunning) {
+                    if (this.isPaused) {
+                        await sleep(1000);
+                        continue;
+                    }
 
-                // Check raid limit
-                if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
-                    this.logger.info(`[Status] Raid limit reached: ${this.raidsCompleted}/${this.maxRaids}`);
-                    break;
-                }
+                    // Check raid limit
+                    if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
+                        this.logger.info(`[Status] Raid limit reached: ${this.raidsCompleted}/${this.maxRaids}`);
+                        break;
+                    }
 
-                const success = await this.runSingleRaid();
-                if (success) {
-                    this.raidsCompleted++;
-                }
+                    const success = await this.runSingleRaid();
+                    if (success) {
+                        this.raidsCompleted++;
+                    }
 
-                // Short delay between raids
-                await sleep(500);
-            }
-        } catch (error) {
-            // Graceful exit on browser close/disconnect
-            if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                this.logger.info('[System] Session terminated (Browser closed)');
-            } else {
-                this.logger.error('[Error] [Bot] Raid bot error:', error);
-                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
-                await this.controller.takeScreenshot('error_raid');
-                throw error;
+                    // Short delay between raids
+                    await sleep(500);
+                }
+            } catch (error) {
+                // Graceful exit on browser close/disconnect
+                if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
+                    this.logger.info('[System] Session terminated (Browser closed)');
+                } else {
+                    this.logger.error('[Error] [Bot] Raid bot error:', error);
+                    notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
+                    await this.controller.takeScreenshot('error_raid');
+                    throw error;
+                }
             }
         } finally {
-            this.isRunning = false;
+            this.stop();
         }
     }
 
@@ -182,14 +184,12 @@ class RaidBot {
     }
 
     async findAndJoinRaid() {
-        // Navigate to raid backup page
         this.logger.info('[Raid] Navigating to backup page...');
         await this.controller.goto(this.raidBackupUrl);
-        // Snappy navigation delay
         await sleep(100);
 
         let attempts = 0;
-        const maxAttempts = 10; // Prevent infinite loops
+        const maxAttempts = 10;
 
         while (attempts < maxAttempts && this.isRunning) {
             attempts++;
@@ -252,7 +252,7 @@ class RaidBot {
                             const raceResult = await Promise.race([
                                 this.controller.waitForElement('.prt-supporter-list', 3000).then(res => res ? 'summon' : null),
                                 this.controller.waitForElement('.btn-usual-ok', 3000).then(res => res ? 'ok_btn' : null),
-                                this.controller.waitForElement('#pop-error', 1000).then(res => res ? 'error' : null), // Fast check for error
+                                this.controller.waitForElement('#pop-error', 1000).then(res => res ? 'error' : null),
                                 this.controller.waitForElement('.cnt-raid', 3000).then(res => res ? 'battle' : null)
                             ]);
 
@@ -316,7 +316,6 @@ class RaidBot {
 
                 try {
                     await this.controller.clickSafe(raidSelector);
-                    // Optimization: Adjusted sleep to 200ms (User request)
                     await sleep(200);
 
                     // fast check for result/summon screen immediately
@@ -346,14 +345,8 @@ class RaidBot {
                         return true;
                     }
 
-                    // Check for error popup after clicking
                     const clickError = await this.handleErrorPopup();
                     if (clickError.detected) {
-                        // Check if the "error" was actually a confirmation that led to success
-                        // (Sometimes user clicks raid -> "You joined!" popup -> Battle)
-                        // But usually "You joined" is just a transition.
-                        // If it's battle full/ended, we handle it.
-
                         // Re-check URL after clicking OK on popup
                         const urlAfterPopup = this.controller.page.url();
                         if (urlAfterPopup.includes('#raid') || urlAfterPopup.includes('_raid') || await this.controller.elementExists('.prt-supporter-list', 100)) {
@@ -406,7 +399,27 @@ class RaidBot {
     }
 
     async handleErrorPopup() {
-        // Check for error popup with class "prt-popup-footer" containing "btn-usual-ok"
+        // Priority: GBF's raid-ended popup (pop-result-assist-raid) uses an empty btn-usual-ok
+        // with no dimensions, so elementExists with visible:true fails. Check container class instead.
+        const assistRaidEnded = await this.controller.page.evaluate(() => {
+            const popup = document.querySelector('.pop-result-assist-raid.pop-show');
+            if (!popup || popup.offsetWidth === 0) return null;
+            const body = popup.querySelector('#popup-body, .txt-popup-body, .prt-popup-body');
+            return body ? body.innerText.trim().toLowerCase() : null;
+        }).catch(() => null);
+
+        if (assistRaidEnded) {
+            this.logger.info(`[Wait] Raid-ended popup detected: ${assistRaidEnded}`);
+            // Click OK even if it has no dimensions (use evaluate for reliability)
+            await this.controller.page.evaluate(() => {
+                const btn = document.querySelector('.pop-result-assist-raid .btn-usual-ok');
+                if (btn) btn.click();
+            }).catch(() => { });
+            await sleep(800); // Wait for redirect to assist page
+            return { detected: true, text: assistRaidEnded };
+        }
+
+        // Check for generic error popup with class "prt-popup-footer" containing "btn-usual-ok"
         // Use visible: true to avoid clicking phantom/closing popups
         const errorPopupSelector = '.prt-popup-footer .btn-usualok, .prt-popup-footer .btn-usual-ok';
         const bodySelector = '.txt-popup-body';
@@ -497,7 +510,7 @@ class RaidBot {
         // Wait for summon screen (Faster check interval)
         let retryCount = 0;
         while (retryCount < 15) { // 3s total
-            // Optimization: If battle detected, skip summon selection
+            // Wait for summon list, OK button, error popup, or direct battle join
             const instantBattle = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
                 const att = document.querySelector('.btn-attack-start');
@@ -515,7 +528,7 @@ class RaidBot {
                 break;
             }
 
-            // Optimization: Check for OK confirmation popup INSIDE the loop for faster reaction
+            // Check for OK confirmation popup before giving up on the wait
             if (await this.controller.elementExists('.btn-usual-ok', 50, true)) {
                 this.logger.info('[Summon] OK button detected during wait. Breaking loop');
                 break;
@@ -525,10 +538,7 @@ class RaidBot {
             await sleep(200);
         }
 
-        // Check for 'btn-usual-ok' (Confirmation popup)
-        const okFound = await this.controller.elementExists('.btn-usual-ok', 200, true);
         if (okFound) {
-            // Priority: Check if the OK button belongs to a "Battle Concluded" popup first
             const error = await this.handleErrorPopup();
             if (error.detected) {
                 if (error.text.includes('already ended') || error.text.includes('defeated')) return 'ended';

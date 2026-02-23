@@ -26,10 +26,17 @@ class NetworkListener extends EventEmitter {
 
     stop() {
         if (!this.isListening) return;
+        this.page.off('request', this._handleResponse); // Just in case
         this.page.off('response', this._handleResponse);
         this.isListening = false;
         this.logger.info('[Network] Listener stopped');
     }
+
+    clearAllListeners() {
+        this.removeAllListeners();
+        this.logger.debug('[Network] All internal listeners cleared');
+    }
+
 
     async _handleResponse(response) {
         try {

@@ -46,7 +46,7 @@ class PageController {
     }
 
     async disableResourceBlocking() {
-        if (!this.blockingEnabled) return;
+        if (!this.requestHandler && !this.blockingEnabled) return;
 
         if (this.requestHandler) {
             this.page.off('request', this.requestHandler);
@@ -54,13 +54,16 @@ class PageController {
         }
 
         try {
-            await this.page.setRequestInterception(false);
+            // Only attempt to disable if the page is still open
+            if (!this.page.isClosed()) {
+                await this.page.setRequestInterception(false);
+                this.logger.info('[Performance] Resource blocking disabled');
+            }
         } catch (e) {
-            // Ignore if already disabled or context lost
+            // Ignore if context lost or already disabled
         }
 
         this.blockingEnabled = false;
-        this.logger.info('[Performance] Resource blocking disabled');
     }
 
     /**
@@ -69,6 +72,7 @@ class PageController {
     async stop() {
         if (this.network) {
             this.network.stop();
+            this.network.clearAllListeners();
         }
         await this.disableResourceBlocking();
     }
