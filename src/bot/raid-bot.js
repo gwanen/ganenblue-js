@@ -38,6 +38,8 @@ class RaidBot {
         this.isPaused = false;
         this.battleTimes = []; // Array to store battle durations
         this.battleTurns = []; // Array to store turn counts
+        this.lastEndHonor = 0;  // Honor at end of last raid (used for per-raid diff)
+        this.totalHonor = 0;    // Accumulated honor gained this session
     }
 
     async start() {
@@ -45,7 +47,9 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
-        this.startTime = Date.now(); // Fix #5: Remove duplicate startTime assignment
+        this.lastEndHonor = 0;
+        this.totalHonor = 0;
+        this.startTime = Date.now();
 
         this.logger.info('[System] Session started');
         this.logger.info(`[Status] Target: ${this.maxRaids === 0 ? 'Unlimited' : this.maxRaids} raids`);
@@ -142,13 +146,11 @@ class RaidBot {
             return;
         }
 
-        // Capture initial honors for summary calculation
-        const initialHonors = await this.battle.getHonors();
-
         // Handle battle
+        // Note: initialHonors is NOT read from the summon screen (it has no honor data).
+        // Instead, RaidBot tracks lastEndHonor across raids for accurate per-raid diffing.
         const result = await this.battle.executeBattle(this.battleMode, {
             honorTarget: this.honorTarget,
-            initialHonors,
             refreshOnStart: true // User requested refresh after join to skip animations
         });
 
@@ -318,59 +320,55 @@ class RaidBot {
                     await this.controller.clickSafe(raidSelector);
                     await sleep(200);
 
-                    // fast check for result/summon screen immediately
-                    if (await this.controller.elementExists('.prt-supporter-list', 200)) {
-                        this.logger.info('[Raid] Click successful (Summon detected)');
-                        return true;
-                    }
+                    // Wait up to 3s for either: summon screen (success) OR any OK popup (error/confirm)
+                    // GBF may briefly pass through the assist page before landing on summon — the longer
+                    // window handles that redirect without falling through to unknown state.
+                    const joinResult = await this.controller.page.waitForSelector(
+                        '.prt-supporter-list, .btn-usual-ok',
+                        { timeout: 3000 }
+                    ).then(el => el).catch(() => null);
 
-                    if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
-                        const isPopup = await this.controller.page.evaluate(() => {
-                            const btn = document.querySelector('.btn-usual-ok');
-                            return btn && (btn.closest('.prt-popup-footer') || btn.closest('.pop-usual'));
-                        });
-                        if (!isPopup) {
-                            this.logger.info('[Raid] Click successful (OK detected)');
-                            return true;
-                        }
-                    }
-
-                    // Check if we successfully joined (moved to summon screen or battle)
-                    const currentUrl = this.controller.page.url();
-                    const onSummonScreen = await this.controller.elementExists('.prt-supporter-list', 500);
-                    const inBattle = currentUrl.includes('#raid') || currentUrl.includes('_raid');
-
-                    if (onSummonScreen || inBattle) {
-                        this.logger.info('[Raid] Joing successful');
-                        return true;
-                    }
-
-                    const clickError = await this.handleErrorPopup();
-                    if (clickError.detected) {
-                        // Re-check URL after clicking OK on popup
-                        const urlAfterPopup = this.controller.page.url();
-                        if (urlAfterPopup.includes('#raid') || urlAfterPopup.includes('_raid') || await this.controller.elementExists('.prt-supporter-list', 100)) {
-                            this.logger.info('[Raid] Joined after popup confirmation');
+                    if (joinResult) {
+                        const onSummon = await this.controller.elementExists('.prt-supporter-list', 100);
+                        if (onSummon) {
+                            this.logger.info('[Raid] Join successful');
                             return true;
                         }
 
-                        if (clickError.text === 'max_raids_limit') {
-                            this.logger.warn('[Raid] Concurrent limit reached. Restarting cycle');
-                            return false;
-                        }
-
-                        if (clickError.text.includes('pending battles')) {
-                            this.logger.info('[System] Pending battles detected after join. Clearing...');
-                            await this.clearPendingBattles();
-                            await this.controller.goto(this.raidBackupUrl);
-                            await sleep(randomDelay(1500, 2500));
+                        // An OK button appeared — determine which one
+                        const clickError = await this.handleErrorPopup();
+                        if (clickError.detected) {
+                            if (clickError.text === 'max_raids_limit') {
+                                this.logger.warn('[Raid] Concurrent limit reached. Restarting cycle');
+                                return false;
+                            }
+                            if (clickError.text.includes('pending battles')) {
+                                this.logger.info('[System] Pending battles detected after join. Clearing...');
+                                await this.clearPendingBattles();
+                                await this.controller.goto(this.raidBackupUrl);
+                                await sleep(randomDelay(1500, 2500));
+                                continue;
+                            }
+                            // Raid full or ended
+                            this.logger.warn('[Raid] Raid was full or unavailable. Refreshing...');
+                            await this.refreshRaidSearch();
+                            await sleep(randomDelay(800, 1200));
                             continue;
                         }
 
-                        this.logger.warn('[Raid] Raid was full or unavailable. Refreshing...');
-                        await this.refreshRaidSearch();
-                        await sleep(randomDelay(800, 1200));
-                        continue;
+                        // OK btn present but handleErrorPopup didn't detect a known error — could be summon confirm OK
+                        const urlNow = this.controller.page.url();
+                        if (urlNow.includes('#raid') || urlNow.includes('_raid') || await this.controller.elementExists('.prt-supporter-list', 200)) {
+                            this.logger.info('[Raid] Joined after popup confirmation');
+                            return true;
+                        }
+                    } else {
+                        // Also check if we landed directly in battle (no summon screen)
+                        const urlNow = this.controller.page.url();
+                        if (urlNow.includes('#raid') || urlNow.includes('_raid')) {
+                            this.logger.info('[Raid] Join successful (direct battle)');
+                            return true;
+                        }
                     }
 
                     // Unknown state, refresh and retry
@@ -538,6 +536,7 @@ class RaidBot {
             await sleep(200);
         }
 
+        const okFound = await this.controller.elementExists('.btn-usual-ok', 100, true);
         if (okFound) {
             const error = await this.handleErrorPopup();
             if (error.detected) {
@@ -545,7 +544,7 @@ class RaidBot {
                 if (error.text.includes('pending battles')) return 'pending';
             }
 
-            this.logger.info('[Bot] Clicking confirmation popup');
+            this.logger.info('[Summon] Clicking start confirmation');
             await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true }).catch(() => {
                 this.logger.debug('[Wait] Confirmation popup vanished before click');
             });
@@ -737,6 +736,17 @@ class RaidBot {
         if (result.turns > 0) {
             this.totalTurns += result.turns;
         }
+
+        // Honor tracking: diff against the honor reading at the end of the last raid
+        if (result.honors > 0) {
+            const gained = result.honors - this.lastEndHonor;
+            if (gained > 0) {
+                this.totalHonor += gained;
+                this.logger.info(`[Summary] Honor gained this raid: +${gained.toLocaleString()} (Session total: ${this.totalHonor.toLocaleString()})`);
+            }
+            this.lastEndHonor = result.honors; // Always update baseline for next raid
+        }
+
         if (result.duration) {
             const ms = Math.floor(result.duration);
             this.battleTimes.push(ms);
@@ -788,7 +798,8 @@ class RaidBot {
             battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0,
             lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
-            rate: rate
+            rate: rate,
+            totalHonor: this.totalHonor || 0
         };
     }
 

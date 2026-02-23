@@ -114,14 +114,6 @@ class BattleHandler {
             const formattedTime = this.formatTime(this.lastBattleDuration);
             this.logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
 
-            // Calculate final honor difference (total gained during this battle execution)
-            // Note: result.honors is the absolute value at end. 
-            // We use the baseline captured by the bots or the first turn.
-            const totalGained = result.honors - (options.initialHonors || 0);
-            if (totalGained > 0) {
-                this.logger.info(`[Battle] Final Honor: ${result.honors.toLocaleString()} (+${totalGained.toLocaleString()})`);
-            }
-
             // Attach current honors to result for tracking
             this.lastHonors = result.honors; // Update lastHonors to current total
 
@@ -366,7 +358,11 @@ class BattleHandler {
             this.logger.debug('[SA] display-off wait timed out (turn may have ended)');
         });
 
-        // Step 4: Refresh to skip animations
+        // Step 4: Brief pause to allow in-flight network response (normal_attack_result.json)
+        // to finish parsing before page context is torn down. Prevents missing cmd:win/lose on one-shots.
+        await sleep(100);
+
+        // Step 5: Refresh to skip animations
         this.logger.info('[SA] Refreshing');
         await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
         await sleep(50);
@@ -379,6 +375,7 @@ class BattleHandler {
         const startTime = Date.now();
         // checkInterval will be dynamic inside the loop
         let missingUiCount = 0;
+        let lastHonorCheckTime = 0; // Throttle getHonors() to avoid IPC spam
 
         const currentUrl = this.controller.page.url();
         const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
@@ -413,15 +410,25 @@ class BattleHandler {
             }
         }
 
-        // Network Event Promise
+        // Network event flags
         let networkFinished = false;
-        const onBattleResult = () => {
-            this.logger.info('[Network] Battle end detected');
-            networkFinished = true;
-        };
+        let bossDied = false;
+        let partyWiped = false;
+        let summonUsed = false;
+        let networkTurn = turnCount; // Will be updated by battle:start events
+
+        const onBattleResult = () => { this.logger.info('[Network] Battle end detected'); networkFinished = true; };
+        const onBossDied = () => { bossDied = true; };
+        const onPartyWiped = () => { partyWiped = true; };
+        const onSummonUsed = () => { summonUsed = true; };
+        const onBattleStart = ({ turn }) => { if (turn > networkTurn) networkTurn = turn; };
 
         if (this.controller.network) {
             this.controller.network.once('battle:result', onBattleResult);
+            this.controller.network.on('battle:boss_died', onBossDied);
+            this.controller.network.on('battle:party_wiped', onPartyWiped);
+            this.controller.network.on('battle:summon_used', onSummonUsed);
+            this.controller.network.on('battle:start', onBattleStart);
         }
 
         try {
@@ -449,6 +456,49 @@ class BattleHandler {
                     }
                 }
 
+                // --- PRIORITY 0: Network end-state signals (fastest possible detection) ---
+                if (bossDied) {
+                    this.logger.info('[Network] Boss death confirmed. Refreshing to result page...');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(800);
+                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                }
+
+                if (partyWiped) {
+                    this.logger.info('[Network] Party wipe confirmed. Refreshing...');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(800);
+                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                }
+
+                // Summon animation skip: refresh as soon as summon_result.json received
+                if (summonUsed && mode !== 'semi_auto') {
+                    summonUsed = false;
+                    this.logger.debug('[Battle] Summon animation skip (refreshing)');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(this.fastRefresh ? 200 : 500);
+                    continue;
+                }
+
+                // Sync turn from network if ahead of DOM count
+                if (networkTurn > turnCount) {
+                    const honors = isRaid ? await this.getHonors() : 0;
+                    const diff = honors - previousHonors;
+                    if (isRaid) {
+                        this.logger.info(`[Turn ${networkTurn}] ${honors.toLocaleString()} honor${diff > 0 ? ` (+${diff.toLocaleString()})` : ''}`);
+                        previousHonors = honors;
+                        if (honorTarget > 0 && honors >= honorTarget) {
+                            this.logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(networkTurn, 1), honors, honorReached: true };
+                        }
+                    } else {
+                        this.logger.info(`[Turn ${networkTurn}]`);
+                    }
+                    lastTurn = networkTurn;
+                    turnCount = networkTurn;
+                    lastTurnChangeTime = Date.now();
+                }
+
                 if (networkFinished) {
                     // Short sleep to allow UI to update slightly (optional, but good for safety)
                     await sleep(200);
@@ -474,35 +524,32 @@ class BattleHandler {
                     const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
                     if (isRaid && honorTarget > 0) {
-                        const h = await this.getHonors();
-                        if (h >= honorTarget) {
-                            this.logger.info(`[Target] Honor goal reached periodically: ${h.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: h, honorReached: true };
+                        const now = Date.now();
+                        if (now - lastHonorCheckTime > 3000) { // Throttle: max once per 3s
+                            lastHonorCheckTime = now;
+                            const h = await this.getHonors();
+                            if (h >= honorTarget) {
+                                this.logger.info(`[Target] Honor goal reached periodically: ${h.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+                                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: h, honorReached: true };
+                            }
                         }
                     }
 
-                    // Stuck UI Watchdog: Reduced to 4s from 10s
                     const idleTime = Date.now() - lastTurnChangeTime;
-                    if (idleTime > 4000) {
-                        this.logger.warn(`[Watchdog] UI stuck for ${Math.round(idleTime / 1000)}s. Refreshing`);
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(800);
 
-                        if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
-                        }
+                    // FA watchdog: only trigger when attack button is display-on (idle at turn start)
+                    // If button is display-off or absent, attack is processing — not a stall
+                    if (idleTime > 5000 && isRaid && mode === 'full_auto') {
+                        const attackIdling = await this.controller.page.evaluate((sel) => {
+                            const btn = document.querySelector(sel.attackButton);
+                            return btn ? btn.classList.contains('display-on') : false;
+                        }, this.selectors);
 
-                        lastTurnChangeTime = Date.now(); // Reset
-                        continue;
-                    }
-
-                    // Original watchdog logic for FA re-activation (if needed after refresh/stuck)
-                    if (idleTime > 2000 && isRaid && mode === 'full_auto') {
-                        const isFaActive = await this.verifyFullAutoState();
-                        if (!isFaActive && !this.stopped) {
-                            this.logger.warn('[Watchdog] Full Auto dropped. Re-activating...');
-                            await this.handleFullAuto();
-                            lastTurnChangeTime = Date.now(); // Reset after re-activation attempt
+                        if (attackIdling && !this.stopped) {
+                            this.logger.warn('[Battle] Full Auto stalled. Refreshing to recover...');
+                            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                            await sleep(this.fastRefresh ? 200 : 500);
+                            lastTurnChangeTime = Date.now();
                         }
                     }
                 }
@@ -617,12 +664,16 @@ class BattleHandler {
                     }
                 }
 
-                await sleep(100);
+                await sleep(200);
             }
             throw new Error('Battle timeout');
         } finally {
             if (this.controller.network) {
                 this.controller.network.off('battle:result', onBattleResult);
+                this.controller.network.off('battle:boss_died', onBossDied);
+                this.controller.network.off('battle:party_wiped', onPartyWiped);
+                this.controller.network.off('battle:summon_used', onSummonUsed);
+                this.controller.network.off('battle:start', onBattleStart);
             }
         }
     }

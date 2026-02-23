@@ -42,18 +42,70 @@ class NetworkListener extends EventEmitter {
         try {
             const url = response.url();
 
-            // Fast pre-filter: Only process GBF result endpoints.
-            // This avoids calling response.headers() on every CDN image/font/stylesheet response,
-            // which was causing significant CPU overhead when 2+ profiles ran simultaneously.
+            // Fast pre-filter: Only process GBF API endpoints.
             if (!url.includes('granbluefantasy.jp')) return;
-            if (!url.includes('/result.json')) return;
 
-            // Only now do we confirm by checking the content type header
-            const contentType = response.headers()['content-type'];
-            if (contentType && contentType.includes('application/json')) {
-                this.logger.info('[Network] Detected Result JSON');
-                this.emit('battle:result', { url, time: Date.now() });
+            // --- Battle end (existing) ---
+            if (url.includes('/result.json')) {
+                const contentType = response.headers()['content-type'];
+                if (contentType && contentType.includes('application/json')) {
+                    this.logger.info('[Network] Detected Result JSON');
+                    this.emit('battle:result', { url, time: Date.now() });
+                }
+                return;
             }
+
+            // --- Turn number (fires on every page refresh in raid) ---
+            if (url.includes('/rest/multiraid/start.json')) {
+                const json = await response.json().catch(() => null);
+                const turn = json?.turn ?? null;
+                if (turn !== null) {
+                    this.logger.debug(`[Network] Battle start received (turn: ${turn})`);
+                    this.emit('battle:start', { turn });
+                }
+                return;
+            }
+
+            // --- Attack/Ability/Summon result: boss death, party wipe, and turn number ---
+            if (url.includes('/rest/multiraid/') && (
+                url.includes('_attack_result.json') ||
+                url.includes('ability_result.json') ||
+                url.includes('summon_result.json')
+            )) {
+                const json = await response.json().catch(() => null);
+                if (!json) return;
+
+                // Turn number is also in status.turn of attack results
+                const statusTurn = json?.status?.turn ?? null;
+                if (statusTurn !== null) {
+                    this.emit('battle:start', { turn: statusTurn });
+                }
+
+                const scenario = json?.scenario ?? [];
+                let terminalFound = false;
+                for (const entry of scenario) {
+                    if (entry.cmd === 'win') {
+                        // cmd:win is the definitive battle-over signal (follows cmd:die)
+                        this.logger.info('[Network] Battle won (cmd:win detected)');
+                        this.emit('battle:boss_died', {});
+                        terminalFound = true;
+                        break;
+                    }
+                    if (entry.cmd === 'lose') {
+                        this.logger.info('[Network] Party wipe detected (cmd:lose)');
+                        this.emit('battle:party_wiped', {});
+                        terminalFound = true;
+                        break;
+                    }
+                }
+
+                // If summon was used and battle is still ongoing, signal for animation skip
+                if (!terminalFound && url.includes('summon_result.json')) {
+                    this.emit('battle:summon_used');
+                }
+                return;
+            }
+
         } catch (error) {
             // Ignore errors reading response (e.g. navigation closing context)
         }
