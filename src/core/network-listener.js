@@ -99,9 +99,14 @@ class NetworkListener extends EventEmitter {
                     }
                 }
 
-                // If summon was used and battle is still ongoing, signal for animation skip
-                if (!terminalFound && url.includes('summon_result.json')) {
-                    this.emit('battle:summon_used');
+                if (!terminalFound) {
+                    if (url.includes('summon_result.json')) {
+                        this.emit('battle:summon_used');
+                    } else if (url.includes('ability_result.json')) {
+                        this.emit('battle:ability_used');
+                    } else if (url.includes('_attack_result.json') || url.includes('normal_attack_result.json')) {
+                        this.emit('battle:attack_used');
+                    }
                 }
                 return;
             }
