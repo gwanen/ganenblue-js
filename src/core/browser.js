@@ -68,7 +68,6 @@ class BrowserManager {
         this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
         this.logger.info(`[System] Launching with profile: ${this.userDataDir}`);
 
-
         // Prepare launch options
         const launchArgs = [
             '--disable-blink-features=AutomationControlled',
@@ -230,7 +229,7 @@ class BrowserManager {
             this.browser = null;
         }
 
-        // Fix #3: Synchronous cleanup — avoids setTimeout firing after process exits on Windows
+        // Synchronous cleanup — avoids setTimeout firing after process exits on Windows
         if (this.userDataDir && existsSync(this.userDataDir)) {
             try {
                 rmSync(this.userDataDir, { recursive: true, force: true });

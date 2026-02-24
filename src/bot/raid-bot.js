@@ -325,7 +325,7 @@ class RaidBot {
                     // window handles that redirect without falling through to unknown state.
                     const joinResult = await this.controller.page.waitForSelector(
                         '.prt-supporter-list, .btn-usual-ok',
-                        { timeout: 3000 }
+                        { timeout: 5000 }
                     ).then(el => el).catch(() => null);
 
                     if (joinResult) {
@@ -336,7 +336,10 @@ class RaidBot {
                         }
 
                         // An OK button appeared — determine which one
-                        const clickError = await this.handleErrorPopup();
+                        const clickError = await this.handleErrorPopup().catch(e => {
+                            this.logger.warn('[Raid] Error reading popup:', e.message);
+                            return { detected: false, text: '' };
+                        });
                         if (clickError.detected) {
                             if (clickError.text === 'max_raids_limit') {
                                 this.logger.warn('[Raid] Concurrent limit reached. Restarting cycle');
@@ -538,7 +541,10 @@ class RaidBot {
 
         const okFound = await this.controller.elementExists('.btn-usual-ok', 100, true);
         if (okFound) {
-            const error = await this.handleErrorPopup();
+            const error = await this.handleErrorPopup().catch(e => {
+                this.logger.warn('[Summon] Error reading popup:', e.message);
+                return { detected: false, text: '' };
+            });
             if (error.detected) {
                 if (error.text.includes('already ended') || error.text.includes('defeated')) return 'ended';
                 if (error.text.includes('pending battles')) return 'pending';
@@ -591,6 +597,14 @@ class RaidBot {
 
                 if (!clickSuccess) this.logger.warn('[Wait] Failed to click start confirmation properly');
                 await sleep(300);
+
+                // Check for error popup after clicking OK (edge case: battle ended or pending battles
+                // filled up between supporter selection and confirming).
+                const postClickError = await this.handleErrorPopup().catch(() => ({ detected: false, text: '' }));
+                if (postClickError.detected) {
+                    if (postClickError.text.includes('already ended') || postClickError.text.includes('defeated')) return 'ended';
+                    if (postClickError.text.includes('pending battles')) return 'pending';
+                }
             }
 
             return await this.validatePostClick();
@@ -615,6 +629,13 @@ class RaidBot {
                         this.logger.debug('[Summon] Fallback confirmation vanished before click');
                     });
                     await sleep(300);
+
+                    // Check for pending battles / battle ended after confirmation click
+                    const fallbackError = await this.handleErrorPopup().catch(() => ({ detected: false, text: '' }));
+                    if (fallbackError.detected) {
+                        if (fallbackError.text.includes('already ended') || fallbackError.text.includes('defeated')) return 'ended';
+                        if (fallbackError.text.includes('pending battles')) return 'pending';
+                    }
 
                     return await this.validatePostClick();
                 }

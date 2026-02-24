@@ -67,7 +67,7 @@ class NetworkListener extends EventEmitter {
             }
 
             // --- Attack/Ability/Summon result: boss death, party wipe, and turn number ---
-            if (url.includes('/rest/multiraid/') && (
+            if ((url.includes('/rest/multiraid/') || url.includes('/rest/raid/')) && (
                 url.includes('_attack_result.json') ||
                 url.includes('ability_result.json') ||
                 url.includes('summon_result.json')
@@ -82,26 +82,24 @@ class NetworkListener extends EventEmitter {
                 }
 
                 const scenario = json?.scenario ?? [];
-                let terminalFound = false;
                 for (const entry of scenario) {
                     if (entry.cmd === 'win') {
                         // cmd:win is the definitive battle-over signal (follows cmd:die)
                         this.logger.info('[Network] Battle won (cmd:win detected)');
                         this.emit('battle:boss_died', {});
-                        terminalFound = true;
                         break;
                     }
                     if (entry.cmd === 'lose') {
                         this.logger.info('[Network] Party wipe detected (cmd:lose)');
                         this.emit('battle:party_wiped', {});
-                        terminalFound = true;
                         break;
                     }
                 }
 
-                // If summon was used and battle is still ongoing, signal for animation skip
-                if (!terminalFound && url.includes('summon_result.json')) {
-                    this.emit('battle:summon_used');
+                // If regular attack was used, signal that payload was safely parsed
+                // (Used by FA to know it's safe to refresh the page without aborting the request)
+                if (url.includes('_attack_result.json')) {
+                    this.emit('battle:attack_result');
                 }
                 return;
             }
