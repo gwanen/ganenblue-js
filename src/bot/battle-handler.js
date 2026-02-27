@@ -182,8 +182,8 @@ class BattleHandler {
             };
 
             try {
-                // Give DOM a tiny bit of time to settle
-                await sleep(500);
+                // Brief settle
+                await sleep(100);
 
                 const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
 
@@ -204,8 +204,8 @@ class BattleHandler {
                     return;
                 }
 
-                // Wait 50-100ms before clicking
-                await sleep(Math.floor(Math.random() * 51) + 50);
+                // Sharp delay before clicking
+                await sleep(100);
 
                 await this.controller.page.click(this.selectors.fullAutoButton);
                 this.logger.debug('[Battle] Fast-clicked Full Auto');
@@ -292,8 +292,8 @@ class BattleHandler {
     }
 
     async handleSemiAuto(buttonAlreadyVisible = false, currentTurn = null) {
-        // Buffer: 50-100ms delay after button found before clicking (as requested)
-        await sleep(Math.floor(Math.random() * 51) + 50);
+        // High-speed fixed delay
+        await sleep(100);
 
         const selAttack = '.btn-attack-start.display-on'; // Specific selector to avoid dummy elements
         const selCancel = this.selectors.attackCancel;
