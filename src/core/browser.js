@@ -1,11 +1,12 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import UserAgent from 'user-agents';
-import { existsSync, readFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import os from 'os';
-import logger from '../utils/logger.js';
+import logger, { createScopedLogger } from '../utils/logger.js';
+
 import { fileURLToPath } from 'url';
 import LoginHandler from './login-handler.js';
 
@@ -19,6 +20,7 @@ class BrowserManager {
     constructor(config, profileId = 'profile1') {
         this.config = config || {};
         this.profileId = profileId;
+        this.logger = createScopedLogger(profileId); // Scoped logger for all browser-level logs
         this.browser = null;
         this.page = null;
         this.userDataDir = null;
@@ -55,25 +57,34 @@ class BrowserManager {
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 850;
-            logger.info(`[Core] Using custom window size: ${windowWidth}x${windowHeight}`);
+            this.logger.info(`[System] Custom window size: ${windowWidth}x${windowHeight}`);
         } else {
-            logger.info('[Core] Using default desktop mode');
+            this.logger.info('[System] Using default desktop mode');
         }
 
         // Create unique temp directory for this session to avoid file locking collisions
         const tempDir = os.tmpdir();
         const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
-        logger.info(`[Core] [${this.profileId}] Launching with temp profile: ${this.userDataDir}`);
+        this.logger.info(`[System] Launching with profile: ${this.userDataDir}`);
+
 
         // Prepare launch options
         const launchArgs = [
             '--disable-blink-features=AutomationControlled',
             '--disable-dev-shm-usage',
             `--window-size=${windowWidth},${windowHeight}`,
+
+            // Lighter: Memory and process optimization flags
+            '--disable-extensions',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-default-apps',
+            '--no-first-run',
+            '--disable-sync',
+
             // Disable password and security popups
             '--password-store=basic',
-            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
+            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding,PasswordLeakDetection',
             '--no-default-browser-check',
             '--disable-infobars',
             '--disable-notifications',
@@ -88,11 +99,14 @@ class BrowserManager {
             '--media-cache-size=0',
             '--disable-application-cache',
 
-            // Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
+            // Lighter: Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
             '--disable-background-networking',
+
+            // Safer: IPC and process optimizations
+            '--disable-ipc-flooding-protection',
         ];
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
@@ -114,9 +128,9 @@ class BrowserManager {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
-                logger.info(`[Core] Using Microsoft Edge: ${edgePath}`);
+                this.logger.info(`[System] Using Microsoft Edge: ${edgePath}`);
             } else {
-                logger.warn('[Wait] Edge not found, falling back to Chromium');
+                this.logger.warn('[Status] Edge not found. Falling back to Chromium...');
             }
         }
 
@@ -141,23 +155,23 @@ class BrowserManager {
     async applyStealth() {
         // Force webdriver to undefined (stealth plugin might set it to false)
         await this.page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-            });
+            try {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined,
+                });
+            } catch (e) { }
         });
 
         // Remove CDC variables (Chrome DevTools Protocol)
         await this.page.evaluateOnNewDocument(() => {
-            const newProto = navigator.__proto__;
-            delete newProto.webdriver;
-            navigator.__proto__ = newProto;
-
-            // Remove cdc_ variables
-            for (const key of Object.keys(window)) {
-                if (key.startsWith('cdc_')) {
-                    delete window[key];
+            try {
+                // Safer removal, avoid throwing on locked __proto__
+                for (const key of Object.keys(window)) {
+                    if (key.startsWith('cdc_')) {
+                        delete window[key];
+                    }
                 }
-            }
+            } catch (e) { }
         });
     }
 
@@ -169,20 +183,25 @@ class BrowserManager {
             throw new Error('Browser not launched. Call launch() first.');
         }
 
-        await this.page.goto(url, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
-        });
+        try {
+            await this.page.goto(url, {
+                waitUntil: 'domcontentloaded',
+                timeout: 60000
+            });
+        } catch (error) {
+            this.logger.error(`[Error] [Browser] Navigation failed: ${error.message}`);
+            return false;
+        }
 
         // Load credentials and perform auto-login
         try {
             const credentials = this.loadCredentials();
             if (credentials && credentials.mobage) {
-                const loginHandler = new LoginHandler(this.page);
+                const loginHandler = new LoginHandler(this.page, this.logger);
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            logger.warn(`[Wait] Auto-login skipped: ${error.message}`);
+            this.logger.warn(`[Status] Auto-login skipped: ${error.message}`);
         }
     }
 
@@ -216,7 +235,7 @@ class BrowserManager {
             // Fallback to legacy structure
             return data;
         } catch (error) {
-            logger.error(`[Error] [Core] Failed to load credentials: ${error.message}`);
+            this.logger.error(`[Error] [Core] Failed to load credentials: ${error.message}`);
             return null;
         }
     }
@@ -227,43 +246,49 @@ class BrowserManager {
             this.browser = null;
         }
 
-        // Clean up temp dir to mimic ephemeral session
-        if (this.userDataDir) {
-            setTimeout(() => {
-                if (existsSync(this.userDataDir)) {
-                    try {
-                        rmSync(this.userDataDir, { recursive: true, force: true });
-                        logger.info(`[Core] [${this.profileId}] Cleaned up temp profile: ${this.userDataDir}`);
-                    } catch (e) {
-                        logger.warn(`[Core] [${this.profileId}] Failed to cleanup temp profile (locked?): ${e.message}`);
-                    }
-                }
-            }, 2000); // Give file locks time to release
+        // Fix #3: Synchronous cleanup — avoids setTimeout firing after process exits on Windows
+        if (this.userDataDir && existsSync(this.userDataDir)) {
+            try {
+                rmSync(this.userDataDir, { recursive: true, force: true });
+                this.logger.info(`[System] Cleaned up profile: ${this.userDataDir}`);
+            } catch (e) {
+                this.logger.warn(`[System] Failed to cleanup profile: ${e.message}`);
+            }
         }
     }
 
     /**
      * Delete orphaned profiles older than 24 hours (or configurable)
      */
+    /**
+     * Delete orphaned profiles older than 24 hours
+     * Fix #4: Was a no-op stub. Now implemented.
+     */
     static cleanupOldProfiles() {
         try {
             const tempDir = os.tmpdir();
             const profilesDir = path.join(tempDir, 'ganenblue-profiles');
 
-            // Check if base folder exists, skip if not (creating it is browser's job on launch)
             if (!existsSync(profilesDir)) return;
 
-            // TODO: Read directory and delete old folders
-            // For now, simpler approach: just log. Implementing full recursive cleanup might be risky without precise filtering.
-            // Actually, let's play it safe and NOT delete indiscriminately yet. 
-            // Better: Delete the CURRENT outdated ones if possible
+            const entries = readdirSync(profilesDir, { withFileTypes: true });
+            const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
 
-            // Let's implement a safe check: 
-            // 1. List folders in ganenblue-profiles
-            // 2. Check creation time
-            // 3. Delete if > 24h
+            for (const entry of entries) {
+                if (!entry.isDirectory()) continue;
+                const fullPath = path.join(profilesDir, entry.name);
+                try {
+                    const stat = statSync(fullPath);
+                    if (stat.mtimeMs < cutoffTime) {
+                        rmSync(fullPath, { recursive: true, force: true });
+                        logger.info(`[System] Cleaned up old profile: ${fullPath}`);
+                    }
+                } catch (e) {
+                    logger.warn(`[System] Could not clean ${fullPath}: ${e.message}`);
+                }
+            }
         } catch (e) {
-            logger.warn(`[Core] Cleanup warning: ${e.message}`);
+            logger.warn(`[System] Cleanup warning: ${e.message}`);
         }
     }
 }

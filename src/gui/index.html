@@ -1213,12 +1213,16 @@
 
                     <div class="form-group" style="margin-top: 8px;">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="block-resources-p1" checked>
+                            <input type="checkbox" id="block-resources-p1">
                             <span>Block Images (Fast)</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="fast-refresh-p1">
                             <span>Fast Refresh (Aggressive)</span>
+                        </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="refresh-on-start-p1" checked>
+                            <span>Refresh On Raid Start (Skip Anim)</span>
                         </label>
                     </div>
 
@@ -1371,12 +1375,16 @@
 
                     <div class="form-group" style="margin-top: 8px;">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="block-resources-p2" checked>
+                            <input type="checkbox" id="block-resources-p2">
                             <span>Block Images (Fast)</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="fast-refresh-p2">
                             <span>Fast Refresh (Aggressive)</span>
+                        </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="refresh-on-start-p2" checked>
+                            <span>Refresh On Raid Start (Skip Anim)</span>
                         </label>
                     </div>
 
@@ -1467,15 +1475,59 @@
 
         <!-- Shared Logs Section (Collapsible/Modal) -->
         <div id="logs-panel" class="panel logs-panel hidden">
-            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>Activity Logs</h3>
+            <div class="panel-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Activity Logs</h3>
                 <div class="log-controls">
                     <button id="btn-clear-logs" class="btn-header" title="Clear Logs">🗑️</button>
                     <button id="btn-close-logs" class="btn-header">Close</button>
                 </div>
             </div>
-            <div id="log-container"></div>
+            <!-- Profile Log Tabs -->
+            <div id="log-tabs" style="display: flex; gap: 4px; margin-bottom: 8px;">
+                <button id="log-tab-p1" class="log-tab log-tab-active" onclick="switchLogTab('p1')"
+                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(96,165,250,0.4); background:rgba(96,165,250,0.15); color:#60a5fa; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">Profile
+                    1</button>
+                <button id="log-tab-p2" class="log-tab" onclick="switchLogTab('p2')"
+                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:#64748b; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">Profile
+                    2</button>
+                <button id="log-tab-all" class="log-tab" onclick="switchLogTab('all')"
+                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:#64748b; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">All</button>
+            </div>
+            <!-- Per-profile log containers -->
+            <div id="log-container-p1" class="log-container-tab"
+                style="height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            </div>
+            <div id="log-container-p2" class="log-container-tab"
+                style="display:none; height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            </div>
+            <div id="log-container-all" class="log-container-tab"
+                style="display:none; height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            </div>
         </div>
+        <!-- Keep legacy #log-container for backward compat (hidden, unused) -->
+        <div id="log-container" style="display:none;"></div>
+        <script>
+            // Tab switching — inline so it works before renderer.js loads
+            let activeLogTab = 'p1';
+            function switchLogTab(tab) {
+                activeLogTab = tab;
+                ['p1', 'p2', 'all'].forEach(t => {
+                    const btn = document.getElementById('log-tab-' + t);
+                    const cont = document.getElementById('log-container-' + t);
+                    const isActive = t === tab;
+                    if (btn) {
+                        btn.style.background = isActive ? (t === 'p1' ? 'rgba(96,165,250,0.15)' : t === 'p2' ? 'rgba(248,113,113,0.15)' : 'rgba(167,139,250,0.15)') : 'transparent';
+                        btn.style.color = isActive ? (t === 'p1' ? '#60a5fa' : t === 'p2' ? '#f87171' : '#a78bfa') : '#64748b';
+                        btn.style.borderColor = isActive ? (t === 'p1' ? 'rgba(96,165,250,0.4)' : t === 'p2' ? 'rgba(248,113,113,0.4)' : 'rgba(167,139,250,0.4)') : 'rgba(255,255,255,0.05)';
+                    }
+                    if (cont) cont.style.display = isActive ? 'block' : 'none';
+                });
+                // Auto-scroll active tab
+                const activeContainer = document.getElementById('log-container-' + tab);
+                if (activeContainer) activeContainer.scrollTop = activeContainer.scrollHeight;
+            }
+        </script>
     </div>
 
     <script src="renderer.js"></script>

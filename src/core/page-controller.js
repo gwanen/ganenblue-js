@@ -5,9 +5,10 @@ import path from 'path';
 import NetworkListener from './network-listener.js';
 
 class PageController {
-    constructor(page) {
+    constructor(page, scopedLogger = null) {
         this.page = page;
-        this.network = new NetworkListener(page);
+        this.logger = scopedLogger || logger; // Use scoped (profile-aware) logger if provided
+        this.network = new NetworkListener(page, this.logger);
         this.network.start(); // Start listening immediately
         this.requestHandler = null;
         this.lastMousePos = { x: 0, y: 0 };
@@ -24,7 +25,7 @@ class PageController {
             const url = req.url();
 
             // Allow essential game assets but block heavy media
-            if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+            if (['image', 'media', 'font'].includes(resourceType)) {
                 // Optimization: Block images for speed, but keep some UI elements if needed
                 // For now, aggressive blocking
                 if (url.includes('assets/img/sp/ui') || url.includes('assets/img/sp/quest')) {
@@ -41,11 +42,11 @@ class PageController {
         };
 
         this.page.on('request', this.requestHandler);
-        logger.info('[Performance] Resource blocking enabled (Images/Media)');
+        this.logger.info('[Performance] Resource blocking enabled (Images/Media)');
     }
 
     async disableResourceBlocking() {
-        if (!this.blockingEnabled) return;
+        if (!this.requestHandler && !this.blockingEnabled) return;
 
         if (this.requestHandler) {
             this.page.off('request', this.requestHandler);
@@ -53,13 +54,16 @@ class PageController {
         }
 
         try {
-            await this.page.setRequestInterception(false);
+            // Only attempt to disable if the page is still open
+            if (!this.page.isClosed()) {
+                await this.page.setRequestInterception(false);
+                this.logger.info('[Performance] Resource blocking disabled');
+            }
         } catch (e) {
-            // Ignore if already disabled or context lost
+            // Ignore if context lost or already disabled
         }
 
         this.blockingEnabled = false;
-        logger.info('[Performance] Resource blocking disabled');
     }
 
     /**
@@ -68,6 +72,7 @@ class PageController {
     async stop() {
         if (this.network) {
             this.network.stop();
+            this.network.clearAllListeners();
         }
         await this.disableResourceBlocking();
     }
@@ -105,7 +110,7 @@ class PageController {
             } catch (error) {
                 if (this.isNetworkError(error) && i < maxRetries - 1) {
                     const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-                    logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    this.logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
                     await sleep(waitTime);
                     continue;
                 }
@@ -126,7 +131,20 @@ class PageController {
             return true;
         } catch (error) {
             const currentUrl = this.page.url();
-            logger.debug(`[Debug] Element not found: ${selector} (URL: ${currentUrl})`);
+            this.logger.debug(`[Debug] Element not found: ${selector} (URL: ${currentUrl})`);
+            return false;
+        }
+    }
+
+    /**
+     * Wait for custom function to return truthy
+     */
+    async waitForFunction(fn, timeout = 30000) {
+        try {
+            await this.page.waitForFunction(fn, { timeout });
+            return true;
+        } catch (error) {
+            this.logger.debug(`[Debug] waitForFunction timed out: ${error.message}`);
             return false;
         }
     }
@@ -138,10 +156,11 @@ class PageController {
         const {
             waitAfter = true,
             delay = randomDelay(100, 300),
-            preDelay = randomDelay(200, 500), // Default pre-click delay (human-like)
+            preDelay = randomDelay(200, 500),
             maxRetries = 3,
             timeout = 5000,
-            silent = false
+            silent = false,
+            fast = false // New: Skip human-like delays
         } = options;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -152,8 +171,8 @@ class PageController {
                     throw new Error(`Element not found: ${selector}`);
                 }
 
-                // Random delay before click (configurable)
-                if (preDelay > 0) {
+                // Random delay before click
+                if (!fast && preDelay > 0) {
                     await sleep(preDelay);
                 }
 
@@ -162,6 +181,8 @@ class PageController {
                 if (!element) throw new Error(`Element handle not found: ${selector}`);
 
                 const box = await element.boundingBox();
+                await element.dispose(); // Fix Memory Leak
+
                 if (!box) throw new Error(`Bounding box not found for: ${selector}`);
 
                 // Calculate normal (Gaussian) distribution around center
@@ -181,15 +202,17 @@ class PageController {
                 randomX = Math.max(box.x + marginX, Math.min(box.x + box.width - marginX, randomX));
                 randomY = Math.max(box.y + marginY, Math.min(box.y + box.height - marginY, randomY));
 
-                // Move mouse human-like to target
-                await this.moveMouseHumanLike(randomX, randomY);
+                // Move mouse to target
+                await this.moveMouseHumanLike(randomX, randomY, fast);
 
-                // Tiny hesitation before click (human-like)
-                await sleep(randomDelay(50, 150));
+                // Tiny hesitation before click
+                if (!fast) {
+                    await sleep(randomDelay(50, 150));
+                }
 
                 // Perform randomized click
                 await this.page.mouse.click(randomX, randomY);
-                logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
+                this.logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
                 // Wait after click
                 if (waitAfter) {
@@ -199,7 +222,7 @@ class PageController {
                 return true;
             } catch (error) {
                 if (!silent) {
-                    logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                    this.logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
                 }
                 if (attempt === maxRetries) {
                     throw error;
@@ -212,7 +235,7 @@ class PageController {
     /**
      * Move mouse cursor naturally
      */
-    async moveMouseHumanLike(targetX, targetY) {
+    async moveMouseHumanLike(targetX, targetY, fast = false) {
         try {
             const start = this.lastMousePos;
             const end = { x: targetX, y: targetY };
@@ -229,13 +252,15 @@ class PageController {
 
             for (const point of points) {
                 await this.page.mouse.move(point.x, point.y);
-                // Tiny variable delay between points for human-like speed jitter
-                await sleep(getRandomInRange(2, 8));
+                if (!fast) {
+                    // Tiny variable delay between points for human-like speed jitter
+                    await sleep(getRandomInRange(2, 8));
+                }
             }
 
             this.lastMousePos = end;
         } catch (e) {
-            logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
+            this.logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
         }
     }
 
@@ -259,17 +284,141 @@ class PageController {
     }
 
     /**
-     * Navigate with retry logic
+     * Navigate with retry logic (full page load).
+     * For GBF hash-based SPA navigation, prefer gotoSPA() instead.
      */
     async goto(url, options = {}) {
         return this.retryOnNetworkError(async () => {
-            logger.info(`[Core] Navigating to: ${url}`);
+            this.logger.info(`[Core] Navigating to: ${url}`);
             return await this.page.goto(url, {
                 waitUntil: 'domcontentloaded',
                 timeout: 60000, // 60s timeout
                 ...options
             });
         }, 3, 'navigation');
+    }
+
+    /**
+     * Navigate to a GBF hash-based SPA URL (e.g. '#quest/assist').
+     *
+     * Problem: page.goto() on a same-origin hash URL only fires a 'hashchange'
+     * event — it never triggers 'domcontentloaded'. Worse, if the target hash
+     * is ALREADY the current hash, no event fires at all and the DOM stays frozen.
+     *
+     * This method:
+     *   1. Forces a real hashchange even when already on the target URL by
+     *      briefly resetting the hash to '' first.
+     *   2. Uses in-page JavaScript to set location.hash directly so the SPA
+     *      router always picks up the change.
+     *   3. Waits for the game's own loading spinner to appear then disappear,
+     *      confirming the new page DOM has been rendered.
+     *
+     * @param {string} url - Full URL with hash, e.g.
+     *   'https://game.granbluefantasy.jp/#quest/assist'
+     * @param {object} options
+     * @param {number} [options.timeout=15000] - Max ms to wait for DOM to settle.
+     * @param {string|null} [options.waitForSelector=null] - Optional selector to
+     *   wait for after navigation (faster than relying on spinner alone).
+     */
+    async gotoSPA(url, options = {}) {
+        const { timeout = 15000, waitForSelector = null } = options;
+
+        // Extract just the hash portion (e.g. '#quest/assist')
+        const hashMatch = url.match(/#.+/);
+        const targetHash = hashMatch ? hashMatch[0] : '';
+
+        if (!targetHash) {
+            // No hash — fall back to a regular full-page navigation
+            return this.goto(url, options);
+        }
+
+        this.logger.info(`[Core] SPA navigate to: ${targetHash}`);
+
+        try {
+            await this.page.evaluate((target) => {
+                const current = window.location.hash;
+
+                // If already on this hash, nudge the router by clearing it first
+                // so a real hashchange event fires when we set it again.
+                if (current === target || current === target.replace('#', '')) {
+                    // Temporarily set to a dummy hash — this fires hashchange #1
+                    history.replaceState(null, '', '#');
+                }
+
+                // Now set the real target — fires hashchange #2 (or #1 if we
+                // weren't on this hash before), triggering the SPA router.
+                window.location.hash = target.replace(/^#/, '');
+            }, targetHash);
+        } catch (e) {
+            // Page context may be mid-navigation; fall back to hard goto.
+            this.logger.debug(`[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`);
+            return this.goto(url);
+        }
+
+        // Wait for the DOM to actually reflect the new page.
+        // GBF renders a .loading-bar / #loading element while switching pages.
+        // We wait for: (a) a page-specific selector OR (b) loading to finish.
+        const deadline = Date.now() + timeout;
+
+        if (waitForSelector) {
+            const found = await this.elementExists(waitForSelector, timeout);
+            if (!found) {
+                this.logger.warn(`[Core] gotoSPA: waitForSelector '${waitForSelector}' not found after ${timeout}ms`);
+            }
+            return;
+        }
+
+        // Fallback: wait for the game's loading overlay to disappear, which
+        // signals that the new page's DOM has been fully injected.
+        try {
+            await this.page.waitForFunction(
+                () => {
+                    // GBF uses #loading or .loading-wrapper to signal transitions.
+                    const loader = document.querySelector('#loading') ||
+                        document.querySelector('.loading-wrapper') ||
+                        document.querySelector('.prt-loading');
+                    // If no loader present, the page has settled (or never showed one).
+                    if (!loader) return true;
+                    const style = window.getComputedStyle(loader);
+                    return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+                },
+                { timeout: Math.max(0, deadline - Date.now()) }
+            );
+        } catch (e) {
+            // Timeout waiting for loader — the DOM may still be fine, log and continue.
+            this.logger.debug(`[Core] gotoSPA: loading overlay wait timed out for ${targetHash}`);
+
+            // If we timed out, the router might have ignored the SPA hash change.
+            // Attempt an in-game footer reload to forcefully unstick it.
+            const reloadBtn = '.btn-treasure-footer-reload';
+            if (await this.elementExists(reloadBtn, 100)) {
+                this.logger.info('[Core] SPA transition seems stuck. Triggering footer reload...');
+                await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(() => { });
+                await sleep(500);
+            }
+        }
+
+        // Extra short yield so any remaining microtasks on the SPA router settle.
+        await sleep(100);
+    }
+
+    /**
+     * Reload the page using GBF's native footer reload button when possible,
+     * falling back to a full browser reload if not available.
+     */
+    async reloadPage() {
+        this.logger.info('[Core] Reloading page...');
+        const reloadBtn = '.btn-treasure-footer-reload';
+        if (await this.elementExists(reloadBtn, 500)) {
+            try {
+                await this.clickSafe(reloadBtn, { fast: true, silent: true });
+                await sleep(1000);
+                return;
+            } catch (e) {
+                this.logger.debug(`[Core] Footer reload failed, falling back to page.reload: ${e.message}`);
+            }
+        }
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
     }
 
     /**
@@ -289,12 +438,12 @@ class PageController {
         try {
             // Check if browser/page is still accessible
             if (this.page.isClosed && this.page.isClosed()) {
-                logger.warn('[Debug] Cannot take screenshot: Page is closed');
+                this.logger.warn('[Debug] Cannot take screenshot: Page is closed');
                 return;
             }
             // Puppeteer specific check if browser is connected
             if (this.page.browser && !this.page.browser().isConnected()) {
-                logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
+                this.logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
                 return;
             }
 
@@ -306,13 +455,13 @@ class PageController {
             const filename = path.join(dir, `${namePrefix}_${timestamp}.png`);
 
             await this.page.screenshot({ path: filename, fullPage: true });
-            logger.info(`[Debug] Screenshot saved: ${filename}`);
+            this.logger.info(`[Debug] Screenshot saved: ${filename}`);
         } catch (error) {
             // Suppress errors during screenshot if they are due to closing
             if (this.isNetworkError(error) || error.message.includes('Target closed')) {
-                logger.debug(`[Debug] Screenshot skipped (browser closed)`);
+                this.logger.debug(`[Debug] Screenshot skipped (browser closed)`);
             } else {
-                logger.error(`[Error] Failed to take screenshot: ${error.message}`);
+                this.logger.error(`[Error] Failed to take screenshot: ${error.message}`);
             }
         }
     }

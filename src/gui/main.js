@@ -183,12 +183,12 @@ ipcMain.handle('browser:launch', async (event, profileId, browserType = 'chromiu
 
     // Prevent multiple browser instances for the same profile
     if (instance.browser) {
-        logger.info(`[Gui] [${profileId}] Browser already open, reusing...`);
+        logger.info(`[System] [${profileId}] Browser already active. Reusing instance...`);
         return { success: true, message: 'Browser already open' };
     }
 
     try {
-        logger.info(`[Gui] [${profileId}] Launching ${browserType} browser...`);
+        logger.info(`[System] [${profileId}] Launching ${browserType} browser...`);
 
         // Override browser type in config
         const browserConfig = {
@@ -216,7 +216,7 @@ ipcMain.handle('browser:close', async (event, profileId) => {
     const instance = getInstance(profileId);
     if (instance.browser) {
         try {
-            logger.info(`[Gui] [${profileId}] Closing browser...`);
+            logger.info(`[System] [${profileId}] Closing browser...`);
             await instance.browser.close();
             instance.browser = null;
             instance.bot = null; // Also clear bot instance if browser closes
@@ -241,7 +241,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
     }
 
     try {
-        logger.info(`[Bot] [${profileId}] Starting automation in ${settings.botMode} mode...`);
+        logger.info(`[Status] [${profileId}] Starting automation in ${settings.botMode} mode...`);
         logger.debug(`[Bot] [${profileId}] Settings: ${JSON.stringify(settings)}`);
 
         const botMode = settings.botMode || 'quest';
@@ -293,6 +293,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                refreshOnStart: settings.refreshOnStart,
                 profileId: profileId
             });
         } else {
@@ -311,7 +312,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             const quests = stats.completedQuests || 0;
             const raids = stats.raidsCompleted || 0;
 
-            logger.info(`[Bot] [${profileId}] Finished: Quest ${quests} | Raid ${raids}`);
+            logger.info(`[Status] [${profileId}] Finished: Quest ${quests} | Raid ${raids}`);
             mainWindow.webContents.send('bot:status', { profileId, status: 'Stopped' });
 
             // Show completion notification
@@ -343,9 +344,13 @@ ipcMain.handle('bot:stop', async (event, profileId) => {
     const instance = getInstance(profileId);
     if (instance.bot) {
         instance.bot.stop();
+        // Fix #8: Ensure the NetworkListener is properly stopped to prevent response handler leak
+        if (instance.bot.battle && instance.bot.battle.controller) {
+            instance.bot.battle.controller.stop().catch(e => logger.debug('[Cleanup] Controller stop error:', e));
+        }
         instance.bot = null;
     }
-    logger.info(`[Gui] [${profileId}] Bot stopped`);
+    logger.info(`[System] [${profileId}] Bot stopped`);
     return { success: true };
 });
 
@@ -444,7 +449,7 @@ ipcMain.handle('credentials:load', async (event, profileId) => {
 });
 
 ipcMain.handle('app:restart', async () => {
-    logger.info('[Gui] Restarting application...');
+    logger.info('[System] Restarting application...');
     app.relaunch();
     app.exit(0);
 });
@@ -458,7 +463,11 @@ import winston from 'winston';
 class GuiTransport extends winston.Transport {
     log(info, callback) {
         if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('log:update', info);
+            mainWindow.webContents.send('log:update', {
+                level: info.level,
+                message: info.message,
+                profileId: info.profileId || null   // stamped by createScopedLogger's child logger
+            });
 
             // High-priority notification for Captcha/Safety issues
             if (info.level === 'error' && (info.message.includes('Captcha') || info.message.includes('[Safety]'))) {

@@ -26,7 +26,12 @@ const dom = {
         btnCloseLogs: document.getElementById('btn-close-logs'),
         btnClearLogs: document.getElementById('btn-clear-logs'),
         logsPanel: document.getElementById('logs-panel'),
-        logContainer: document.getElementById('log-container'),
+        // Per-profile log containers (tabbed)
+        logContainers: {
+            p1: null, // initialized after DOMContentLoaded
+            p2: null,
+            all: null
+        },
         btnToggleP2: document.getElementById('btn-toggle-p2'),
         btnTestSound: document.getElementById('btn-test-sound'),
         globalStatus: document.getElementById('global-status')
@@ -98,6 +103,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setupGlobalListeners();
+
+    // Initialize per-profile log containers after DOM is ready
+    dom.global.logContainers.p1 = document.getElementById('log-container-p1');
+    dom.global.logContainers.p2 = document.getElementById('log-container-p2');
+    dom.global.logContainers.all = document.getElementById('log-container-all');
 });
 
 // === Profile Logic ===
@@ -158,7 +168,8 @@ function setupProfileListeners(pid) {
             raidTargetUser: els.raidTarget ? els.raidTarget.value.trim() : '',
             zoneId: els.zone ? els.zone.value : null,
             blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
-            fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
+            fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
+            refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -210,7 +221,10 @@ function setupProfileListeners(pid) {
         els.nameInput,
         els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget, els.raidTarget,
         els.zone,
-        els.browserType, els.disableSandbox
+        els.browserType, els.disableSandbox,
+        document.getElementById(`block-resources-${pid}`),
+        document.getElementById(`fast-refresh-${pid}`),
+        document.getElementById(`refresh-on-start-${pid}`)
     ];
     inputs.forEach(input => {
         if (input) {
@@ -300,8 +314,9 @@ function updateStatsDisplay(pid) {
     }
 
     // Timer & Rate
-    if (s.startTime && profileState[pid].isRunning) {
-        const diff = Date.now() - s.startTime;
+    const startTime = profileState[pid].startTime;
+    if (startTime && profileState[pid].isRunning) {
+        const diff = Date.now() - startTime;
         const seconds = Math.floor(diff / 1000);
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -339,8 +354,14 @@ function setupGlobalListeners() {
     });
 
     dom.global.btnClearLogs.addEventListener('click', () => {
-        dom.global.logContainer.innerHTML = '';
-        log('sys', 'Logs cleared', 'info');
+        const activeTab = window.activeLogTab || 'p1';
+        // Clear the active profile tab
+        const activeContainer = dom.global.logContainers[activeTab];
+        if (activeContainer) activeContainer.innerHTML = '';
+        // Also clear the 'all' tab since it mirrors everything
+        if (activeTab !== 'all' && dom.global.logContainers.all) {
+            dom.global.logContainers.all.innerHTML = '';
+        }
     });
 
     // Hide/Show P2
@@ -381,34 +402,40 @@ function setupGlobalListeners() {
 // === Logging System ===
 
 function log(pid, message, level = 'info') {
-    const entry = document.createElement('div');
-    entry.className = `log-entry log-level-${level}`;
-
     const time = new Date().toLocaleTimeString();
-    const tagColor = pid === 'p1' ? 'var(--accent-blue)' : 'var(--accent-red)'; // Distinguish profiles
+    const tagColor = pid === 'p1' ? 'var(--accent-blue)' : pid === 'p2' ? 'var(--accent-red)' : 'var(--text-secondary)';
 
-    // Professional Log Colorization: Find and style [Tags]
-    // Pattern: Matches [Tag] at the start or mid-message
     let coloredMessage = message.replace(/\[([a-zA-Z0-9]+)\]/g, (match, tag) => {
         const lowerTag = tag.toLowerCase();
-        // Check if we have a specific class for this tag
-        // These classes are defined in index.html (e.g., .log-tag-battle)
         return `<span class="log-tag log-tag-${lowerTag}">[${tag}]</span>`;
     });
 
-    entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        ${pid !== 'sys' ? `<span class="log-tag" style="color: ${tagColor}">${pid.toUpperCase()}</span>` : ''}
-        <span class="log-message">${coloredMessage}</span>
-    `;
+    const profileLabel = pid !== 'sys' ? `<span class="log-tag" style="color: ${tagColor}">${pid.toUpperCase()}</span>` : '';
+    const entryHTML = `<span class="log-time">${time}</span>${profileLabel}<span class="log-message">${coloredMessage}</span>`;
 
-    dom.global.logContainer.appendChild(entry);
-    dom.global.logContainer.scrollTop = dom.global.logContainer.scrollHeight;
+    // Append to the profile-specific container
+    const targetPid = (pid === 'p1' || pid === 'p2') ? pid : 'p1';
+    const profileContainer = dom.global.logContainers[targetPid];
+    const allContainer = dom.global.logContainers.all;
 
-    // Memory Guard: Limit logs to 200 entries
-    if (dom.global.logContainer.children.length > 200) {
-        dom.global.logContainer.removeChild(dom.global.logContainer.firstChild);
+    function appendTo(container) {
+        if (!container) return;
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-level-${level}`;
+        entry.innerHTML = entryHTML;
+        container.appendChild(entry);
+        // Auto-scroll only the currently active tab
+        if (container === dom.global.logContainers[window.activeLogTab]) {
+            container.scrollTop = container.scrollHeight;
+        }
+        // Memory Guard: cap at 300 entries per container
+        if (container.children.length > 300) {
+            container.removeChild(container.firstChild);
+        }
     }
+
+    appendTo(profileContainer);
+    appendTo(allContainer);
 }
 
 // === IPC Event Handlers ===
@@ -417,12 +444,19 @@ if (window.electronAPI) {
     window.electronAPI.onLogUpdate((data) => {
         // data = { level, message, ... }
         let pid = 'sys';
-        const msg = data.message;
+        let msg = data.message;
 
-        // More robust profile detection
-        if (msg.includes('[p1]') || msg.includes('[p1]') || msg.match(/\[bot\]\s*\[p1\]/i)) pid = 'p1';
-        else if (msg.includes('[p2]') || msg.includes('[p2]') || msg.match(/\[bot\]\s*\[p2\]/i)) pid = 'p2';
-        else if (data.profileId) pid = data.profileId; // Use explicit profile if provided
+        // Profile detection (check explicit ID first, then scan message)
+        if (data.profileId && (data.profileId === 'p1' || data.profileId === 'p2')) {
+            pid = data.profileId;
+        } else if (msg.match(/\[p1\]/i) || msg.match(/\[bot\]\s*\[p1\]/i)) {
+            pid = 'p1';
+        } else if (msg.match(/\[p2\]/i) || msg.match(/\[bot\]\s*\[p2\]/i)) {
+            pid = 'p2';
+        }
+
+        // Strip redundant [P1]/[P2] from the message body — the tab label already shows the profile
+        msg = msg.replace(/^\[P[12]\]\s*/i, '').replace(/\[P[12]\]\s*/gi, '').trim();
 
         log(pid, msg, data.level);
     });
@@ -521,6 +555,14 @@ async function loadProfileSettings(pid) {
             const frEl = document.getElementById(`fast-refresh-${pid}`);
             if (frEl) frEl.checked = s.fastRefresh;
         }
+        if (s.refreshOnStart !== undefined) {
+            const rsEl = document.getElementById(`refresh-on-start-${pid}`);
+            if (rsEl) rsEl.checked = s.refreshOnStart;
+        }
+        if (s.blockResources !== undefined) {
+            const brEl = document.getElementById(`block-resources-${pid}`);
+            if (brEl) brEl.checked = s.blockResources;
+        }
     }
 }
 
@@ -537,7 +579,9 @@ function saveProfileSettings(pid) {
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',
         disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
-        fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
+        blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
+        fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
+        refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }

@@ -1,10 +1,11 @@
-import { sleep } from '../utils/random.js';
+import { sleep, getRandomInRange } from '../utils/random.js';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 
 class LoginHandler {
-    constructor(page) {
+    constructor(page, scopedLogger = null) {
         this.page = page;
+        this.logger = scopedLogger || logger;
         this.selectors = config.selectors.login;
     }
 
@@ -13,7 +14,7 @@ class LoginHandler {
      */
     async performLogin(credentials) {
         try {
-            logger.info('[Login] Starting automated flow...');
+            this.logger.info('[Login] Starting automated flow...');
 
             // Step 1: Click main login button
             await this.clickLoginButton();
@@ -27,10 +28,10 @@ class LoginHandler {
             // Step 4: Return to GBF page
             await this.returnToGBF();
 
-            logger.info('[Login] ✓ Automated login completed successfully!');
+            this.logger.info('[Login] ✓ Automated login completed successfully!');
             return true;
         } catch (error) {
-            logger.error('[Error] [Login] Automation failed:', error.message);
+            this.logger.error('[Error] [Login] Automation failed:', error.message);
             return false;
         }
     }
@@ -39,21 +40,28 @@ class LoginHandler {
      * Click the initial login button on GBF home page
      */
     async clickLoginButton() {
-        logger.info('[Login] Waiting for login button...');
+        const currentUrl = this.page.url();
+        if (currentUrl.includes('#authentication')) {
+            this.logger.info('[Login] Already on authentication page. Skipping login button click.');
+            return;
+        }
+
+        this.logger.info('[Login] Waiting for login button...');
 
         try {
             await this.page.waitForSelector(this.selectors.loginButton, {
                 visible: true,
-                timeout: 15000
+                timeout: 10000 // Reduced timeout since it should be fast
             });
 
             await sleep(1000);
             await this.page.click(this.selectors.loginButton);
-            logger.info('[Login] ✓ Clicked login button');
+            this.logger.info('[Login] Clicked login button');
 
+            // Wait for redirect to #authentication
             await sleep(2000);
         } catch (error) {
-            throw new Error(`Login button (${this.selectors.loginButton}) not found or not clickable`);
+            this.logger.info(`[Status] [Login] Login button not found. Proceeding assuming we are on auth page.`);
         }
     }
 
@@ -61,7 +69,7 @@ class LoginHandler {
      * Select Mobage authentication option
      */
     async selectMobageAuth() {
-        logger.info('[Login] Selecting Mobage authentication...');
+        this.logger.info('[Login] Selecting Mobage authentication...');
 
         try {
             await this.page.waitForSelector(this.selectors.mobageOption, {
@@ -72,22 +80,38 @@ class LoginHandler {
             await sleep(1000);
 
             // Click Mobage - this will open a new tab
-            await this.page.click(this.selectors.mobageOption);
-            logger.info('[Login] ✓ Selected Mobage login');
-
-            // Wait for new tab to open
-            await sleep(3000);
-
-            // Check if a new page was opened
             const browser = this.page.browser();
-            const pages = await browser.pages();
+            const newPagePromise = new Promise(resolve => {
+                browser.once('targetcreated', target => resolve(target.page()));
+            });
 
-            if (pages.length > 1) {
-                // Switch to the new tab (last page)
-                this.page = pages[pages.length - 1];
-                logger.info('[Login] ✓ Switched to Mobage login tab');
+            await this.page.click(this.selectors.mobageOption);
+            this.logger.info('[Login] Selected Mobage login');
+
+            let timeoutId;
+            const timeoutPromise = new Promise(resolve => {
+                timeoutId = setTimeout(() => resolve(null), 10000);
+            });
+
+            // Wait for new tab to open up to 10 seconds
+            const newPage = await Promise.race([
+                newPagePromise,
+                timeoutPromise
+            ]);
+            clearTimeout(timeoutId);
+
+            if (newPage) {
+                this.page = newPage;
+                this.logger.info('[Login] Switched to Mobage login tab reliably');
             } else {
-                logger.info('[Login] Page opened in same tab');
+                // Fallback check
+                const pages = await browser.pages();
+                if (pages.length > 1) {
+                    this.page = pages[pages.length - 1];
+                    this.logger.info('[Login] Switched to Mobage login tab (fallback)');
+                } else {
+                    this.logger.info('[Login] Page opened in same tab');
+                }
             }
         } catch (error) {
             throw new Error('Mobage login option not found');
@@ -98,11 +122,11 @@ class LoginHandler {
      * Handle Mobage login page (might be in new tab or iframe)
      */
     async handleMobageLogin(credentials) {
-        logger.info('[Login] Handling Mobage login page...');
+        this.logger.info('[Login] Handling Mobage login page...');
 
         try {
             // Wait longer for page navigation
-            logger.info('[Login] Waiting for login page to load...');
+            this.logger.info('[Login] Waiting for login page to load...');
 
             // Wait for email field to appear (indicates login page loaded)
             await this.page.waitForSelector(this.selectors.emailField, {
@@ -110,31 +134,81 @@ class LoginHandler {
                 timeout: 30000
             });
 
-            logger.info('[Login] Mobage login page loaded');
-            await sleep(1000);
+            this.logger.info('[Login] Mobage login page loaded');
+            await sleep(3000);
 
-            // Fill email - click first to focus
-            await this.page.click(this.selectors.emailField);
-            await sleep(500);
-            await this.page.type(this.selectors.emailField, credentials.email, { delay: 100 });
-            logger.info('[Login] ✓ Filled email');
-            await sleep(1000);
+            const fillField = async (selector, value, fieldName) => {
 
-            // Fill password - click first to focus
-            await this.page.click(this.selectors.passwordField);
+                for (let retry = 0; retry < 3; retry++) {
+                    try {
+                        this.logger.debug(`[Login] Attempting to fill ${fieldName} (Attempt ${retry + 1}/3)`);
+                        // Ensure element is visible and interactive
+                        await this.page.waitForSelector(selector, { visible: true, timeout: 5000 });
+
+                        // Force clear existing value via DOM and set explicit focus
+                        await this.page.evaluate((sel) => {
+                            const el = document.querySelector(sel);
+                            if (el) {
+                                el.value = '';
+                                el.focus();
+                            }
+                        }, selector);
+
+                        await sleep(800);
+
+                        // Type out the characters naturally
+                        await this.page.type(selector, value, { delay: getRandomInRange(100, 200) });
+                        await sleep(1000);
+
+                        // Verify it stuck
+                        const actualValue = await this.page.evaluate(sel => document.querySelector(sel).value, selector);
+                        if (actualValue === value) {
+                            this.logger.info(`[Login] Successfully filled ${fieldName}`);
+                            return true;
+                        }
+
+                        // DOM Bypass Fallback if Puppeteer typing fails completely
+                        this.logger.warn(`[Login] ${fieldName} value mismatch. Emitting keyboard events directly via DOM...`);
+                        await this.page.evaluate((sel, val) => {
+                            const el = document.querySelector(sel);
+                            if (el) {
+                                el.value = val;
+                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        }, selector, value);
+
+                        const finalValue = await this.page.evaluate(sel => document.querySelector(sel).value, selector);
+                        if (finalValue === value) {
+                            this.logger.info(`[Login] Successfully filled ${fieldName} via Fallback`);
+                            return true;
+                        }
+
+                    } catch (e) {
+                        this.logger.warn(`[Login] Error filling ${fieldName}: ${e.message}`);
+                    }
+                    await sleep(1000);
+                }
+                throw new Error(`Failed to fill ${fieldName} after 3 attempts`);
+            };
+
+
+
+            await fillField(this.selectors.emailField, credentials.email, 'email');
             await sleep(500);
-            await this.page.type(this.selectors.passwordField, credentials.password, { delay: 100 });
-            logger.info('[Login] ✓ Filled password');
-            await sleep(1500);
+
+            await fillField(this.selectors.passwordField, credentials.password, 'password');
+            await sleep(1000);
 
             // Click login button
             const loginButton = await this.page.$(this.selectors.submitButton);
             if (loginButton) {
                 await loginButton.click();
-                logger.info('[Login] ✓ Clicked login button');
+                await loginButton.dispose(); // Prevent Memory Leak
+                this.logger.info('[Login] Clicked login button');
 
                 // Wait for login to process
-                logger.info('[Login] Waiting for login to process (may require reCAPTCHA)...');
+                this.logger.info('[Login] Waiting for login to process (may require reCAPTCHA)...');
                 await sleep(10000); // Longer wait for reCAPTCHA
             } else {
                 throw new Error('Login button not found');
@@ -148,7 +222,7 @@ class LoginHandler {
      * Click close button to return to GBF
      */
     async returnToGBF() {
-        logger.info('[Login] Returning to GBF...');
+        this.logger.info('[Login] Returning to GBF...');
 
         try {
             // Look for close button (閉じる)
@@ -159,13 +233,13 @@ class LoginHandler {
             if (closeButton) {
                 await sleep(2000);
                 await closeButton.click();
-                logger.info('[Login] ✓ Clicked close button');
+                this.logger.info('[Login] ✓ Clicked close button');
                 await sleep(3000);
             }
 
-            logger.info('[Login] ✓ Returned to GBF page');
+            this.logger.info('[Login] ✓ Returned to GBF page');
         } catch (error) {
-            logger.warn('[Wait] [Login] Close button not found - login may have completed already');
+            this.logger.warn('[Status] [Login] Close button not found - login may have completed already');
         }
     }
 }
