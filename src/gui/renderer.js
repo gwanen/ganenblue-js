@@ -168,7 +168,8 @@ function setupProfileListeners(pid) {
             raidTargetUser: els.raidTarget ? els.raidTarget.value.trim() : '',
             zoneId: els.zone ? els.zone.value : null,
             blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
-            fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
+            fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
+            refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -220,7 +221,10 @@ function setupProfileListeners(pid) {
         els.nameInput,
         els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget, els.raidTarget,
         els.zone,
-        els.browserType, els.disableSandbox
+        els.browserType, els.disableSandbox,
+        document.getElementById(`block-resources-${pid}`),
+        document.getElementById(`fast-refresh-${pid}`),
+        document.getElementById(`refresh-on-start-${pid}`)
     ];
     inputs.forEach(input => {
         if (input) {
@@ -551,6 +555,14 @@ async function loadProfileSettings(pid) {
             const frEl = document.getElementById(`fast-refresh-${pid}`);
             if (frEl) frEl.checked = s.fastRefresh;
         }
+        if (s.refreshOnStart !== undefined) {
+            const rsEl = document.getElementById(`refresh-on-start-${pid}`);
+            if (rsEl) rsEl.checked = s.refreshOnStart;
+        }
+        if (s.blockResources !== undefined) {
+            const brEl = document.getElementById(`block-resources-${pid}`);
+            if (brEl) brEl.checked = s.blockResources;
+        }
     }
 }
 
@@ -567,7 +579,9 @@ function saveProfileSettings(pid) {
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',
         disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
-        fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false
+        blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
+        fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
+        refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }

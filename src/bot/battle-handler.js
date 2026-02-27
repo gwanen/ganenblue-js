@@ -34,7 +34,7 @@ class BattleHandler {
         this.battleStartTime = Date.now();
         this.lastAttackTurn = 0;
         this.lastReloadTurn = 0;
-        this.logger.info(`[Battle] Engaging combat (${mode})`);
+        this.logger.info(`[Battle] Engaging (${mode})`);
 
         try {
             const currentUrl = this.controller.page.url();
@@ -44,7 +44,7 @@ class BattleHandler {
 
             if (options.refreshOnStart) {
                 this.logger.info('[Battle] Refreshing to skip animations');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                await this.controller.reloadPage();
                 await sleep(this.fastRefresh ? 200 : 500);
 
                 const earlyStateAfterRefresh = await this.checkEarlyBattleEndPopup();
@@ -81,7 +81,7 @@ class BattleHandler {
 
                     if (!battleLoaded) {
                         this.logger.warn('[Wait] Auto button missing for 10s. Refreshing page...');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                        await this.controller.reloadPage();
                         // Wait another 10s after refresh
                         battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
 
@@ -90,14 +90,25 @@ class BattleHandler {
                         }
                     }
                 } else if (!currentUrl.includes('#result')) {
-                    throw new Error(`Battle failed to load. URL: ${currentUrl}`);
+                    // Safety: Check for a lagged confirmation button (OK) before throwing error
+                    const okBtn = '.btn-usual-ok';
+                    if (await this.controller.elementExists(okBtn, 2000, true)) {
+                        this.logger.info('[Battle] Late confirmation button detected. Clicking...');
+                        await this.controller.clickSafe(okBtn, { fast: true });
+                        await sleep(1000);
+                        battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
+                    }
+
+                    if (!battleLoaded) {
+                        throw new Error(`Battle failed to load. URL: ${currentUrl}`);
+                    }
                 }
             }
 
             // Proactive Turn Fetch
             const initialTurns = await this.getTurnNumber();
             if (initialTurns > 0) {
-                this.logger.info(`[Battle] Starting at Turn ${initialTurns}`);
+                this.logger.info(`[Battle] Turn ${initialTurns}`);
             }
 
             if (mode === 'full_auto') {
@@ -112,7 +123,7 @@ class BattleHandler {
             // Calculate battle duration
             this.lastBattleDuration = Date.now() - this.battleStartTime;
             const formattedTime = this.formatTime(this.lastBattleDuration);
-            this.logger.info(`[Summary] Duration: ${formattedTime} (${result.turns} turns)`);
+            this.logger.info(`[Summary] ${formattedTime} (${result.turns} turns)`);
 
             // Attach current honors to result for tracking
             this.lastHonors = result.honors; // Update lastHonors to current total
@@ -148,84 +159,101 @@ class BattleHandler {
         const url = this.controller.page.url();
         if (url.includes('#result') || url.includes('#quest/index')) return;
 
-        this.logger.info('[Full Auto] Initializing activation');
+        this.logger.info('[Full Auto] Activating');
 
-        // Pre-listen for early attack to prevent race condition (e.g. all skills on cooldown)
-        let earlyAttackFired = false;
-        const tempAttackListener = () => { earlyAttackFired = true; };
-        if (this.controller.network) {
-            this.controller.network.once('battle:attack_used', tempAttackListener);
-        }
+        let attempts = 0;
+        const maxAttempts = 3;
 
-        // 1. Press Auto Button (Fast Mode)
-        try {
-            // Give DOM a tiny bit of time to settle before checking
-            await sleep(500);
+        while (attempts < maxAttempts) {
+            attempts++;
 
-            // User Request: Wait 5s for button, if not found -> Refresh
-            const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+            // Pre-listen for early attack to prevent race condition
+            let earlyAttackFired = false;
+            const tempAttackListener = () => { earlyAttackFired = true; };
+            if (this.controller.network) {
+                this.controller.network.once('battle:attack_used', tempAttackListener);
+            }
 
-            if (!btnFound) {
-                // Check for Salute popup before refreshing
-                const dismissed = await this.dismissSalutePopup();
-                if (dismissed) {
-                    this.logger.info('[Full Auto] Salute popup dismissed. Retrying activation...');
-                    return this.handleFullAuto();
+            const cleanupListener = () => {
+                if (this.controller.network) {
+                    this.controller.network.off('battle:attack_used', tempAttackListener);
+                }
+            };
+
+            try {
+                // Give DOM a tiny bit of time to settle
+                await sleep(500);
+
+                const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+
+                if (!btnFound) {
+                    // Check for Salute popup
+                    const dismissed = await this.dismissSalutePopup();
+                    if (dismissed) {
+                        this.logger.info(`[Full Auto] Salute dismissed. Retry ${attempts}/${maxAttempts}`);
+                        cleanupListener();
+                        continue; // Try again in this while loop
+                    }
+
+                    this.logger.warn('[Battle] FA button not found in 5s. Refreshing...');
+                    await this.controller.reloadPage();
+                    await sleep(800);
+                    cleanupListener();
+                    await this.checkStateAndResume('full_auto');
+                    return;
                 }
 
-                this.logger.warn('[Battle] FA button not found in 5s. Refreshing...');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                // Wait 50-100ms before clicking
+                await sleep(Math.floor(Math.random() * 51) + 50);
+
+                await this.controller.page.click(this.selectors.fullAutoButton);
+                this.logger.debug('[Battle] Fast-clicked Full Auto');
+
+                // Handle common post-click popups
+                await sleep(500);
+
+                // 1.5 Handle "Waiting for last turn" popup
+                if (await this.controller.elementExists('.pop-usual.common-pop-error.pop-show', 200)) {
+                    const errorText = await this.controller.getText('.pop-usual.common-pop-error.pop-show .txt-popup-body');
+                    if (errorText.includes('Waiting for last turn')) {
+                        await this.controller.reloadPage();
+                        await sleep(800);
+                        cleanupListener();
+                        await this.checkStateAndResume('full_auto');
+                        return;
+                    }
+                }
+
+                // 1.6 Handle "Battle Concluded" popup
+                if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 200)) {
+                    await this.controller.reloadPage();
+                    await sleep(800);
+                    cleanupListener();
+                    await this.checkStateAndResume('full_auto');
+                    return;
+                }
+
+                if (earlyAttackFired) {
+                    this.logger.info('[Full Auto] Attack fired');
+                }
+
+                cleanupListener();
+                return; // Success, exit method
+
+            } catch (e) {
+                this.logger.warn(`[Battle] Click failed: ${e.message}`);
+                await this.controller.reloadPage();
                 await sleep(800);
+                cleanupListener();
                 await this.checkStateAndResume('full_auto');
                 return;
             }
-
-            // User Request: Wait 100-150ms after finding the button before clicking
-            // Increased to 250-350ms to prevent click flakiness where the game ignores the click
-            // if the event listeners on the button haven't fully attached after a refresh.
-            await sleep(Math.floor(Math.random() * 101) + 250);
-
-            await this.controller.page.click(this.selectors.fullAutoButton);
-            this.logger.debug('[Battle] Fast-clicked Full Auto');
-        } catch (e) {
-            this.logger.warn(`[Battle] Click failed: ${e.message}`);
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-            await sleep(800);
-            await this.checkStateAndResume('full_auto');
-            return;
         }
 
-        // 1.5 Handle "Waiting for last turn" popup
-        // This appears if FA is clicked too quickly while previous turn is processing
-        if (await this.controller.elementExists('.pop-usual.common-pop-error.pop-show', 500)) {
-            const errorText = await this.controller.getText('.pop-usual.common-pop-error.pop-show .txt-popup-body');
-            if (errorText.includes('Waiting for last turn')) {
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                await sleep(800);
-                await this.checkStateAndResume('full_auto');
-                return;
-            }
-        }
-
-        // 1.6 Handle "Battle Concluded" popup (Race condition on join)
-        if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 500)) {
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-            await sleep(800);
-            await this.checkStateAndResume('full_auto');
-            return;
-        }
-
-        // 2. Return control immediately so waitForBattleEnd can monitor network & DOM
-        if (earlyAttackFired) {
-            this.logger.info('[Full Auto] Normal attack fired immediately.');
-        }
-
-        if (this.controller.network) {
-            this.controller.network.off('battle:attack_used', tempAttackListener);
-        }
-        // Do NOT return `checkStateAndResume` here. 
-        // `handleFullAuto`'s job is just to click the button and wait for the action to submit.
-        // The overarching `waitForBattleEnd` loop will handle checking if the battle is over or resuming FA.
+        this.logger.warn(`[Full Auto] Failed to activate after ${maxAttempts} attempts. Refreshing...`);
+        await this.controller.reloadPage();
+        await sleep(800);
+        await this.checkStateAndResume('full_auto');
     }
 
     /**
@@ -236,6 +264,10 @@ class BattleHandler {
      */
     async verifyFullAutoState() {
         return await this.controller.page.evaluate((selectors) => {
+            // 0. Safety: If the page is still in a loading/overlay state, assume FA is active/pending
+            const loading = document.querySelector('.prt-loading-container, .prt-popup-back.show, #loading-mask');
+            if (loading && loading.offsetHeight > 0) return true;
+
             // 1. Primary Signal: Auto Button marked as 'pushed'
             const autoBtn = document.querySelector(selectors.fullAutoButton);
             if (autoBtn && autoBtn.classList.contains('pushed')) {
@@ -259,10 +291,6 @@ class BattleHandler {
     }
 
     async handleSemiAuto(buttonAlreadyVisible = false, currentTurn = null) {
-        if (currentTurn !== null) {
-            this.lastAttackTurn = currentTurn;
-        }
-
         // Buffer: 50-100ms delay after button found before clicking (as requested)
         await sleep(Math.floor(Math.random() * 51) + 50);
 
@@ -271,13 +299,13 @@ class BattleHandler {
 
         // Step 1: Only wait if we don't already know the button is present
         if (!buttonAlreadyVisible) {
-            this.logger.debug('[SA] Waiting for attack button');
+            this.logger.debug('[SA] Wait for attack');
             const attackReady = await this.controller.page
                 .waitForSelector(selAttack, { timeout: 5000 })
                 .then(() => true).catch(() => false);
             if (!attackReady) {
-                this.logger.warn('[SA] Attack button timeout. Refreshing');
-                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                this.logger.warn('[SA] Timeout. Refreshing');
+                await this.controller.reloadPage();
                 return;
             }
         }
@@ -287,15 +315,18 @@ class BattleHandler {
             await this.controller.page.click(selAttack);
         } catch (e) {
             this.logger.warn(`[SA] Click failed: ${e.message}. Refreshing`);
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await this.controller.reloadPage();
             return;
         }
-        this.logger.info('[SA] Attack pressed');
+        this.logger.info('[SA] Attack');
+        if (currentTurn !== null) {
+            this.lastAttackTurn = currentTurn;
+        }
 
         // Step 2.5: Handle "Battle Concluded" popup
         if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 100)) {
             this.logger.info('[Battle] Battle concluded popup detected. Refreshing...');
-            await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+            await this.controller.reloadPage();
             await sleep(800);
             return;
         }
@@ -316,7 +347,7 @@ class BattleHandler {
 
         // Step 5: Refresh to skip animations
         this.logger.info('[SA] Refreshing');
-        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.controller.reloadPage();
         await sleep(50);
     }
 
@@ -329,6 +360,10 @@ class BattleHandler {
         let missingUiCount = 0;
         let lastHonorCheckTime = 0; // Throttle getHonors() to avoid IPC spam
         let lastFACheckTime = Date.now(); // Start timer from now to avoid immediate fire
+        let lastWatchdogCheckTime = 0; // Throttle stuck detection to reduce IPC traffic
+        let lastEndStateCheckTime = 0; // Throttle battle-end DOM checks to 1000ms
+        let lastSkipCheckTime = 0;     // Throttle animation skip DOM checks to 1000ms
+        let lastCheckTurn = 0;         // Used for Turn-Change Priority Refresh
 
         const currentUrl = this.controller.page.url();
         const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
@@ -379,7 +414,7 @@ class BattleHandler {
             lastActionTime = Date.now();
             faInactivityThreshold = 12000; // Reset to 12s window after action
             lastFACheckTime = Date.now();  // Reset FA check timer on action
-            this.logger.info('[Full Auto] Ability or Summon used. Extending wait timeout (+12s)');
+            this.logger.info('[Ability] Used');
         };
 
         let networkTurn = turnCount; // Will be updated by battle:start events
@@ -404,6 +439,13 @@ class BattleHandler {
 
         try {
             while (Date.now() - startTime < maxWaitMs) {
+                // Turn-Change Priority: If turn incremented via network, bypass all throttles for one immediate check
+                if (turnCount > lastCheckTurn) {
+                    lastCheckTurn = turnCount;
+                    lastEndStateCheckTime = 0;
+                    lastSkipCheckTime = 0;
+                    lastWatchdogCheckTime = 0;
+                }
                 if (this.stopped) {
                     this.logger.info('[Wait] Cancelled (Bot stopped)');
                     const duration = (Date.now() - startTime) / 1000;
@@ -423,22 +465,27 @@ class BattleHandler {
                         if (attReady) {
                             await this.handleSemiAuto(true, turnCount); // button already confirmed present
                             continue;
+                        } else {
+                            // Non-blocking log to inform user we are waiting for the UI
+                            if (Date.now() - lastTurnChangeTime > 5000 && Date.now() - lastActionTime > 5000) {
+                                this.logger.debug('[SA] Waiting for attack button to be ready...');
+                            }
                         }
                     }
                 }
 
                 // --- PRIORITY 0: Network end-state signals (fastest possible detection) ---
                 if (bossDied) {
-                    this.logger.info('[Network] Boss death confirmed. Refreshing to result page...');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(800);
+                    this.logger.info('[Network] Boss died. Refreshing');
+                    await this.controller.reloadPage();
+                    await sleep(this.fastRefresh ? 200 : 500);
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
 
                 if (partyWiped) {
-                    this.logger.info('[Network] Party wipe confirmed. Refreshing...');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(800);
+                    this.logger.info('[Network] Wiped. Refreshing');
+                    await this.controller.reloadPage();
+                    await sleep(this.fastRefresh ? 200 : 500);
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
 
@@ -451,8 +498,8 @@ class BattleHandler {
                 }
 
                 if (networkFinished) {
-                    // Short sleep to allow UI to update slightly (optional, but good for safety)
-                    await sleep(200);
+                    // Safety sleep - slashed to 50ms for instant feel
+                    await sleep(50);
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount + 1, 1), honors: previousHonors };
                 }
 
@@ -481,56 +528,61 @@ class BattleHandler {
                     });
                 }
 
-                // 3. Definite End: Result URL or Empty Result Notice
+                // 3. Definite End: Result URL or Empty Result Notice (URL check is zero cost)
                 if (currentUrl.includes('#result')) {
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
 
-                // Combined end-condition check (single DOM round-trip instead of 4 sequential IPC calls)
-                const endState = await this.controller.page.evaluate((selectors) => {
-                    // Check empty result screen
-                    if (document.querySelector(selectors.emptyResultNotice)) return 'empty_result';
-                    // Check rematch failure popup
-                    const rematch = document.querySelector('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2');
-                    if (rematch && rematch.offsetWidth > 0) return 'rematch_fail';
-                    // Check party wipe: "Salute Participants" cheer popup (party knocked out in raid)
-                    const cheerPopup = document.querySelector('.pop-cheer.pop-show');
-                    if (cheerPopup && cheerPopup.offsetWidth > 0) return 'wiped';
-                    // Check party wipe: btn-cheer / btn-salute visible (fallback)
-                    const cheerBtn = document.querySelector('.btn-cheer, .btn-salute');
-                    if (cheerBtn && cheerBtn.offsetWidth > 0 && cheerBtn.offsetHeight > 0) return 'wiped';
-                    // Check party wipe: "Unable to Continue" header (legacy fallback)
-                    const wipePopup = document.querySelector('.prt-popup-header');
-                    if (wipePopup && wipePopup.textContent && wipePopup.textContent.includes('Unable to Continue')) return 'wiped';
-                    // Check raid ended popup (join race condition)
-                    if (document.querySelector(selectors.raidEndedPopup)) return 'raid_ended';
-                    return null;
-                }, this.selectors).catch(() => null);
+                // Combined end-condition check: Throttled to 1000ms for IPC relief
+                let endState = null;
+                if (Date.now() - lastEndStateCheckTime > 1000) {
+                    lastEndStateCheckTime = Date.now();
+                    endState = await this.controller.page.evaluate((selectors) => {
+                        // Check empty result screen
+                        if (document.querySelector(selectors.emptyResultNotice)) return 'empty_result';
+                        // Check rematch failure popup
+                        const rematch = document.querySelector('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2');
+                        if (rematch && rematch.offsetWidth > 0) return 'rematch_fail';
+                        // Check party wipe: "Salute Participants" cheer popup (party knocked out in raid)
+                        const cheerPopup = document.querySelector('.pop-cheer.pop-show');
+                        if (cheerPopup && cheerPopup.offsetWidth > 0) return 'wiped';
+                        // Check party wipe: btn-cheer / btn-salute visible (fallback)
+                        const cheerBtn = document.querySelector('.btn-cheer, .btn-salute');
+                        if (cheerBtn && cheerBtn.offsetWidth > 0 && cheerBtn.offsetHeight > 0) return 'wiped';
+                        // Check party wipe: "Unable to Continue" header (legacy fallback)
+                        const wipePopup = document.querySelector('.prt-popup-header');
+                        if (wipePopup && wipePopup.textContent && wipePopup.textContent.includes('Unable to Continue')) return 'wiped';
+                        // Check raid ended popup (join race condition)
+                        if (document.querySelector(selectors.raidEndedPopup)) return 'raid_ended';
+                        return null;
+                    }, this.selectors).catch(() => null);
+                }
 
                 if (endState === 'empty_result') {
-                    this.logger.info('[Wait] Empty result screen detected');
+                    this.logger.info('[Wait] Result empty');
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'rematch_fail') {
-                    this.logger.info('[Wait] Rematch failure detected. Refreshing');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(800);
+                    this.logger.info('[Wait] Rematch fail. Refreshing');
+                    await this.controller.reloadPage();
+                    await sleep(this.fastRefresh ? 200 : 500);
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'wiped') {
                     this.logger.info('[Raid] Party wiped (Death popup detected)');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(800);
+                    await this.controller.reloadPage();
+                    await sleep(this.fastRefresh ? 200 : 500);
                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'raid_ended') {
                     this.logger.info('[Raid] Battle already ended');
-                    await this.controller.clickSafe(this.selectors.raidEndedOkButton);
+                    const okButtonSelector = config.selectors.raid.raidEndedOkButton || '.btn-usual-ok';
+                    await this.controller.clickSafe(okButtonSelector);
                     await sleep(1000);
                     return { duration: 0, turns: 0, honors: previousHonors, raidEnded: true };
                 }
 
-                if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
+                if (currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/)) {
                     // Animation Skipping (Full Auto only — SA handles its own reload after each attack)
                     // Added: Check lastReloadTurn to avoid reloading multiple times for the same turn animation skip
 
@@ -539,8 +591,9 @@ class BattleHandler {
                         attackUsed = false;
                         this.lastReloadTurn = turnCount;
                         this.logger.info('[Battle] Normal attack fired. Refreshing page...');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(this.fastRefresh ? 400 : 800);
+                        await this.controller.reloadPage();
+                        await sleep(this.fastRefresh ? 200 : 500);
+                        lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                         if (await this.checkStateAndResume(mode)) {
                             return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
@@ -548,26 +601,31 @@ class BattleHandler {
                         continue;
                     }
 
-                    // 2. DOM Fallback Skip
-                    if (mode !== 'semi_auto' && this.lastReloadTurn < turnCount && await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
-                        this.lastReloadTurn = turnCount;
-                        this.logger.info('[Battle] Refreshing to skip animations');
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(this.fastRefresh ? 400 : 800);
+                    // 2. DOM Fallback Skip: Throttled to 1000ms
+                    if (mode !== 'semi_auto' && this.lastReloadTurn < turnCount && Date.now() - lastSkipCheckTime > 1000) {
+                        lastSkipCheckTime = Date.now();
+                        if (await this.controller.elementExists('.btn-attack-start.display-off', 100)) {
+                            this.lastReloadTurn = turnCount;
+                            this.logger.info('[Battle] Refreshing to skip animations');
+                            await this.controller.reloadPage();
+                            await sleep(this.fastRefresh ? 200 : 500);
+                            lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
-                        if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            if (await this.checkStateAndResume(mode)) {
+                                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            }
+                            continue;
                         }
-                        continue;
                     }
 
                     // 3. Watchdog Fallback (Dynamic inactivity window during FA)
                     if (mode === 'full_auto' && (Date.now() - lastActionTime > faInactivityThreshold)) {
-                        this.logger.warn(`[Full Auto] No activity for ${faInactivityThreshold / 1000}s. Refreshing as fallback...`);
+                        this.logger.warn('[Full Auto] Inactive. Refreshing');
                         lastActionTime = Date.now();
                         faInactivityThreshold = 15000; // Reset threshold after recovery refresh
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(800);
+                        await this.controller.reloadPage();
+                        await sleep(this.fastRefresh ? 300 : 500);
+                        lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                         if (await this.checkStateAndResume(mode)) {
                             return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
@@ -576,27 +634,28 @@ class BattleHandler {
                     }
 
                     // 4. Ongoing FA Persistence Check
-                    // High-reliability safety net: ensure FA stays active if logic thinks it should be.
-                    // Increased interval to 10s and using verifyFullAutoState to avoid toggling it OFF.
-                    if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 10000)) {
+                    if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 20000)) {
                         lastFACheckTime = Date.now();
                         const isEngaged = await this.verifyFullAutoState();
 
                         if (!isEngaged) {
-                            this.logger.info('[Full Auto] Not active (Attack button still visible). Re-activating...');
+                            this.logger.info('[Full Auto] Re-activating');
                             await this.handleFullAuto();
                         }
                     }
+                }
 
-                    // Stuck detection
-                    // Only check for UI presence if attack button is not display-off
+                // --- PRIORITY 3: Global Watchdog (Stuck Detection) ---
+                // Throttled to 2000ms to reduce IPC traffic
+                if (Date.now() - lastWatchdogCheckTime > 2000) {
+                    lastWatchdogCheckTime = Date.now();
                     const attackProcessing = await this.controller.page.evaluate((sel) => {
                         const btn = document.querySelector(sel.attackButton);
                         return btn && btn.classList.contains('display-off');
-                    }, this.selectors);
+                    }, this.selectors).catch(() => false);
 
                     if (!attackProcessing) {
-                        const uiSelector = '.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-cheer, .btn-salute';
+                        const uiSelector = '.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-cheer, .btn-salute, .btn-usual-ok';
                         const uiFound = await this.controller.elementExists(uiSelector, 100);
 
                         if (uiFound) {
@@ -605,8 +664,9 @@ class BattleHandler {
                             missingUiCount++;
                             if (missingUiCount >= 4) {
                                 this.logger.warn('[Watchdog] UI missing (stuck). Refreshing');
-                                await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                                await sleep(800);
+                                await this.controller.reloadPage();
+                                await sleep(this.fastRefresh ? 300 : 500);
+                                lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                                 if (await this.checkStateAndResume(mode)) {
                                     return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
@@ -617,10 +677,16 @@ class BattleHandler {
                     } else {
                         missingUiCount = 0; // Reset count if attack is currently processing
                     }
-                } else {
-                    if (await this.controller.elementExists(this.selectors.okButton, 300) ||
-                        await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                        return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                }
+
+                if (!currentUrl.includes('#raid') && !currentUrl.includes('_raid')) {
+                    // Throttled menu checks
+                    if (Date.now() - lastSkipCheckTime > 1000) {
+                        lastSkipCheckTime = Date.now();
+                        if (await this.controller.elementExists(this.selectors.okButton, 300) ||
+                            await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                        }
                     }
                 }
 
@@ -646,14 +712,11 @@ class BattleHandler {
 
     /**
      * Standardized state detection after refresh.
-     * Checks URL first, then completion modal, then battle UI.
-     * Returns true if battle is finished.
      */
     async checkStateAndResume(mode) {
         const url = this.controller.page.url();
 
         // 1. Check URL and Login Button (Most reliable)
-        // Check for home page redirections, landing pages (#top), or the presence of the login button
         const isLoggedOut = await this.controller.page.evaluate(() => {
             const url = window.location.href;
             const hasLogin = !!document.querySelector('#login-auth');
@@ -677,17 +740,13 @@ class BattleHandler {
         }
 
         // 2. Check for OK button (completion modal), Empty Result Notice, or Wipe/Cheer popup
-        // Optimized: Single evaluate covers all end-state checks without sequential waits
         const endState2 = await this.controller.page.evaluate((selectors) => {
             if (document.querySelector(selectors.okButton)) return 'finished';
             if (document.querySelector(selectors.emptyResultNotice)) return 'finished';
-            // Wipe: Salute/Cheer popup (most common wipe state in raids)
             const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
             if (cheer && cheer.offsetWidth > 0) return 'wiped';
-            // Wipe: rematch fail
             const rematch = document.querySelector('.pop-rematch-fail.pop-show');
             if (rematch && rematch.offsetWidth > 0) return 'wiped';
-            // Wipe: elixir prompt
             const elixir = document.querySelector('.pop-use-elixir, .img-elixir');
             if (elixir && elixir.offsetWidth > 0) return 'wiped';
             return null;
@@ -702,15 +761,11 @@ class BattleHandler {
             return true;
         }
 
-        // 3. Still in battle? Quick wipe pre-check before re-engaging FA to prevent the
-        //    'attack gone without Skill Rail' refresh storm when party is dead post-reload
+        // 3. Still in battle? Quick wipe pre-check before re-engaging FA to prevent reload loops
         this.logger.debug('[Battle] Checking for battle UI to re-engage FA...');
-        // Increased timeout to 6s and check for DOM presence (visible: false) to catch fade-in elements
         const found = await this.controller.elementExists('.btn-attack-start, .btn-auto, .btn-usual-cancel', 6000, false);
-        this.logger.debug(`[Battle] Battle UI found: ${found}, stopped: ${this.stopped}`);
 
         if (found && !this.stopped) {
-            // Pre-check: If cheer popup already visible, don't engage FA
             const isAlreadyWiped = await this.controller.page.evaluate(() => {
                 const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
                 return cheer && cheer.offsetWidth > 0;
@@ -722,40 +777,29 @@ class BattleHandler {
             }
 
             if (mode === 'full_auto') {
-                this.logger.info('[Battle] Re-engaging Full Auto after refresh');
+                this.logger.info('[Battle] Re-engaging Full Auto');
                 await this.handleFullAuto();
                 return false;
             } else if (mode === 'semi_auto') {
-                this.logger.info('[Battle] Re-engaging Semi Auto after refresh');
+                this.logger.info('[Battle] Re-engaging Semi Auto');
                 await this.handleSemiAuto();
                 return false;
             }
-        } else {
-            this.logger.warn(`[Battle] Could not find attack button after refresh. FA will not re-engage. URL: ${this.controller.page.url()}`);
         }
 
-        // 4. Final safety check after timeout
         const finalUrl = this.controller.page.url();
         if (finalUrl.includes('#result') || finalUrl.includes('#quest/index')) {
+            await sleep(50); // SPA navigation buffer
             return true;
         }
 
         return false;
     }
 
-    /**
-     * Deprecated: Replaced by fully decoupled network turn / non-blocking DOM honor tracking
-     */
-    async updateTurnCount(context, honorTarget = 0) {
-        return { turnChanged: false, honorReached: false };
-    }
-
     async getBattleState() {
         try {
             return await this.controller.page.evaluate(() => {
                 const state = { turn: 0, honors: null };
-
-                // 1. Get Turn Count
                 const container = document.querySelector('.prt-turn-info, #js-turn-num, #js-turn-num-count');
                 if (container) {
                     const digits = container.querySelectorAll('div[class*="num-info"]');
@@ -768,8 +812,6 @@ class BattleHandler {
                         state.turn = parseInt(str, 10) || 0;
                     }
                 }
-
-                // 2. Get Honors
                 const userRow = document.querySelector('.lis-user.guild-member');
                 if (userRow) {
                     const pointEl = userRow.querySelector('.txt-point');
@@ -778,7 +820,6 @@ class BattleHandler {
                         state.honors = parseInt(honorsStr, 10) || 0;
                     }
                 }
-
                 return state;
             });
         } catch (e) {
@@ -797,60 +838,73 @@ class BattleHandler {
         return state.turn || 0;
     }
 
-    /**
-     * Detects and dismisses the "Salute Participants" (Cheer) popup.
-     * Gain DA/TA/HP buff and unblocks the UI.
-     */
-    async dismissSalutePopup() {
-        return await this.controller.page.evaluate(() => {
-            const saluteBtn = document.querySelector('.btn-cheer, .btn-salute, .pop-cheer.pop-show .btn-usual-ok');
-            if (saluteBtn && saluteBtn.offsetWidth > 0 && saluteBtn.offsetHeight > 0) {
-                saluteBtn.click();
-                return true;
-            }
-            return false;
-        }).catch(() => false);
-    }
-    /**
-     * Checks if the battle cannot be played due to "Raid is full" or "Already ended" popups.
-     * Clicks OK and returns early result state if found.
-     */
     async checkEarlyBattleEndPopup() {
-        const state = await this.controller.page.evaluate(() => {
-            // 1. Specific check: GBF's raid-ended popup (pop-result-assist-raid).
-            //    The btn-usual-ok in this popup is empty (no dimensions), so we can't
-            //    rely on offsetWidth check. Check the container class directly instead.
+        const popupData = await this.controller.page.evaluate(() => {
             const assistRaidPopup = document.querySelector('.pop-result-assist-raid.pop-show');
             if (assistRaidPopup && assistRaidPopup.offsetWidth > 0) {
                 const body = assistRaidPopup.querySelector('#popup-body, .txt-popup-body, .prt-popup-body');
-                const text = body ? body.textContent.toLowerCase() : '';
-                if (text.includes('already ended') || text.includes('home screen will now appear')) return 'ended';
+                const rawText = body ? body.textContent.trim() : '';
+                const text = rawText.toLowerCase();
+                if (text.includes('already ended') ||
+                    text.includes('home screen will now appear') ||
+                    text.includes('heavy') ||
+                    text.includes('currently')) {
+                    return { state: 'ended', text: rawText };
+                }
             }
 
-            // 2. Generic check: visible OK button + popup body text
             const okBtn = document.querySelector('.btn-usual-ok');
             if (!okBtn || okBtn.offsetWidth === 0) return null;
 
             const body = document.querySelector('.txt-popup-body') || document.querySelector('.prt-popup-body');
             if (!body) return null;
 
-            const text = body.textContent.toLowerCase();
-            if (text.includes('raid battle is full')) return 'full';
-            if (text.includes('already ended') || text.includes('home screen will now appear') || text.includes('pending battles')) return 'ended';
+            const rawText = body.textContent.trim();
+            const text = rawText.toLowerCase();
+
+            if (text.includes('raid battle is full')) return { state: 'full', text: rawText };
+            if (text.includes('already ended') ||
+                text.includes('home screen will now appear') ||
+                text.includes('already been defeated') ||
+                text.includes('heavy') ||
+                text.includes('currently')) return { state: 'ended', text: rawText };
+            if (text.includes('pending battles')) {
+                return { state: 'pending', text: rawText };
+            }
+            if (text.includes('three raid battles')) {
+                return { state: 'concurrent_limit', text: rawText };
+            }
+
             return null;
         }).catch(() => null);
 
-        if (state) {
-            this.logger.info(`[Raid] Raid is ${state}. Dismissing and skipping`);
-            await this.controller.page.evaluate(() => {
-                const btn = document.querySelector('.pop-result-assist-raid .btn-usual-ok') ||
-                    document.querySelector('.btn-usual-ok');
-                if (btn) btn.click();
-            }).catch(() => { });
-            await sleep(800);
-            return { duration: 0, turns: 0, raidFull: state === 'full', raidEnded: state === 'ended' };
+        if (popupData) {
+            this.logger.info(`[Raid] Join error detected: ${popupData.text || popupData.state}`);
+            return {
+                duration: 0,
+                turns: 0,
+                raidFull: popupData.state === 'full',
+                raidEnded: popupData.state === 'ended',
+                raidPending: popupData.state === 'pending',
+                raidConcurrentLimit: popupData.state === 'concurrent_limit',
+                errorText: popupData.text
+            };
         }
         return null;
+    }
+
+    async dismissSalutePopup() {
+        return await this.controller.page.evaluate(() => {
+            const popup = document.querySelector('.pop-salute.pop-show, .pop-cheer.pop-show');
+            if (popup && popup.offsetWidth > 0) {
+                const btn = popup.querySelector('.btn-usual-ok, .btn-usual-cancel');
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+            }
+            return false;
+        }).catch(() => false);
     }
 }
 

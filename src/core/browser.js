@@ -74,9 +74,17 @@ class BrowserManager {
             '--disable-blink-features=AutomationControlled',
             '--disable-dev-shm-usage',
             `--window-size=${windowWidth},${windowHeight}`,
+
+            // Lighter: Memory and process optimization flags
+            '--disable-extensions',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-default-apps',
+            '--no-first-run',
+            '--disable-sync',
+
             // Disable password and security popups
             '--password-store=basic',
-            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding',
+            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding,PasswordLeakDetection',
             '--no-default-browser-check',
             '--disable-infobars',
             '--disable-notifications',
@@ -91,11 +99,14 @@ class BrowserManager {
             '--media-cache-size=0',
             '--disable-application-cache',
 
-            // Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
+            // Lighter: Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
             '--disable-background-networking',
+
+            // Safer: IPC and process optimizations
+            '--disable-ipc-flooding-protection',
         ];
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
@@ -144,23 +155,23 @@ class BrowserManager {
     async applyStealth() {
         // Force webdriver to undefined (stealth plugin might set it to false)
         await this.page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-            });
+            try {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined,
+                });
+            } catch (e) { }
         });
 
         // Remove CDC variables (Chrome DevTools Protocol)
         await this.page.evaluateOnNewDocument(() => {
-            const newProto = navigator.__proto__;
-            delete newProto.webdriver;
-            navigator.__proto__ = newProto;
-
-            // Remove cdc_ variables
-            for (const key of Object.keys(window)) {
-                if (key.startsWith('cdc_')) {
-                    delete window[key];
+            try {
+                // Safer removal, avoid throwing on locked __proto__
+                for (const key of Object.keys(window)) {
+                    if (key.startsWith('cdc_')) {
+                        delete window[key];
+                    }
                 }
-            }
+            } catch (e) { }
         });
     }
 
@@ -172,10 +183,15 @@ class BrowserManager {
             throw new Error('Browser not launched. Call launch() first.');
         }
 
-        await this.page.goto(url, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
-        });
+        try {
+            await this.page.goto(url, {
+                waitUntil: 'domcontentloaded',
+                timeout: 60000
+            });
+        } catch (error) {
+            this.logger.error(`[Error] [Browser] Navigation failed: ${error.message}`);
+            return false;
+        }
 
         // Load credentials and perform auto-login
         try {

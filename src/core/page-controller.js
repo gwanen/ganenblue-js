@@ -137,6 +137,19 @@ class PageController {
     }
 
     /**
+     * Wait for custom function to return truthy
+     */
+    async waitForFunction(fn, timeout = 30000) {
+        try {
+            await this.page.waitForFunction(fn, { timeout });
+            return true;
+        } catch (error) {
+            this.logger.debug(`[Debug] waitForFunction timed out: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
      * Click with human-like behavior
      */
     async clickSafe(selector, options = {}) {
@@ -168,6 +181,8 @@ class PageController {
                 if (!element) throw new Error(`Element handle not found: ${selector}`);
 
                 const box = await element.boundingBox();
+                await element.dispose(); // Fix Memory Leak
+
                 if (!box) throw new Error(`Bounding box not found for: ${selector}`);
 
                 // Calculate normal (Gaussian) distribution around center
@@ -269,7 +284,8 @@ class PageController {
     }
 
     /**
-     * Navigate with retry logic
+     * Navigate with retry logic (full page load).
+     * For GBF hash-based SPA navigation, prefer gotoSPA() instead.
      */
     async goto(url, options = {}) {
         return this.retryOnNetworkError(async () => {
@@ -280,6 +296,129 @@ class PageController {
                 ...options
             });
         }, 3, 'navigation');
+    }
+
+    /**
+     * Navigate to a GBF hash-based SPA URL (e.g. '#quest/assist').
+     *
+     * Problem: page.goto() on a same-origin hash URL only fires a 'hashchange'
+     * event — it never triggers 'domcontentloaded'. Worse, if the target hash
+     * is ALREADY the current hash, no event fires at all and the DOM stays frozen.
+     *
+     * This method:
+     *   1. Forces a real hashchange even when already on the target URL by
+     *      briefly resetting the hash to '' first.
+     *   2. Uses in-page JavaScript to set location.hash directly so the SPA
+     *      router always picks up the change.
+     *   3. Waits for the game's own loading spinner to appear then disappear,
+     *      confirming the new page DOM has been rendered.
+     *
+     * @param {string} url - Full URL with hash, e.g.
+     *   'https://game.granbluefantasy.jp/#quest/assist'
+     * @param {object} options
+     * @param {number} [options.timeout=15000] - Max ms to wait for DOM to settle.
+     * @param {string|null} [options.waitForSelector=null] - Optional selector to
+     *   wait for after navigation (faster than relying on spinner alone).
+     */
+    async gotoSPA(url, options = {}) {
+        const { timeout = 15000, waitForSelector = null } = options;
+
+        // Extract just the hash portion (e.g. '#quest/assist')
+        const hashMatch = url.match(/#.+/);
+        const targetHash = hashMatch ? hashMatch[0] : '';
+
+        if (!targetHash) {
+            // No hash — fall back to a regular full-page navigation
+            return this.goto(url, options);
+        }
+
+        this.logger.info(`[Core] SPA navigate to: ${targetHash}`);
+
+        try {
+            await this.page.evaluate((target) => {
+                const current = window.location.hash;
+
+                // If already on this hash, nudge the router by clearing it first
+                // so a real hashchange event fires when we set it again.
+                if (current === target || current === target.replace('#', '')) {
+                    // Temporarily set to a dummy hash — this fires hashchange #1
+                    history.replaceState(null, '', '#');
+                }
+
+                // Now set the real target — fires hashchange #2 (or #1 if we
+                // weren't on this hash before), triggering the SPA router.
+                window.location.hash = target.replace(/^#/, '');
+            }, targetHash);
+        } catch (e) {
+            // Page context may be mid-navigation; fall back to hard goto.
+            this.logger.debug(`[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`);
+            return this.goto(url);
+        }
+
+        // Wait for the DOM to actually reflect the new page.
+        // GBF renders a .loading-bar / #loading element while switching pages.
+        // We wait for: (a) a page-specific selector OR (b) loading to finish.
+        const deadline = Date.now() + timeout;
+
+        if (waitForSelector) {
+            const found = await this.elementExists(waitForSelector, timeout);
+            if (!found) {
+                this.logger.warn(`[Core] gotoSPA: waitForSelector '${waitForSelector}' not found after ${timeout}ms`);
+            }
+            return;
+        }
+
+        // Fallback: wait for the game's loading overlay to disappear, which
+        // signals that the new page's DOM has been fully injected.
+        try {
+            await this.page.waitForFunction(
+                () => {
+                    // GBF uses #loading or .loading-wrapper to signal transitions.
+                    const loader = document.querySelector('#loading') ||
+                        document.querySelector('.loading-wrapper') ||
+                        document.querySelector('.prt-loading');
+                    // If no loader present, the page has settled (or never showed one).
+                    if (!loader) return true;
+                    const style = window.getComputedStyle(loader);
+                    return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+                },
+                { timeout: Math.max(0, deadline - Date.now()) }
+            );
+        } catch (e) {
+            // Timeout waiting for loader — the DOM may still be fine, log and continue.
+            this.logger.debug(`[Core] gotoSPA: loading overlay wait timed out for ${targetHash}`);
+
+            // If we timed out, the router might have ignored the SPA hash change.
+            // Attempt an in-game footer reload to forcefully unstick it.
+            const reloadBtn = '.btn-treasure-footer-reload';
+            if (await this.elementExists(reloadBtn, 100)) {
+                this.logger.info('[Core] SPA transition seems stuck. Triggering footer reload...');
+                await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(() => { });
+                await sleep(500);
+            }
+        }
+
+        // Extra short yield so any remaining microtasks on the SPA router settle.
+        await sleep(100);
+    }
+
+    /**
+     * Reload the page using GBF's native footer reload button when possible,
+     * falling back to a full browser reload if not available.
+     */
+    async reloadPage() {
+        this.logger.info('[Core] Reloading page...');
+        const reloadBtn = '.btn-treasure-footer-reload';
+        if (await this.elementExists(reloadBtn, 500)) {
+            try {
+                await this.clickSafe(reloadBtn, { fast: true, silent: true });
+                await sleep(1000);
+                return;
+            } catch (e) {
+                this.logger.debug(`[Core] Footer reload failed, falling back to page.reload: ${e.message}`);
+            }
+        }
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
     }
 
     /**

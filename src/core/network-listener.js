@@ -9,9 +9,8 @@ class NetworkListener extends EventEmitter {
         this.isListening = false;
         this.handlers = new Map();
 
-        // Prevent Node.js EventEmitter memory leak warnings for battle:result listeners
-        // Each battle registers one .once() listener, so 20 is a safe ceiling.
-        this.setMaxListeners(20);
+        // Increased to 100 to allow headroom for complex monitoring
+        this.setMaxListeners(100);
 
         // Bind handler context
         this._handleResponse = this._handleResponse.bind(this);
@@ -26,7 +25,6 @@ class NetworkListener extends EventEmitter {
 
     stop() {
         if (!this.isListening) return;
-        this.page.off('request', this._handleResponse); // Just in case
         this.page.off('response', this._handleResponse);
         this.isListening = false;
         this.logger.info('[Network] Listener stopped');
@@ -46,22 +44,59 @@ class NetworkListener extends EventEmitter {
             if (!url.includes('granbluefantasy.jp')) return;
 
             // --- Battle end (existing) ---
-            if (url.includes('/result.json')) {
-                const contentType = response.headers()['content-type'];
-                if (contentType && contentType.includes('application/json')) {
-                    this.logger.info('[Network] Detected Result JSON');
-                    this.emit('battle:result', { url, time: Date.now() });
+            if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('js/view/result/empty.js')) {
+                // For JSON check only if it's the result.json endpoint
+                if (url.includes('.json')) {
+                    const contentType = response.headers()['content-type'];
+                    if (!contentType || !contentType.includes('application/json')) return;
                 }
+
+                this.logger.info(`[Network] Detected Battle Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'})`);
+                this.emit('battle:result', { url, time: Date.now() });
                 return;
             }
 
             // --- Turn number (fires on every page refresh in raid) ---
             if (url.includes('/rest/multiraid/start.json')) {
                 const json = await response.json().catch(() => null);
+                if (json?.popup) {
+                    this.logger.info('[Network] Join error detected (popup in start.json)');
+                    this.emit('raid:error', { type: 'start_popup' });
+                    return;
+                }
                 const turn = json?.turn ?? null;
                 if (turn !== null) {
                     this.logger.debug(`[Network] Battle start received (turn: ${turn})`);
                     this.emit('battle:start', { turn });
+                }
+                return;
+            }
+
+            // --- Raid Join Validation (Detailed checks) ---
+            if (url.includes('/quest/check_multi_start')) {
+                const json = await response.json().catch(() => null);
+                if (json && json.popup) {
+                    const body = json.popup.body ? json.popup.body.toLowerCase() : '';
+                    let type = 'check_multi_start';
+                    if (body.includes('full')) type = 'full';
+                    if (body.includes('pending')) {
+                        type = 'pending';
+                    } else if (body.includes('three raid battles')) {
+                        type = 'concurrent_limit';
+                    }
+
+                    const logText = json.popup.body ? json.popup.body : type;
+                    this.logger.info(`[Network] Join error detected: ${logText}`);
+                    this.emit('raid:error', { type, body: json.popup.body });
+                }
+                return;
+            }
+
+            if (url.includes('/quest/raid_deck_data_create')) {
+                const json = await response.json().catch(() => null);
+                if (json && (json.error === true || json.error_type !== undefined)) {
+                    this.logger.info(`[Network] Deck creation error detected (type: ${json.error_type || 'unknown'})`);
+                    this.emit('raid:error', { type: 'deck_error' });
                 }
                 return;
             }

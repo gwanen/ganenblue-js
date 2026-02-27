@@ -293,6 +293,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                refreshOnStart: settings.refreshOnStart,
                 profileId: profileId
             });
         } else {
