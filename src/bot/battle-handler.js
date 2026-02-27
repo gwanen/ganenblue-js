@@ -185,7 +185,7 @@ class BattleHandler {
                 // Brief settle
                 await sleep(100);
 
-                const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 15000);
+                const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 20000);
 
                 if (!btnFound) {
                     // Check for Salute popup
@@ -196,7 +196,7 @@ class BattleHandler {
                         continue; // Try again in this while loop
                     }
 
-                    this.logger.warn('[Battle] FA button not found in 15s. Refreshing...');
+                    this.logger.warn('[Battle] FA button not found in 20s. Refreshing...');
                     await this.controller.reloadPage();
                     await sleep(800);
                     cleanupListener();
@@ -401,7 +401,7 @@ class BattleHandler {
         let attackUsed = false;
         let summonUsed = false;
         let lastActionTime = Date.now();
-        let faInactivityThreshold = 17000; // Initial 17s window after FA button press
+        let faInactivityThreshold = 20000; // Synchronized to 20s initial window
 
         const onBattleResult = () => { this.logger.info('[Network] Battle end detected'); networkFinished = true; };
         const onBossDied = () => { bossDied = true; };
@@ -409,7 +409,7 @@ class BattleHandler {
         const onAttack = () => {
             attackUsed = true;
             lastActionTime = Date.now();
-            faInactivityThreshold = 15000;
+            faInactivityThreshold = 20000;
             lastFACheckTime = Date.now(); // Reset FA check timer on action
         };
         const onAbilityOrSummon = () => {
@@ -432,7 +432,7 @@ class BattleHandler {
             if (turn > networkTurn) {
                 networkTurn = turn;
                 lastActionTime = Date.now();
-                faInactivityThreshold = 15000; // Reset to 15s window on turn change
+                faInactivityThreshold = 20000; // Reset to 20s window on turn change
             }
         };
 
@@ -647,7 +647,7 @@ class BattleHandler {
                     if (mode === 'full_auto' && (Date.now() - lastActionTime > faInactivityThreshold)) {
                         this.logger.warn('[Full Auto] Inactive. Refreshing');
                         lastActionTime = Date.now();
-                        faInactivityThreshold = 15000; // Reset threshold after recovery refresh
+                        faInactivityThreshold = 20000; // Reset threshold after recovery refresh
                         await this.controller.reloadPage();
                         await sleep(this.fastRefresh ? 300 : 500);
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload
@@ -658,7 +658,7 @@ class BattleHandler {
                         continue;
                     }
 
-                    // 4. Ongoing FA Persistence Check
+                    // 4. Ongoing FA Persistence Check: Synchronized to 20s
                     if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 20000)) {
                         lastFACheckTime = Date.now();
                         const isEngaged = await this.verifyFullAutoState();
@@ -687,7 +687,8 @@ class BattleHandler {
                             missingUiCount = 0;
                         } else {
                             missingUiCount++;
-                            if (missingUiCount >= 4) {
+                            // Trigger after ~20s (10 checks at 2s interval)
+                            if (missingUiCount >= 10) {
                                 this.logger.warn('[Watchdog] UI missing (stuck). Refreshing');
                                 await this.controller.reloadPage();
                                 await sleep(this.fastRefresh ? 300 : 500);
