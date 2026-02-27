@@ -185,7 +185,7 @@ class BattleHandler {
                 // Brief settle
                 await sleep(100);
 
-                const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 5000);
+                const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 15000);
 
                 if (!btnFound) {
                     // Check for Salute popup
@@ -196,7 +196,7 @@ class BattleHandler {
                         continue; // Try again in this while loop
                     }
 
-                    this.logger.warn('[Battle] FA button not found in 5s. Refreshing...');
+                    this.logger.warn('[Battle] FA button not found in 15s. Refreshing...');
                     await this.controller.reloadPage();
                     await sleep(800);
                     cleanupListener();
