@@ -1,60 +1,36 @@
-# Ganenblue
+# 🚀 Ganenblue-JS
+### YOUR ULTIMATE GRINDING PARTNER 🎮
 
-## Installation
-
-### For Users (Download)
-- Go to the [Releases](https://github.com/gwanen/ganenblue-js/releases) page.
-- Download the latest `Ganenblue-JS-Setup.exe`.
-- Run the installer and follow the instructions.
-
-### For Developers (Build from source)
-1. Clone the repository: `git clone https://github.com/gwanen/ganenblue-js.git`
-2. Install dependencies: `npm install`
-3. Run the GUI: `npm start`
-4. Build the installer: `npm run dist`
-
-## Releases
-Check the [Releases](https://github.com/gwanen/ganenblue-js/releases) page for the latest versions and changelogs.
-
-## License
-
-This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](LICENSE.md).
-
-**Non-commercial use only.** You may use, modify, and share this code, but strictly for non-commercial purposes.
-A high-performance Granblue Fantasy automation framework built with **Node.js**, **Puppeteer-Extra**, and **Electron**.
+**Ganenblue-JS** is a high-speed, sleek Granblue Fantasy automation tool built to handle the heavy farm so you don't have to! Optimized for dual-profile grinding with a professional, symmetrical dash.
 
 > [!WARNING]
-> **Disclaimer**: This project is for **educational, academic, and personal research purposes only**. It is not intended for unfair advantage in any commercial game. Use at your own risk. The authors are not responsible for any account labels, bans, or data loss.
+> This project is for **educational & personal research only**. Grinding is serious business—use at your own risk! 🛡️
 
-## 🚀 Key Features
-- **Stealth Core**: Human-mimicry via modern evasion plugins.
-- **Multi-Mode**: Optimized for Quest Farming and Raid Backup.
-- **Smart Battle**: Real-time turn tracking, honor targets, and animation skipping.
-- **Resilient**: Auto-recovery for stuck states, party wipe awareness, and raid join reliability.
-- **Visual Intelligence**: Color-coded activity logs and professionalized system messaging.
-- **Interactive GUI**: Real-time stats, sound-testable alerts (pleasant rising sweep), and easy configuration.
+## ✨ Epic Features
 
-## 🛠️ Quick Start
+- **Slick Dual Dash**: Symmetrical layout with compact logic icons (🌐/❌/⏳). Easy on the eyes, heavy on the farm!
+- **Never-Stop Grinder**: Unified **20s Heartbeat**! If the game lags or freezes, the bot jumps right back in.
+- **Turbo Stealth**: Modern evasion and optimized 100ms reactions. Fast, quiet, and efficient. 🥷
+- **Pro-Stats & Logs**: Real-time tracking (Avg Time/Turns/Rate) and a high-speed log with a "Scroll to Bottom" button for quick check-ins.
+- **Smart Battle**: Auto-tracks turns, skips animations, and stops exactly at your honor target. Blue chest secured! 💎
 
-1. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
+## 🛠️ Get Grinding (Setup)
 
-2. **Launch GUI**:
-   ```bash
-   npm start
-   ```
+1. **Clone it**: `git clone https://github.com/gwanen/ganenblue-js.git`
+2. **Setup**: `npm install`
+3. **Launch**: `npm start`
+4. **Build (Optional)**: `npm run dist`
 
-3. **Configure**: Select mode, browser type, and battle settings in the dashboard.
+## ⚙️ Quick Tweaks
+- **UI Settings**: Managed directly in the dash (saves automatically!).
+- **Advanced Config**: Check `config/default.yaml` for the deep stuff.
+- **Selectors**: Tweak `config/selectors.yaml` if the game UI updates.
 
-## ⚙️ Configuration
-Main settings are located in `config/default.yaml` and `config/selectors.yaml`. For auto-login, configure `config/credentials.yaml`.
-
-## 📂 Structure
-- `src/bot`: Core battle and automation logic.
-- `src/gui`: Electron interface and UI logic.
-- `src/core`: Browser and page interaction management.
+## 📂 The Lab
+- `src/bot`: The grinding brain.
+- `src/gui`: The shiny control panel.
+- `src/core`: The engine under the hood.
 
 ---
-**License**: MIT. For educational use only.
+**License**: [CC BY-NC 4.0](LICENSE.md). Keep it friendly, keep it non-commercial! ✌️
+
