@@ -101,11 +101,12 @@ class NetworkListener extends EventEmitter {
                 return;
             }
 
-            // --- Attack/Ability/Summon result: boss death, party wipe, and turn number ---
+            // --- Attack/Ability/Summon/FatalChain result: boss death, party wipe, and turn number ---
             if (url.includes('/rest/multiraid/') && (
                 url.includes('_attack_result.json') ||
                 url.includes('ability_result.json') ||
-                url.includes('summon_result.json')
+                url.includes('summon_result.json') ||
+                url.includes('fatal_chain_result.json')
             )) {
                 const json = await response.json().catch(() => null);
                 if (!json) return;
@@ -136,10 +137,16 @@ class NetworkListener extends EventEmitter {
 
                 if (!terminalFound) {
                     if (url.includes('summon_result.json')) {
+                        this.logger.debug('[Network] summon_result → battle:summon_used');
                         this.emit('battle:summon_used');
+                    } else if (url.includes('fatal_chain_result.json')) {
+                        this.logger.debug('[Network] fatal_chain_result → battle:ability_used');
+                        this.emit('battle:ability_used');
                     } else if (url.includes('ability_result.json')) {
+                        this.logger.debug('[Network] ability_result → battle:ability_used');
                         this.emit('battle:ability_used');
                     } else if (url.includes('_attack_result.json') || url.includes('normal_attack_result.json')) {
+                        this.logger.debug('[Network] attack_result → battle:attack_used');
                         this.emit('battle:attack_used');
                     }
                 }

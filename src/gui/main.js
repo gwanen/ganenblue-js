@@ -255,6 +255,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                summonRefresh: settings.summonRefresh,
                 profileId: profileId
             });
         } else if (botMode === 'replicard') {
@@ -266,6 +267,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                summonRefresh: settings.summonRefresh,
                 isReplicard: true,
                 profileId: profileId
             });
@@ -278,6 +280,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                summonRefresh: settings.summonRefresh,
                 isReplicard: true,
                 isXeno: true,
                 zoneId: settings.zoneId,
@@ -293,6 +296,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 onBattleEnd: createStatsCallback(profileId, instance),
                 blockResources: settings.blockResources,
                 fastRefresh: settings.fastRefresh,
+                summonRefresh: settings.summonRefresh,
                 refreshOnStart: settings.refreshOnStart,
                 profileId: profileId
             });

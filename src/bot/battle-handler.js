@@ -13,6 +13,7 @@ class BattleHandler {
         this.lastBattleDuration = 0;
         this.lastHonors = 0;
         this.fastRefresh = options.fastRefresh || false;
+        this.summonRefresh = options.summonRefresh !== undefined ? options.summonRefresh : true;
         this.logger = options.logger || logger;
     }
 
@@ -398,8 +399,9 @@ class BattleHandler {
         let bossDied = false;
         let partyWiped = false;
         let attackUsed = false;
+        let summonUsed = false;
         let lastActionTime = Date.now();
-        let faInactivityThreshold = 15000; // Initial 15s window
+        let faInactivityThreshold = 17000; // Initial 17s window after FA button press
 
         const onBattleResult = () => { this.logger.info('[Network] Battle end detected'); networkFinished = true; };
         const onBossDied = () => { bossDied = true; };
@@ -412,9 +414,16 @@ class BattleHandler {
         };
         const onAbilityOrSummon = () => {
             lastActionTime = Date.now();
-            faInactivityThreshold = 12000; // Reset to 12s window after action
+            faInactivityThreshold = 7000; // Reset to 7s after ability/fatal-chain
             lastFACheckTime = Date.now();  // Reset FA check timer on action
             this.logger.info('[Ability] Used');
+        };
+        const onSummonUsed = () => {
+            summonUsed = true;
+            lastActionTime = Date.now();
+            faInactivityThreshold = 7000;
+            lastFACheckTime = Date.now();
+            this.logger.info('[Summon] Used — queuing page refresh');
         };
 
         let networkTurn = turnCount; // Will be updated by battle:start events
@@ -434,7 +443,7 @@ class BattleHandler {
             this.controller.network.on('battle:start', onBattleStart);
             this.controller.network.on('battle:attack_used', onAttack);
             this.controller.network.on('battle:ability_used', onAbilityOrSummon);
-            this.controller.network.on('battle:summon_used', onAbilityOrSummon);
+            this.controller.network.on('battle:summon_used', onSummonUsed);
         }
 
         try {
@@ -586,6 +595,22 @@ class BattleHandler {
                     // Animation Skipping (Full Auto only — SA handles its own reload after each attack)
                     // Added: Check lastReloadTurn to avoid reloading multiple times for the same turn animation skip
 
+                    // 0.5. Summon Used: Reload immediately to skip summon animation (if enabled)
+                    if (mode !== 'semi_auto' && summonUsed) {
+                        summonUsed = false;
+                        if (this.summonRefresh) {
+                            this.logger.info('[Summon] Refreshing page after summon...');
+                            await this.controller.reloadPage();
+                            await sleep(this.fastRefresh ? 200 : 500);
+                            lastFACheckTime = Date.now();
+
+                            if (await this.checkStateAndResume(mode)) {
+                                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            }
+                            continue;
+                        }
+                    }
+
                     // 1. Network Attack Skip (Priority)
                     if (mode !== 'semi_auto' && this.lastReloadTurn < turnCount && attackUsed) {
                         attackUsed = false;
@@ -701,7 +726,7 @@ class BattleHandler {
                 this.controller.network.off('battle:start', onBattleStart);
                 this.controller.network.off('battle:attack_used', onAttack);
                 this.controller.network.off('battle:ability_used', onAbilityOrSummon);
-                this.controller.network.off('battle:summon_used', onAbilityOrSummon);
+                this.controller.network.off('battle:summon_used', onSummonUsed);
             }
         }
     }

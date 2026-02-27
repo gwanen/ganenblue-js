@@ -946,10 +946,12 @@
         }
 
         .btn-launch {
-            padding: 4px;
-            font-size: 11px;
-            margin-top: 4px;
+            padding: 0;
+            font-size: 14px;
             height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .btn-group {
@@ -960,6 +962,10 @@
             width: 26px !important;
             height: 26px !important;
             font-size: 14px !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 !important;
         }
 
         /* Collapsible Compact */
@@ -1050,7 +1056,7 @@
             bottom: 0;
             left: 0;
             right: 0;
-            height: 350px;
+            height: 100vh;
             background: var(--bg-primary);
             border-top: 1px solid var(--border);
             z-index: 100;
@@ -1100,6 +1106,50 @@
             cursor: pointer;
         }
 
+        .log-container-tab {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            font-size: 13px;
+            background: rgba(22, 23, 38, 0.7);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            line-height: 1.4;
+        }
+
+        .btn-scroll-bottom {
+            position: absolute;
+            bottom: 20px;
+            right: 30px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s ease;
+            z-index: 101;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn-scroll-bottom.visible {
+            opacity: 0.4;
+            pointer-events: auto;
+        }
+
+        .btn-scroll-bottom.visible:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
         /* Checkbox Custom Style */
         .checkbox-container {
             display: flex;
@@ -1121,6 +1171,31 @@
 
         .checkbox-container:hover {
             color: var(--text-primary);
+        }
+
+        .btn-grow {
+            flex: 1;
+            width: auto !important;
+            margin-top: 0 !important;
+        }
+
+        /* Logs Panel Resize Handle */
+        .logs-resize-handle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            cursor: ns-resize;
+            background: transparent;
+            border-radius: 3px 3px 0 0;
+            transition: background 0.2s;
+            z-index: 10;
+        }
+
+        .logs-resize-handle:hover,
+        .logs-resize-handle.dragging {
+            background: rgba(96, 165, 250, 0.35);
         }
 
         /* Compact Mode adjustments for Split View */
@@ -1158,6 +1233,18 @@
                 </div>
 
                 <div class="panel controls-panel">
+                    <div class="button-section">
+                        <div class="btn-group">
+                            <button id="btn-start-p1" class="btn-square btn-start" title="Start Farming"
+                                disabled>▶</button>
+                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled></button>
+                            <button id="btn-launch-p1" class="btn-square btn-launch btn-grow"
+                                title="Open Browser">🌐</button>
+                        </div>
+                    </div>
+
+                    <hr>
+
                     <h3>Farming Setup</h3>
 
                     <div class="form-group">
@@ -1182,7 +1269,7 @@
                     </div>
 
                     <div class="form-group" id="quest-url-group-p1">
-                        <label>Quest / Raid URL</label>
+                        <label for="quest-url-p1">Quest / Raid URL</label>
                         <input type="text" id="quest-url-p1"
                             placeholder="http://game.granbluefantasy.jp/#quest/supporter/..." autocomplete="off">
                         <div class="error-message" id="quest-url-error-p1">Invalid URL format</div>
@@ -1211,36 +1298,32 @@
                         </select>
                     </div>
 
-                    <div class="form-group" style="margin-top: 8px;">
-                        <label class="checkbox-container">
+                    <hr>
+
+                    <!-- Options Section -->
+                    <div class="collapsible-header" onclick="toggleSection('options-p1')">
+                        <span class="collapsible-title">⚡ Options</span>
+                        <span class="collapsible-chevron" id="options-p1-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="options-p1-content">
+                        <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="block-resources-p1">
-                            <span>Block Images (Fast)</span>
+                            <span>Block Images</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="fast-refresh-p1">
-                            <span>Fast Refresh (Aggressive)</span>
+                            <span>Fast Refresh</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="refresh-on-start-p1" checked>
-                            <span>Refresh On Raid Start (Skip Anim)</span>
+                            <span>Refresh on Battle Start</span>
+                        </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="summon-refresh-p1" checked>
+                            <span>Refresh on Summon</span>
                         </label>
                     </div>
-
                     <hr>
-
-                    <div class="button-section">
-                        <h4>Bot Actions</h4>
-                        <div class="btn-group">
-                            <button id="btn-start-p1" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶</button>
-                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled></button>
-                            <button id="btn-reset-stats-p1" class="btn-square btn-reset" title="Reset Stats">🔄</button>
-                        </div>
-                        <button id="btn-launch-p1" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
-                    </div>
-
-                    <hr>
-
                     <!-- Stats Summary (Mini) -->
                     <div class="stats-summary">
                         <div class="stat-row">
@@ -1289,9 +1372,7 @@
                             <input type="checkbox" id="disable-sandbox-p1" style="width:auto; margin:0;">
                         </div>
                     </div>
-
                     <hr>
-
                     <!-- Credentials Section -->
                     <div class="collapsible-header" onclick="toggleSection('credentials-p1')">
                         <span class="collapsible-title">🔐 Credentials</span>
@@ -1319,6 +1400,17 @@
                 </div>
 
                 <div class="panel controls-panel">
+                    <div class="button-section">
+                        <div class="btn-group">
+                            <button id="btn-start-p2" class="btn-square btn-start" title="Start Farming"
+                                disabled>▶</button>
+                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled></button>
+                            <button id="btn-launch-p2" class="btn-square btn-launch btn-grow"
+                                title="Open Browser">🌐</button>
+                        </div>
+                    </div>
+
+                    <hr>
                     <h3>Farming Setup</h3>
 
                     <div class="form-group">
@@ -1373,36 +1465,33 @@
                         </select>
                     </div>
 
-                    <div class="form-group" style="margin-top: 8px;">
-                        <label class="checkbox-container">
+                    <hr>
+
+                    <!-- Options Section -->
+                    <div class="collapsible-header" onclick="toggleSection('options-p2')">
+                        <span class="collapsible-title">⚡ Options</span>
+                        <span class="collapsible-chevron" id="options-p2-chevron">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="options-p2-content">
+                        <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="block-resources-p2">
-                            <span>Block Images (Fast)</span>
+                            <span>Block Images</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="fast-refresh-p2">
-                            <span>Fast Refresh (Aggressive)</span>
+                            <span>Fast Refresh</span>
                         </label>
                         <label class="checkbox-container" style="margin-top: 4px;">
                             <input type="checkbox" id="refresh-on-start-p2" checked>
-                            <span>Refresh On Raid Start (Skip Anim)</span>
+                            <span>Refresh on Battle Start</span>
+                        </label>
+                        <label class="checkbox-container" style="margin-top: 4px;">
+                            <input type="checkbox" id="summon-refresh-p2" checked>
+                            <span>Refresh on Summon</span>
                         </label>
                     </div>
-
                     <hr>
-
-                    <div class="button-section">
-                        <h4>Bot Actions</h4>
-                        <div class="btn-group">
-                            <button id="btn-start-p2" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶</button>
-                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled></button>
-                            <button id="btn-reset-stats-p2" class="btn-square btn-reset" title="Reset Stats">🔄</button>
-                        </div>
-                        <button id="btn-launch-p2" class="btn-launch" style="margin-top: 12px;">Open Browser</button>
-                    </div>
-
-                    <hr>
-
+                    <!-- Stats Summary (Mini) -->
                     <div class="stats-summary">
                         <div class="stat-row">
                             <span>Time:</span>
@@ -1450,9 +1539,7 @@
                             <input type="checkbox" id="disable-sandbox-p2" style="width:auto; margin:0;">
                         </div>
                     </div>
-
                     <hr>
-
                     <!-- Credentials Section -->
                     <div class="collapsible-header" onclick="toggleSection('credentials-p2')">
                         <span class="collapsible-title">🔐 Credentials</span>
@@ -1475,6 +1562,7 @@
 
         <!-- Shared Logs Section (Collapsible/Modal) -->
         <div id="logs-panel" class="panel logs-panel hidden">
+            <div id="logs-resize-handle" class="logs-resize-handle"></div>
             <div class="panel-header"
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <h3 style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Activity Logs</h3>
@@ -1495,15 +1583,13 @@
                     style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:#64748b; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">All</button>
             </div>
             <!-- Per-profile log containers -->
-            <div id="log-container-p1" class="log-container-tab"
-                style="height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            <div id="log-container-p1" class="log-container-tab">
             </div>
-            <div id="log-container-p2" class="log-container-tab"
-                style="display:none; height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            <div id="log-container-p2" class="log-container-tab" style="display:none;">
             </div>
-            <div id="log-container-all" class="log-container-tab"
-                style="display:none; height:300px; overflow-y:auto; font-size:13px; background:rgba(22,23,38,0.7); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); line-height:1.4;">
+            <div id="log-container-all" class="log-container-tab" style="display:none;">
             </div>
+            <button id="btn-scroll-bottom" class="btn-scroll-bottom" title="Scroll to Bottom">↓</button>
         </div>
         <!-- Keep legacy #log-container for backward compat (hidden, unused) -->
         <div id="log-container" style="display:none;"></div>
@@ -1512,6 +1598,7 @@
             let activeLogTab = 'p1';
             function switchLogTab(tab) {
                 activeLogTab = tab;
+                window.activeLogTab = tab; // For renderer.js visibility
                 ['p1', 'p2', 'all'].forEach(t => {
                     const btn = document.getElementById('log-tab-' + t);
                     const cont = document.getElementById('log-container-' + t);
@@ -1521,12 +1608,82 @@
                         btn.style.color = isActive ? (t === 'p1' ? '#60a5fa' : t === 'p2' ? '#f87171' : '#a78bfa') : '#64748b';
                         btn.style.borderColor = isActive ? (t === 'p1' ? 'rgba(96,165,250,0.4)' : t === 'p2' ? 'rgba(248,113,113,0.4)' : 'rgba(167,139,250,0.4)') : 'rgba(255,255,255,0.05)';
                     }
-                    if (cont) cont.style.display = isActive ? 'block' : 'none';
+                    if (cont) {
+                        cont.style.display = isActive ? 'block' : 'none';
+                        // Attach scroll listener once
+                        if (!cont.dataset.scrollInit) {
+                            cont.onscroll = updateScrollButton;
+                            cont.dataset.scrollInit = "true";
+                        }
+                    }
                 });
                 // Auto-scroll active tab
                 const activeContainer = document.getElementById('log-container-' + tab);
-                if (activeContainer) activeContainer.scrollTop = activeContainer.scrollHeight;
+                if (activeContainer) {
+                    activeContainer.scrollTop = activeContainer.scrollHeight;
+                }
+                updateScrollButton();
             }
+
+            let scrollBtnTicking = false;
+            window.updateScrollButton = function () {
+                if (scrollBtnTicking) return;
+                scrollBtnTicking = true;
+                requestAnimationFrame(() => {
+                    const cont = document.getElementById('log-container-' + activeLogTab);
+                    const btn = document.getElementById('btn-scroll-bottom');
+                    if (cont && btn) {
+                        const isNearBottom = cont.scrollHeight - cont.scrollTop - cont.clientHeight < 50;
+                        if (isNearBottom) {
+                            btn.classList.remove('visible');
+                        } else {
+                            btn.classList.add('visible');
+                        }
+                    }
+                    scrollBtnTicking = false;
+                });
+            }
+
+            document.getElementById('btn-scroll-bottom').onclick = () => {
+                const cont = document.getElementById('log-container-' + activeLogTab);
+                if (cont) {
+                    cont.scrollTo({ top: cont.scrollHeight, behavior: 'smooth' });
+                }
+            };
+
+            // Init for the first tab
+            setTimeout(updateScrollButton, 100);
+        </script>
+        <script>
+            // Logs panel resize (drag top handle upward)
+            (function () {
+                const panel = document.getElementById('logs-panel');
+                const handle = document.getElementById('logs-resize-handle');
+                if (!panel || !handle) return;
+
+                let dragging = false, startY = 0, startH = 0;
+
+                handle.addEventListener('mousedown', (e) => {
+                    dragging = true;
+                    startY = e.clientY;
+                    startH = panel.offsetHeight;
+                    handle.classList.add('dragging');
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    const delta = startY - e.clientY; // up = positive = bigger
+                    const newH = Math.max(150, Math.min(window.innerHeight, startH + delta));
+                    panel.style.height = newH + 'px';
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    handle.classList.remove('dragging');
+                });
+            })();
         </script>
     </div>
 

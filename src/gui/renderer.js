@@ -54,7 +54,6 @@ function getProfileElements(pid) {
         btnLaunch: document.getElementById(`btn-launch-${pid}`),
         btnStart: document.getElementById(`btn-start-${pid}`),
         btnStop: document.getElementById(`btn-stop-${pid}`),
-        btnReset: document.getElementById(`btn-reset-stats-${pid}`),
         statusBadge: document.getElementById(`status-badge-${pid}`),
         // Settings
         mode: document.getElementById(`bot-mode-${pid}`),
@@ -119,14 +118,14 @@ function setupProfileListeners(pid) {
     els.btnLaunch.addEventListener('click', async () => {
         if (profileState[pid].isBrowserOpen) {
             if (!confirm(`Close browser for ${pid}?`)) return;
-            setLoading(els.btnLaunch, true, 'Closing...');
+            setLoading(els.btnLaunch, true, '⏳');
             await window.electronAPI.closeBrowser(pid);
             profileState[pid].isBrowserOpen = false;
             profileState[pid].isRunning = false;
             log(pid, 'Browser closed', 'info');
             setLoading(els.btnLaunch, false);
         } else {
-            setLoading(els.btnLaunch, true, 'Launching...');
+            setLoading(els.btnLaunch, true, '⏳');
             const browserType = els.browserType ? els.browserType.value : 'chromium';
             const settings = {
                 width: 500,
@@ -169,7 +168,8 @@ function setupProfileListeners(pid) {
             zoneId: els.zone ? els.zone.value : null,
             blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
             fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
-            refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
+            refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
+            summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -198,13 +198,7 @@ function setupProfileListeners(pid) {
         log(pid, 'Bot stopped', 'warn');
     });
 
-    // Reset Stats
-    els.btnReset.addEventListener('click', () => {
-        window.electronAPI.resetStats(pid);
-        profileState[pid].stats = { completed: 0, battleCount: 0, avgBattleTime: 0 };
-        updateStatsDisplay(pid);
-        log(pid, 'Stats reset', 'info');
-    });
+
 
     // Save Credentials
     els.btnSaveCreds.addEventListener('click', async () => {
@@ -224,7 +218,8 @@ function setupProfileListeners(pid) {
         els.browserType, els.disableSandbox,
         document.getElementById(`block-resources-${pid}`),
         document.getElementById(`fast-refresh-${pid}`),
-        document.getElementById(`refresh-on-start-${pid}`)
+        document.getElementById(`refresh-on-start-${pid}`),
+        document.getElementById(`summon-refresh-${pid}`)
     ];
     inputs.forEach(input => {
         if (input) {
@@ -253,7 +248,8 @@ function updateProfileUI(pid) {
     els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
 
     // Buttons
-    els.btnLaunch.textContent = s.isBrowserOpen ? 'Close Browser' : 'Open Browser';
+    els.btnLaunch.textContent = s.isBrowserOpen ? '❌' : '🌐';
+    els.btnLaunch.title = s.isBrowserOpen ? 'Close Browser' : 'Open Browser';
     els.btnStart.disabled = s.isRunning || !s.isBrowserOpen;
     els.btnStop.disabled = !s.isRunning;
 
@@ -432,6 +428,7 @@ function log(pid, message, level = 'info') {
         if (container.children.length > 300) {
             container.removeChild(container.firstChild);
         }
+        if (window.updateScrollButton) window.updateScrollButton();
     }
 
     appendTo(profileContainer);
@@ -559,6 +556,10 @@ async function loadProfileSettings(pid) {
             const rsEl = document.getElementById(`refresh-on-start-${pid}`);
             if (rsEl) rsEl.checked = s.refreshOnStart;
         }
+        if (s.summonRefresh !== undefined) {
+            const srEl = document.getElementById(`summon-refresh-${pid}`);
+            if (srEl) srEl.checked = s.summonRefresh;
+        }
         if (s.blockResources !== undefined) {
             const brEl = document.getElementById(`block-resources-${pid}`);
             if (brEl) brEl.checked = s.blockResources;
@@ -581,7 +582,8 @@ function saveProfileSettings(pid) {
         disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
         blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
         fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
-        refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true
+        refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
+        summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }
@@ -602,11 +604,11 @@ async function loadCredentials(pid) {
 // === Helpers ===
 function setLoading(btn, isLoading, text) {
     if (isLoading) {
-        btn.dataset.original = btn.textContent;
-        btn.textContent = text;
+        btn.dataset.original = btn.innerHTML;
+        btn.innerHTML = text;
         btn.disabled = true;
     } else {
-        btn.textContent = btn.dataset.original || 'Action';
+        btn.innerHTML = btn.dataset.original || 'Action';
         btn.disabled = false;
     }
 }
