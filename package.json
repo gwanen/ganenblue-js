@@ -1,15 +1,27 @@
 {
-  "name": "gbf-bot",
+  "name": "ganenblue-js",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js",
+  "main": "src/gui/main.js",
   "bin": {
     "gbf-bot": "./src/cli/index.js"
   },
   "scripts": {
     "start": "electron src/gui/main.js",
     "cli": "node src/cli/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dist": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.ganenblue.js",
+    "productName": "Ganenblue-JS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    }
   },
   "keywords": [],
   "author": "",
@@ -17,6 +29,7 @@
   "description": "",
   "devDependencies": {
     "electron": "^40.2.1",
+    "electron-builder": "^26.8.1",
     "esbuild": "^0.27.3",
     "eslint": "^10.0.0",
     "jest": "^30.2.0",
