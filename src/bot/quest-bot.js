@@ -254,7 +254,7 @@ class QuestBot {
         if (await this.controller.elementExists('.prt-deck', 100, true)) {
             if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
                 this.logger.warn('[Summon] Stuck on Party screen. Clicking OK directly.');
-                await this.controller.clickSafe('.btn-usual-ok', { fast: true });
+                await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
                 await sleep(800);
             }
         }
@@ -263,7 +263,7 @@ class QuestBot {
         if (await this.controller.elementExists('.pop-usual.pop-show', 100, true)) {
             if (await this.controller.elementExists('.pop-usual.pop-show .btn-usual-ok', 50, true)) {
                 this.logger.warn('[Summon] Warning popup detected on Party screen. Clicking OK...');
-                await this.controller.clickSafe('.pop-usual.pop-show .btn-usual-ok', { fast: true });
+                await this.controller.clickSafe('.pop-usual.pop-show .btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
                 await sleep(500);
             }
         }
@@ -406,7 +406,7 @@ class QuestBot {
         if (!this.battleCount) this.battleCount = 0;
 
         this.battleCount++;
-        if (result.turns > 0) this.totalTurns += result.turns;
+        if (typeof result.turns === 'number' && result.turns > 0) this.totalTurns += result.turns;
         if (result.duration) {
             this.battleTimes.push(Math.floor(result.duration));
             if (this.battleTimes.length > 50) this.battleTimes.shift();

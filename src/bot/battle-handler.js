@@ -291,7 +291,7 @@ class BattleHandler {
         }, this.selectors).catch(() => false);
     }
 
-    async handleSemiAuto(buttonAlreadyVisible = false, currentTurn = null) {
+    async handleSemiAuto(buttonAlreadyVisible = false) {
         // High-speed fixed delay
         await sleep(100);
 
@@ -320,9 +320,6 @@ class BattleHandler {
             return;
         }
         this.logger.info('[SA] Attack');
-        if (currentTurn !== null) {
-            this.lastAttackTurn = currentTurn;
-        }
 
         // Step 2.5: Handle "Battle Concluded" popup
         if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 100)) {
@@ -370,14 +367,17 @@ class BattleHandler {
         const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
         // Initial turn detection to avoid duplicate logging (used once at start)
-        const initialState = initialTurns !== null ? { turn: initialTurns } : await this.getBattleState();
+        const isSemiAuto = mode === 'semi_auto';
+
+        // Initial turn detection to avoid duplicate logging (used once at start)
+        const initialState = (initialTurns !== null || isSemiAuto) ? { turn: initialTurns || 0 } : await this.getBattleState();
         let turnCount = initialState.turn;
         let lastTurn = turnCount;
         let lastTurnChangeTime = Date.now();
         let previousHonors = (this.options?.initialHonors > 0) ? this.options.initialHonors : (this.lastHonors || 0);
         let isHonorChecking = false; // prevents overlapping honor checks
 
-        this.logger.debug(`[Wait] Resolving turn (Start: ${turnCount})`);
+        this.logger.debug(`[Wait] Resolving turns (Mode: ${mode})`);
 
         if (turnCount > 0 && !isRaid) {
             this.logger.info(`[Turn ${turnCount}]`);
@@ -390,7 +390,7 @@ class BattleHandler {
 
             if (honorTarget > 0 && honors >= honorTarget) {
                 this.logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
+                return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
             }
         }
 
@@ -458,27 +458,24 @@ class BattleHandler {
                 if (this.stopped) {
                     this.logger.info('[Wait] Cancelled (Bot stopped)');
                     const duration = (Date.now() - startTime) / 1000;
-                    return { duration, turns: Math.max(turnCount, 1) };
+                    return { duration, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1) };
                 }
 
                 const currentUrl = this.controller.page.url();
 
                 // --- PRIORITY 1: Semi-Auto Detection ---
                 if (mode === 'semi_auto' && (currentUrl.includes('#raid') || currentUrl.includes('_raid'))) {
-                    // Safety: Only attack if we haven't already attacked this turn
-                    if (this.lastAttackTurn < turnCount) {
-                        const attReady = await this.controller.page
-                            .waitForSelector('.btn-attack-start.display-on', { timeout: 1000 })
-                            .then(() => true).catch(() => false);
+                    const attReady = await this.controller.page
+                        .waitForSelector('.btn-attack-start.display-on', { timeout: 1000 })
+                        .then(() => true).catch(() => false);
 
-                        if (attReady) {
-                            await this.handleSemiAuto(true, turnCount); // button already confirmed present
-                            continue;
-                        } else {
-                            // Non-blocking log to inform user we are waiting for the UI
-                            if (Date.now() - lastTurnChangeTime > 5000 && Date.now() - lastActionTime > 5000) {
-                                this.logger.debug('[SA] Waiting for attack button to be ready...');
-                            }
+                    if (attReady) {
+                        await this.handleSemiAuto(true); // button already confirmed present
+                        continue;
+                    } else {
+                        // Non-blocking log to inform user we are waiting for the UI
+                        if (Date.now() - lastActionTime > 5000) {
+                            this.logger.debug('[SA] Waiting for attack button...');
                         }
                     }
                 }
@@ -488,14 +485,14 @@ class BattleHandler {
                     this.logger.info('[Network] Boss died. Refreshing');
                     await this.controller.reloadPage();
                     await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
 
                 if (partyWiped) {
                     this.logger.info('[Network] Wiped. Refreshing');
                     await this.controller.reloadPage();
                     await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
 
                 // 1. Network-Driven Turn Check (Zero DOM overhead)
@@ -509,7 +506,7 @@ class BattleHandler {
                 if (networkFinished) {
                     // Safety sleep - slashed to 50ms for instant feel
                     await sleep(50);
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount + 1, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount + 1, 1), honors: previousHonors };
                 }
 
                 // 2. Non-blocking Honor Tracker (Raids only)
@@ -539,7 +536,7 @@ class BattleHandler {
 
                 // 3. Definite End: Result URL or Empty Result Notice (URL check is zero cost)
                 if (currentUrl.includes('#result')) {
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
 
                 // Combined end-condition check: Throttled to 1000ms for IPC relief
@@ -569,19 +566,19 @@ class BattleHandler {
 
                 if (endState === 'empty_result') {
                     this.logger.info('[Wait] Result empty');
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'rematch_fail') {
                     this.logger.info('[Wait] Rematch fail. Refreshing');
                     await this.controller.reloadPage();
                     await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'wiped') {
                     this.logger.info('[Raid] Party wiped (Death popup detected)');
                     await this.controller.reloadPage();
                     await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
                 if (endState === 'raid_ended') {
                     this.logger.info('[Raid] Battle already ended');
@@ -605,7 +602,7 @@ class BattleHandler {
                             lastFACheckTime = Date.now();
 
                             if (await this.checkStateAndResume(mode)) {
-                                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                                return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                             }
                             continue;
                         }
@@ -621,7 +618,7 @@ class BattleHandler {
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                         if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                         }
                         continue;
                     }
@@ -637,7 +634,7 @@ class BattleHandler {
                             lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                             if (await this.checkStateAndResume(mode)) {
-                                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                                return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                             }
                             continue;
                         }
@@ -653,7 +650,7 @@ class BattleHandler {
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                         if (await this.checkStateAndResume(mode)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                         }
                         continue;
                     }
@@ -695,7 +692,7 @@ class BattleHandler {
                                 lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
                                 if (await this.checkStateAndResume(mode)) {
-                                    return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                                 }
                                 missingUiCount = 0;
                             }
@@ -711,7 +708,7 @@ class BattleHandler {
                         lastSkipCheckTime = Date.now();
                         if (await this.controller.elementExists(this.selectors.okButton, 300) ||
                             await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
-                            return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors };
+                            return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                         }
                     }
                 }

@@ -75,7 +75,7 @@ class RaidBot {
         const isOnAssistPage = currentUrl.includes('#quest/assist');
 
         // Dismiss any lingering error popups before navigating/reloading
-        await this.controller.clickSafe('.btn-usual-ok', { silent: true, fast: true }).catch(() => { });
+        await this.controller.clickSafe('.btn-usual-ok', { silent: true, fast: true, timeout: 1000, maxRetries: 1 }).catch(() => { });
 
         // Logic refined: check_multi_start failures trigger refresh.
         // All others (initial join, deck create) navigate back.
@@ -295,7 +295,7 @@ class RaidBot {
                 this.logger.info('[Raid] Resolving pending result screen...');
                 const okFound = await this.controller.elementExists('.btn-usual-ok', 500);
                 if (okFound) {
-                    await this.controller.clickSafe('.btn-usual-ok', { fast: true }).catch(() => { });
+                    await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 }).catch(() => { });
                     await sleep(100);
                 } else {
                     await this.controller.gotoSPA('https://game.granbluefantasy.jp/#mypage');
@@ -309,7 +309,7 @@ class RaidBot {
             const errorResult = await this.battle.checkEarlyBattleEndPopup();
             if (errorResult) {
                 // Clear the error popup
-                await this.controller.clickSafe('.btn-usual-ok', { fast: true }).catch(() => { });
+                await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 }).catch(() => { });
 
                 if (errorResult.raidFull || errorResult.raidEnded) {
                     this.logger.info('[Status] Raid full or ended. Escaping popup state...');
@@ -704,7 +704,7 @@ class RaidBot {
         if (await this.controller.elementExists('.prt-deck', 100, true)) {
             if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
                 this.logger.warn('[Summon] Stuck on Party screen. Clicking OK directly.');
-                await this.controller.clickSafe('.btn-usual-ok', { fast: true });
+                await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
                 await sleep(800);
             }
         }
@@ -713,7 +713,7 @@ class RaidBot {
         if (await this.controller.elementExists('.pop-usual.pop-show', 100, true)) {
             if (await this.controller.elementExists('.pop-usual.pop-show .btn-usual-ok', 50, true)) {
                 this.logger.warn('[Summon] Warning popup detected on Party screen. Clicking OK...');
-                await this.controller.clickSafe('.pop-usual.pop-show .btn-usual-ok', { fast: true });
+                await this.controller.clickSafe('.pop-usual.pop-show .btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
                 await sleep(500);
             }
         }
@@ -817,7 +817,7 @@ class RaidBot {
         if (!this.totalTurns) this.totalTurns = 0;
         if (!this.battleCount) this.battleCount = 0;
         this.battleCount++;
-        if (result.turns > 0) {
+        if (typeof result.turns === 'number' && result.turns > 0) {
             this.totalTurns += result.turns;
         }
         if (result.honors > 0) {
