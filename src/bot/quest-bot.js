@@ -86,7 +86,6 @@ class QuestBot {
             } else {
                 this.logger.error('[Error] [Bot] Quest bot error:', error);
                 notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
-                await this.controller.takeScreenshot('error_quest');
                 throw error;
             }
         } finally {
@@ -197,6 +196,15 @@ class QuestBot {
             if (await this.controller.elementExists('.btn-usual-ok', 50, true)) {
                 break;
             }
+
+            // New: Check for unexpected redirects to result page or early error states
+            const earlyState = await this.checkEarlyBattleEndPopup();
+            if (earlyState) {
+                if (earlyState.raidPending) return 'pending';
+                this.logger.info('[Summon] Redirected or battle ended early detected');
+                return 'ended';
+            }
+
             retryCount++;
             await sleep(300);
         }

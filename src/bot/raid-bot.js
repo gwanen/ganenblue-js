@@ -132,7 +132,6 @@ class RaidBot {
             } else {
                 this.logger.error('[Error] [Bot] Raid bot error:', error);
                 notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
-                await this.controller.takeScreenshot('error_raid');
                 throw error;
             }
         } finally {

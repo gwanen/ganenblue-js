@@ -1,7 +1,5 @@
 import { sleep, randomDelay, getRandomInRange, getNormalRandom, generateBezierCurve } from '../utils/random.js';
 import logger from '../utils/logger.js';
-import fs from 'fs';
-import path from 'path';
 import NetworkListener from './network-listener.js';
 
 class PageController {
@@ -431,40 +429,6 @@ class PageController {
         });
     }
 
-    /**
-     * Take a screenshot for debugging
-     */
-    async takeScreenshot(namePrefix = 'screenshot') {
-        try {
-            // Check if browser/page is still accessible
-            if (this.page.isClosed && this.page.isClosed()) {
-                this.logger.warn('[Debug] Cannot take screenshot: Page is closed');
-                return;
-            }
-            // Puppeteer specific check if browser is connected
-            if (this.page.browser && !this.page.browser().isConnected()) {
-                this.logger.warn('[Debug] Cannot take screenshot: Browser disconnected');
-                return;
-            }
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const dir = path.resolve('screenshots');
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-            const filename = path.join(dir, `${namePrefix}_${timestamp}.png`);
-
-            await this.page.screenshot({ path: filename, fullPage: true });
-            this.logger.info(`[Debug] Screenshot saved: ${filename}`);
-        } catch (error) {
-            // Suppress errors during screenshot if they are due to closing
-            if (this.isNetworkError(error) || error.message.includes('Target closed')) {
-                this.logger.debug(`[Debug] Screenshot skipped (browser closed)`);
-            } else {
-                this.logger.error(`[Error] Failed to take screenshot: ${error.message}`);
-            }
-        }
-    }
 }
 
 export default PageController;

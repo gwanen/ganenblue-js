@@ -1,17 +1,11 @@
 import winston from 'winston';
-
 import fs from 'fs';
-import path from 'path';
 
 // Ensure logs directory exists
 const logsDir = 'logs';
 if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
 }
-
-// Generate session-based filename
-const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-const sessionLogFile = path.join(logsDir, `session_${timestamp}.log`);
 
 const logger = winston.createLogger({
     level: 'info',
@@ -28,8 +22,12 @@ const logger = winston.createLogger({
                 winston.format.simple()
             )
         }),
-        new winston.transports.File({ filename: 'logs/bot.log' }), // Keep main log
-        new winston.transports.File({ filename: sessionLogFile }) // Add session log
+        new winston.transports.File({
+            filename: 'logs/bot.log',
+            maxsize: 10 * 1024 * 1024, // 10 MB per file
+            maxFiles: 3,               // Keep last 3 rotated files
+            tailable: true             // Always write to bot.log, rotate older ones
+        })
     ]
 });
 
@@ -38,6 +36,5 @@ const logger = winston.createLogger({
 export const createScopedLogger = (profileId) => {
     return logger.child({ profileId });
 };
-
 
 export default logger;
