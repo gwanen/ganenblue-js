@@ -84,7 +84,7 @@ class BrowserManager {
 
             // Disable password and security popups
             '--password-store=basic',
-            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding,PasswordLeakDetection',
+            '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding,PasswordLeakDetection,CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenFrame',
             '--no-default-browser-check',
             '--disable-infobars',
             '--disable-notifications',
@@ -107,6 +107,12 @@ class BrowserManager {
 
             // Safer: IPC and process optimizations
             '--disable-ipc-flooding-protection',
+            '--process-per-site', // Consolidate game processes
+
+            // Modern V8 and Graphics Optimizations
+            '--js-flags="--max-old-space-size=512 --expose-gc"', // Limit JS heap memory and expose manual GC
+            '--disable-checker-imaging', // Skip unnecessary image checks to save CPU
+            '--disable-new-id-entities-details',
         ];
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)

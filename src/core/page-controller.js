@@ -10,6 +10,9 @@ class PageController {
         this.network.start(); // Start listening immediately
         this.requestHandler = null;
         this.lastMousePos = { x: 0, y: 0 };
+
+        // Disable background throttling via CDP immediately
+        this.disableBackgroundThrottling().catch(() => { });
     }
 
     async enableResourceBlocking() {
@@ -19,21 +22,16 @@ class PageController {
         await this.page.setRequestInterception(true);
 
         this.requestHandler = (req) => {
+            const url = req.url().toLowerCase();
             const resourceType = req.resourceType();
-            const url = req.url();
 
-            // Allow essential game assets but block heavy media
-            if (['image', 'media', 'font'].includes(resourceType)) {
-                // Optimization: Block images for speed, but keep some UI elements if needed
-                // For now, aggressive blocking
-                if (url.includes('assets/img/sp/ui') || url.includes('assets/img/sp/quest')) {
-                    // Keep UI and Quest images to avoid broken layout issues if needed
-                    // req.continue();
-                    // Actually, for pure botting speed, block ALL images.
-                    req.abort();
-                } else {
-                    req.abort();
-                }
+            // Block trackers and images/media/fonts
+            const isTracker = url.includes('google-analytics.com') ||
+                url.includes('g-acp.com') ||
+                url.includes('doubleclick.net');
+
+            if (isTracker || ['image', 'media', 'font'].includes(resourceType)) {
+                req.abort();
             } else {
                 req.continue();
             }
@@ -41,6 +39,19 @@ class PageController {
 
         this.page.on('request', this.requestHandler);
         this.logger.info('[Performance] Resource blocking enabled (Images/Media)');
+    }
+
+    async disableBackgroundThrottling() {
+        try {
+            const client = await this.page.target().createCDPSession();
+            // 1. Force focusless throttling to disabled (prevents background lag)
+            await client.send('Emulation.setFocuslessThrottlingEnabled', { enabled: false });
+            // 2. Force the page to stay in 'active' lifecycle state
+            await client.send('Page.setWebLifecycleState', { state: 'active' });
+            this.logger.debug('[Performance] Background throttling disabled via CDP');
+        } catch (error) {
+            this.logger.debug('[Performance] CDP Throttling override failed (expected if page closed)', error);
+        }
     }
 
     async disableResourceBlocking() {

@@ -187,22 +187,29 @@ class QuestBot {
             return 'ended';
         }
 
-        // Wait for summon screen - Increased to 15s (50x300ms) for slow transitions
+        // Wait for summon screen - Optimized with single evaluate check
         let retryCount = 0;
         while (retryCount < 50) {
-            if (await this.controller.elementExists('.prt-supporter-list', 100, true)) {
-                break;
-            }
-            if (await this.controller.elementExists('.btn-usual-ok', 50, true)) {
-                break;
-            }
+            const state = await this.controller.page.evaluate(() => {
+                const results = {
+                    listFound: !!document.querySelector('.prt-supporter-list'),
+                    okFound: !!document.querySelector('.btn-usual-ok'),
+                    isResult: window.location.hash.includes('#result') || !!document.querySelector('.prt-result'),
+                    isRaid: window.location.hash.match(/#(?:raid|raid_multi)(?:\/|$)/)
+                };
+                return results;
+            }).catch(() => ({}));
 
-            // New: Check for unexpected redirects to result page or early error states
-            const earlyState = await this.checkEarlyBattleEndPopup();
-            if (earlyState) {
-                if (earlyState.raidPending) return 'pending';
+            if (state.listFound || state.okFound) break;
+
+            if (state.isResult) {
                 this.logger.info('[Summon] Redirected or battle ended early detected');
                 return 'ended';
+            }
+
+            if (state.isRaid) {
+                this.logger.info('[Summon] Already in battle, skipping selection');
+                return 'success';
             }
 
             retryCount++;
@@ -251,60 +258,61 @@ class QuestBot {
     async validatePostClick() {
         if (await this.checkCaptcha()) return 'captcha';
 
-        // Check for Deck selection stuck popups
-        if (await this.controller.elementExists('.pop-deck.pop-show', 300, true)) {
+        // Consolidate multiple popup checks to save IPC
+        const popupState = await this.controller.page.evaluate(() => {
+            const results = {};
+            if (document.querySelector('.pop-deck.pop-show')) results.deck = true;
+            if (document.querySelector('.prt-deck')) results.party = true;
+            if (document.querySelector('.btn-usual-ok')) results.ok = true;
+            if (document.querySelector('.pop-usual.pop-show')) results.warning = true;
+            return results;
+        }).catch(() => ({}));
+
+        if (popupState.deck) {
             this.logger.warn('[Summon] Stuck on Deck Popup. Clicking OK directly.');
             await this.controller.clickSafe('.pop-deck.pop-show .btn-usual-ok', { silent: true });
             await sleep(800);
+        } else if (popupState.party && popupState.ok) {
+            this.logger.warn('[Summon] Stuck on Party screen. Clicking OK directly.');
+            await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
+            await sleep(800);
+        } else if (popupState.warning && popupState.ok) {
+            this.logger.warn('[Summon] Warning popup detected. Clicking OK...');
+            await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
+            await sleep(800);
         }
 
-        // Check for Party Deck stuck (e.g., Quick Summon skip)
-        if (await this.controller.elementExists('.prt-deck', 100, true)) {
-            if (await this.controller.elementExists('.btn-usual-ok', 100, true)) {
-                this.logger.warn('[Summon] Stuck on Party screen. Clicking OK directly.');
-                await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
-                await sleep(800);
-            }
-        }
-
-        // Check for Warning Popups (e.g., "Elixirs can't be used")
-        if (await this.controller.elementExists('.pop-usual.pop-show', 100, true)) {
-            if (await this.controller.elementExists('.pop-usual.pop-show .btn-usual-ok', 50, true)) {
-                this.logger.warn('[Summon] Warning popup detected on Party screen. Clicking OK...');
-                await this.controller.clickSafe('.pop-usual.pop-show .btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
-                await sleep(500);
-            }
-        }
-
-        // Wait for URL transition - 300ms baseline for IPC relief
+        // Wait for URL transition - Optimized for IPC relief
         for (let i = 0; i < 15; i++) {
             if (this.raidErrorType !== null) {
                 const type = this.raidErrorType;
-                this.raidErrorType = null; // Reset for next time
+                this.raidErrorType = null;
                 if (type === 'pending') return 'pending';
                 return 'ended';
             }
 
-            const currentUrl = this.controller.page.url();
+            const state = await this.controller.page.evaluate(() => {
+                const hash = window.location.hash;
+                const url = window.location.href;
+                return {
+                    isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
+                    isResult: hash.includes('#result') || !!document.querySelector('.prt-result'),
+                    isParty: url.includes('supporter_raid'),
+                    startBtn: !!document.querySelector('.btn-usual-ok.se-quest-start')
+                };
+            }).catch(() => ({}));
 
-            if (currentUrl.includes('supporter_raid')) {
-                // If we land on the full-page party selection screen, click the start button
-                if (await this.controller.elementExists('.btn-usual-ok.se-quest-start', 100, true)) {
-                    this.logger.info('[Summon] Party screen confirmed. Clicking OK...');
-                    await this.controller.clickSafe('.btn-usual-ok.se-quest-start', { fast: true });
-                    await sleep(500);
-                }
-            } else if (currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) || currentUrl.includes('#result')) {
+            if (state.isRaid || state.isResult) {
                 return 'success';
             }
-            await sleep(300);
 
-            const error = await this.checkEarlyBattleEndPopup();
-            if (error) {
-                if (error.raidPending) return 'pending';
-                return 'ended';
+            if (state.isParty && state.startBtn) {
+                this.logger.info('[Summon] Party screen confirmed. Clicking OK...');
+                await this.controller.clickSafe('.btn-usual-ok.se-quest-start', { fast: true });
+                await sleep(500);
             }
-            await sleep(200);
+
+            await sleep(300);
         }
 
         const isLoggedOut = await this.controller.page.evaluate(() => {

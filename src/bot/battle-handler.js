@@ -390,30 +390,33 @@ class BattleHandler {
         const currentUrl = this.controller.page.url();
         const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
 
-        // Initial turn detection to avoid duplicate logging (used once at start)
+        // Initial turn/honor detection consolidated into a single fetch
         const isSemiAuto = mode === 'semi_auto';
+        let turnCount = 0;
+        let previousHonors = (this.options?.initialHonors > 0) ? this.options.initialHonors : (this.lastHonors || 0);
 
-        // Initial turn detection to avoid duplicate logging (used once at start)
-        const initialState = (initialTurns !== null || isSemiAuto) ? { turn: initialTurns || 0 } : await this.getBattleState();
-        let turnCount = initialState.turn;
+        if (initialTurns !== null) {
+            turnCount = initialTurns;
+        } else {
+            const state = await this.getBattleState();
+            turnCount = state.turn;
+            if (isRaid && state.honors !== null) {
+                previousHonors = state.honors;
+            }
+        }
+
         let lastTurn = turnCount;
         let lastTurnChangeTime = Date.now();
-        let previousHonors = (this.options?.initialHonors > 0) ? this.options.initialHonors : (this.lastHonors || 0);
-        let isHonorChecking = false; // prevents overlapping honor checks
+        let isHonorChecking = false;
 
         this.logger.debug(`[Wait] Resolving turns (Mode: ${mode})`);
 
-        if (turnCount > 0 && !isRaid) {
-            this.logger.info(`[Turn ${turnCount}]`);
-        } else if (turnCount > 0 && isRaid) {
-            // Initial honor fetched once securely
-            const state = await this.getBattleState();
-            const honors = state.honors !== null ? state.honors : previousHonors;
-            previousHonors = honors;
-            this.logger.info(`[Turn ${turnCount}] ${honors.toLocaleString()} honor`);
+        if (turnCount > 0) {
+            const honorLog = (isRaid && previousHonors > 0) ? ` ${previousHonors.toLocaleString()} honor` : '';
+            this.logger.info(`[Turn ${turnCount}]${honorLog}`);
 
-            if (honorTarget > 0 && honors >= honorTarget) {
-                this.logger.info(`[Target] Honor goal reached: ${honors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
+            if (isRaid && honorTarget > 0 && previousHonors >= honorTarget) {
+                this.logger.info(`[Target] Honor goal reached: ${previousHonors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
                 return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
             }
         }
@@ -488,57 +491,42 @@ class BattleHandler {
                 const currentUrl = this.controller.page.url();
 
                 // --- PRIORITY 1: Semi-Auto Detection ---
-                if (mode === 'semi_auto' && (currentUrl.includes('#raid') || currentUrl.includes('_raid'))) {
-                    const attReady = await this.controller.page
-                        .waitForSelector('.btn-attack-start.display-on', { timeout: 1000 })
-                        .then(() => true).catch(() => false);
+                if (isSemiAuto && currentUrl.includes('#raid')) {
+                    // Check for attack button using direct evaluate to avoid waitForSelector overhead
+                    const attReady = await this.controller.page.evaluate(() => {
+                        const btn = document.querySelector('.btn-attack-start.display-on');
+                        return !!(btn && btn.offsetWidth > 0);
+                    }).catch(() => false);
 
                     if (attReady) {
-                        await this.handleSemiAuto(true); // button already confirmed present
+                        await this.handleSemiAuto(true);
                         continue;
-                    } else {
-                        // Non-blocking log to inform user we are waiting for the UI
-                        if (Date.now() - lastActionTime > 5000) {
-                            this.logger.debug('[SA] Waiting for attack button...');
-                        }
                     }
                 }
 
-                // --- PRIORITY 0: Network end-state signals (fastest possible detection) ---
-                if (bossDied) {
-                    this.logger.info('[Network] Boss died. Hard refreshing');
+                // --- PRIORITY 0: Network end-state signals (fastest) ---
+                if (bossDied || partyWiped) {
+                    this.logger.info(`[Network] ${bossDied ? 'Boss died' : 'Wiped'}. Hard refreshing`);
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                     await sleep(this.fastRefresh ? 200 : 500);
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
 
-                if (partyWiped) {
-                    this.logger.info('[Network] Wiped. Hard refreshing');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
-                }
-
-                // 1. Network-Driven Turn Check (Zero DOM overhead)
                 if (networkTurn > turnCount) {
                     turnCount = networkTurn;
-                    lastTurn = networkTurn;
                     lastTurnChangeTime = Date.now();
                     this.logger.info(`[Turn ${turnCount}]`);
                 }
 
                 if (networkFinished) {
-                    // Safety sleep - slashed to 50ms for instant feel
                     await sleep(50);
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount + 1, 1), honors: previousHonors };
                 }
 
-                // 2. Non-blocking Honor Tracker (Raids only)
+                // 2. Non-blocking Honor Tracker
                 if (isRaid && (Date.now() - lastHonorCheckTime > 3000) && !isHonorChecking) {
                     lastHonorCheckTime = Date.now();
                     isHonorChecking = true;
-
-                    // Fire and forget (do not await blocking the loop)
                     this.getHonors().then(currentHonor => {
                         isHonorChecking = false;
                         if (currentHonor > 0 && currentHonor > previousHonors) {
@@ -546,97 +534,65 @@ class BattleHandler {
                             this.logger.info(`[Honor] ${currentHonor.toLocaleString()} (+${diff.toLocaleString()})`);
                             previousHonors = currentHonor;
                         }
-
-                        // Check if we hit the target
                         if (honorTarget > 0 && currentHonor >= honorTarget) {
                             this.logger.info(`[Target] Honor goal reached: ${currentHonor.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                            // Signal a way to break the loop by artificially concluding battle
                             networkFinished = true;
                         }
-                    }).catch(() => {
-                        isHonorChecking = false;
-                    });
+                    }).catch(() => { isHonorChecking = false; });
                 }
 
-                // 3. Definite End: Result URL or Empty Result Notice (URL check is zero cost)
+                // 3. Combined DOM Checks (End-state + Watchdog)
+                // Consolidate multiple throttled DOM checks into a single evaluate to save IPC
                 if (currentUrl.includes('#result')) {
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                 }
 
-                // Combined end-condition check: Throttled to 1000ms for IPC relief
-                let endState = null;
                 if (Date.now() - lastEndStateCheckTime > 1000) {
                     lastEndStateCheckTime = Date.now();
-                    endState = await this.controller.page.evaluate((selectors) => {
-                        // Check empty result screen
-                        if (document.querySelector(selectors.emptyResultNotice)) return 'empty_result';
-                        // Check rematch failure popup
-                        const rematch = document.querySelector('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2');
-                        if (rematch && rematch.offsetWidth > 0) return 'rematch_fail';
-                        // Check party wipe: "Salute Participants" cheer popup (party knocked out in raid)
-                        const cheerPopup = document.querySelector('.pop-cheer.pop-show');
-                        if (cheerPopup && cheerPopup.offsetWidth > 0) return 'wiped';
-                        // Check party wipe: btn-cheer / btn-salute visible (fallback)
-                        const cheerBtn = document.querySelector('.btn-cheer, .btn-salute');
-                        if (cheerBtn && cheerBtn.offsetWidth > 0 && cheerBtn.offsetHeight > 0) return 'wiped';
-                        // Check party wipe: "Unable to Continue" header (legacy fallback)
-                        const wipePopup = document.querySelector('.prt-popup-header');
-                        if (wipePopup && wipePopup.textContent && wipePopup.textContent.includes('Unable to Continue')) return 'wiped';
-                        // Check raid ended popup (join race condition)
-                        if (document.querySelector(selectors.raidEndedPopup)) return 'raid_ended';
-                        return null;
-                    }, this.selectors).catch(() => null);
-                }
+                    const state = await this.controller.page.evaluate((sel) => {
+                        const results = {};
 
-                if (endState === 'empty_result') {
-                    this.logger.info('[Wait] Result empty');
-                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
-                }
-                if (endState === 'rematch_fail') {
-                    this.logger.info('[Wait] Rematch fail. Hard refreshing');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
-                }
-                if (endState === 'wiped') {
-                    this.logger.info('[Raid] Party wiped (Death popup detected). Hard refreshing');
-                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                    await sleep(this.fastRefresh ? 200 : 500);
-                    return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
-                }
-                if (endState === 'raid_ended') {
-                    this.logger.info('[Raid] Battle already ended');
-                    const okButtonSelector = config.selectors.raid.raidEndedOkButton || '.btn-usual-ok';
-                    await this.controller.clickSafe(okButtonSelector);
-                    await sleep(1000);
-                    return { duration: 0, turns: 0, honors: previousHonors, raidEnded: true };
-                }
+                        // End states
+                        if (document.querySelector(sel.emptyResultNotice)) results.end = 'empty_result';
+                        else if (document.querySelector('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2')) results.end = 'rematch_fail';
+                        else if (document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute')) results.end = 'wiped';
+                        else if (document.querySelector(sel.raidEndedPopup)) results.end = 'raid_ended';
 
-                // --- Global Watchdog (Stuck Detection) ---
-                // FIX: hoisted OUTSIDE the raid-url block so FA Watchdog's continue can never skip it.
-                // Throttled to 2000ms to reduce IPC traffic.
-                if (Date.now() - lastWatchdogCheckTime > 2000) {
-                    lastWatchdogCheckTime = Date.now();
-                    const attackProcessing = await this.controller.page.evaluate((sel) => {
-                        const btn = document.querySelector(sel.attackButton);
-                        return btn && btn.classList.contains('display-off');
-                    }, this.selectors).catch(() => false);
+                        // Watchdog: Check if attack is processing
+                        const attBtn = document.querySelector(sel.attackButton);
+                        results.isAttacking = !!(attBtn && attBtn.classList.contains('display-off'));
 
-                    if (!attackProcessing) {
-                        const uiSelector = '.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-cheer, .btn-salute, .btn-usual-ok';
-                        const uiFound = await this.controller.elementExists(uiSelector, 100);
+                        // Watchdog: Check if any UI is visible
+                        const ui = document.querySelector('.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-usual-ok');
+                        results.uiVisible = !!(ui && ui.offsetWidth > 0);
 
-                        if (uiFound) {
+                        return results;
+                    }, this.selectors).catch(() => ({}));
+
+                    if (state.end) {
+                        if (state.end === 'empty_result') return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
+                        if (state.end === 'raid_ended') {
+                            this.logger.info('[Raid] Battle already ended');
+                            await this.controller.clickSafe('.btn-usual-ok', { silent: true });
+                            return { duration: 0, turns: 0, honors: previousHonors, raidEnded: true };
+                        }
+                        // Other end states (wiped, rematch_fail) require reload
+                        this.logger.info(`[Wait] Battle ended (${state.end}). Hard refreshing`);
+                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                        await sleep(this.fastRefresh ? 200 : 500);
+                        return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
+                    }
+
+                    // Watchdog Logic
+                    if (!state.isAttacking) {
+                        if (state.uiVisible) {
                             missingUiCount = 0;
                         } else {
                             missingUiCount++;
-                            // Trigger after ~20s (10 checks at 2s interval)
-                            if (missingUiCount >= 10) {
+                            if (missingUiCount >= 10) { // ~10-20s depending on loop speed
                                 this.logger.warn('[Watchdog] UI missing (stuck). Refreshing');
                                 await this.controller.reloadPage();
                                 await sleep(this.fastRefresh ? 300 : 500);
-                                lastFACheckTime = Date.now(); // Reset FA check timer after reload
-
                                 if (await this.checkStateAndResume(mode)) {
                                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors };
                                 }
@@ -644,7 +600,7 @@ class BattleHandler {
                             }
                         }
                     } else {
-                        missingUiCount = 0; // Reset count if attack is currently processing
+                        missingUiCount = 0;
                     }
                 }
 
