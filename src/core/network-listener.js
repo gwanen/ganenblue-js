@@ -120,6 +120,19 @@ class NetworkListener extends EventEmitter {
                 // Extraction: Honor/Points
                 const honor = json?.status?.point ?? json?.status?.points ?? json?.point ?? null;
 
+                // Check Scenario for Win/Lose signals
+                if (json.scenario && Array.isArray(json.scenario)) {
+                    for (const step of json.scenario) {
+                        if (step.cmd === 'win' || (step.cmd === 'die' && step.to === 'enemy')) {
+                            this.emit('battle:boss_died', { honor });
+                            break;
+                        } else if (step.cmd === 'lose') {
+                            this.emit('battle:party_wiped', { honor });
+                            break;
+                        }
+                    }
+                }
+
                 // Action Mapping
                 if (url.includes('summon_result.json')) {
                     this.emit('battle:summon_used', { honor });

@@ -224,8 +224,16 @@ class RaidBot {
         // Handle battle
         const result = await this.battle.executeBattle(this.battleMode, {
             honorTarget: this.honorTarget,
-            refreshOnStart: this.refreshOnStart
+            refreshOnStart: this.refreshOnStart,
+            skipOnSalute: true // Just for raid mode
         });
+
+        if (result?.skipRaid) {
+            this.logger.info('[Raid] Salute detected. Moving to next raid');
+            await this.controller.gotoSPA(this.raidBackupUrl);
+            await sleep(300);
+            return false;
+        }
 
         if (result?.raidFull) {
             this.logger.info('[Raid] Raid was full. Navigating back to backup page');

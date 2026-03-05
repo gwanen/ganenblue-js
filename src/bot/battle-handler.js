@@ -31,6 +31,7 @@ class BattleHandler {
 
     async executeBattle(mode = 'full_auto', options = {}) {
         this.stopped = false;
+        this.skipRaid = false;
         this.options = options;
         this.battleStartTime = Date.now();
         this.lastAttackTurn = 0;
@@ -102,6 +103,10 @@ class BattleHandler {
                 if (currentUrl.includes('#raid') || currentUrl.includes('_raid')) {
                     const dismissed = await this.dismissSalutePopup();
                     if (dismissed) {
+                        if (this.options.skipOnSalute) {
+                            this.logger.info('[Battle] Salute detected. Skipping raid as requested');
+                            return { skipRaid: true, duration: 0, turns: 0 };
+                        }
                         this.logger.info('[Battle] Salute popup dismissed. Re-checking');
                         await sleep(800);
                         battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
@@ -141,6 +146,10 @@ class BattleHandler {
                 await this.handleFullAuto();
             } else if (mode === 'semi_auto') {
                 await this.handleSemiAuto(false, initialTurns);
+            }
+
+            if (this.skipRaid) {
+                return { skipRaid: true, duration: 0, turns: 0 };
             }
 
             // Wait for battle to complete - return result for stats
@@ -201,6 +210,11 @@ class BattleHandler {
                     // Check for Salute popup
                     const dismissed = await this.dismissSalutePopup();
                     if (dismissed) {
+                        if (this.options.skipOnSalute) {
+                            this.logger.info('[Full Auto] Salute detected. Skipping raid as requested');
+                            this.skipRaid = true;
+                            return;
+                        }
                         this.logger.info(`[Full Auto] Salute dismissed. Retry ${attempts}/${maxAttempts}`);
                         continue; // Try again in this while loop
                     }
@@ -524,14 +538,9 @@ class BattleHandler {
                     // Final honor check before returning (in case async check didn't complete)
                     if (isRaid && honorTarget > 0 && !honorTargetReached && previousHonors < honorTarget) {
                         const finalHonor = await this.getHonors();
-                        this.logger.debug(`[Target] Final honor check: ${finalHonor.toLocaleString()} / ${honorTarget.toLocaleString()} (previous: ${previousHonors.toLocaleString()})`);
-                        if (finalHonor >= honorTarget) {
-                            this.logger.info(`[Target] Honor goal reached: ${finalHonor.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                            honorTargetReached = true;
-                            previousHonors = finalHonor;
-                        }
+                        if (finalHonor > previousHonors) previousHonors = finalHonor;
+                        if (finalHonor >= honorTarget) honorTargetReached = true;
                     }
-                    this.logger.debug(`[Result] Returning: honorReached=${honorTargetReached}, honors=${previousHonors.toLocaleString()}, target=${honorTarget.toLocaleString()}`);
                     return {
                         duration: (Date.now() - startTime) / 1000,
                         turns: isSemiAuto ? 'N/A' : Math.max(turnCount + 1, 1),
@@ -542,7 +551,6 @@ class BattleHandler {
 
                 // Exit early if honor target reached
                 if (honorTargetReached) {
-                    this.logger.info('[Target] Skipping rest of battle');
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
                 }
 
@@ -552,11 +560,8 @@ class BattleHandler {
                     // Final honor check before returning from result page
                     if (isRaid && honorTarget > 0 && !honorTargetReached) {
                         const finalHonor = await this.getHonors();
-                        if (finalHonor >= honorTarget) {
-                            this.logger.info(`[Target] Honor goal reached: ${finalHonor.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                            honorTargetReached = true;
-                            previousHonors = finalHonor;
-                        }
+                        if (finalHonor > previousHonors) previousHonors = finalHonor;
+                        if (finalHonor >= honorTarget) honorTargetReached = true;
                     }
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                 }
@@ -659,6 +664,11 @@ class BattleHandler {
                         // Check honor once: After attack, but BEFORE reload (as requested)
                         if (isRaid) {
                             await updateHonor(null);
+                        }
+
+                        // Exit immediately if goal was just reached — no need to reload/re-engage
+                        if (honorTargetReached) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
                         }
 
                         await this.controller.reloadPage();
