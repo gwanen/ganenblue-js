@@ -28,10 +28,10 @@ class RaidBot {
 
         // Enable performance optimizations
         if (options.blockResources) {
-            this.logger.info('[System] Image blocking: ENABLED');
-            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable resource blocking', e));
+            this.logger.info('[System] Image blocking enabled');
+            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable image blocking', e));
         } else {
-            this.logger.info('[System] Image blocking: DISABLED');
+            this.logger.info('[System] Image blocking disabled');
         }
 
         this.raidsCompleted = 0;
@@ -44,7 +44,21 @@ class RaidBot {
 
         // Network Error State for Fast Fallback
         this.raidErrorType = null;
+        this.networkBattleStarted = false;
+        this.networkSupporterScreen = false;
         this.onRaidError = this._onRaidError.bind(this);
+        this.onBattleStart = this._onBattleStart.bind(this);
+        this.onSupporterScreen = this._onSupporterScreen.bind(this);
+    }
+
+    _onSupporterScreen() {
+        this.logger.debug('[Network] Supporter screen detected via network');
+        this.networkSupporterScreen = true;
+    }
+
+    _onBattleStart({ turn }) {
+        this.logger.debug(`[Network] Battle start detected (Turn ${turn})`);
+        this.networkBattleStarted = true;
     }
 
     _onRaidError(info) {
@@ -100,6 +114,8 @@ class RaidBot {
 
         if (this.controller.network) {
             this.controller.network.on('raid:error', this.onRaidError);
+            this.controller.network.on('battle:start', this.onBattleStart);
+            this.controller.network.on('raid:supporter_screen', this.onSupporterScreen);
         }
 
         this.logger.info('[Bot] Session started');
@@ -142,6 +158,8 @@ class RaidBot {
     async runSingleRaid() {
         this.logger.info(`[Raid] Searching for raids (${this.raidsCompleted + 1})`);
         this.raidErrorType = null; // Reset error for new cycle
+        this.networkBattleStarted = false; // Reset for new raid
+        this.networkSupporterScreen = false; // Reset for new raid
 
         // Try to find and join a raid
         const joined = await this.findAndJoinRaid();
@@ -236,25 +254,53 @@ class RaidBot {
         }
 
         const honorReached = result?.honorReached || false;
+        const honorValue = result?.honors || 0;
+        this.logger.debug(`[Result] honorReached: ${honorReached}, honors: ${honorValue.toLocaleString()}, target: ${this.honorTarget.toLocaleString()}`);
+
         if (honorReached) {
             this.logger.info(`[Target] Honor goal reached: ${this.honorTarget.toLocaleString()}. Skipping rest of battle`);
+        } else {
+            this.logger.info('[Battle] Combat concluded');
         }
 
         if (result && result.duration > 0) {
             this.updateDetailStats(result);
         }
 
-        if (honorReached) {
+        // Always navigate back to assist page after raid completes (fixes bug when max honor > target honor)
+        const raidCurrentUrl = this.controller.page.url();
+        const isInBattle = raidCurrentUrl.includes('#raid') || raidCurrentUrl.includes('_raid');
+        const isRaidResult = raidCurrentUrl.includes('#result');
+
+        if (isInBattle || isRaidResult) {
+            this.logger.info('[Raid] Navigating back to assist page');
             await this.controller.gotoSPA(this.raidBackupUrl);
-            await sleep(50);
-        } else {
-            this.logger.info('[Battle] Combat concluded');
+            await sleep(500);
+
+            // Verify navigation succeeded
+            const afterUrl = this.controller.page.url();
+            if (!afterUrl.includes('#quest/assist')) {
+                this.logger.warn(`[Raid] Navigation failed. Current URL: ${afterUrl}`);
+            }
         }
 
         return true;
     }
 
     async findAndJoinRaid() {
+        const initialUrl = this.controller.page.url();
+        const isInBattleUrl = initialUrl.match(/#(?:raid|raid_multi)(?:\/|$)/);
+
+        if (isInBattleUrl || this.networkBattleStarted) {
+            this.logger.info('[Raid] Already in battle mode. Skipping search.');
+            return true; // Returns true to represent a 'joined' state
+        }
+
+        if (this.networkSupporterScreen || await this.controller.elementExists('.prt-supporter-list', 100)) {
+            this.logger.info('[Raid] Already on supporter selection screen. Skipping search.');
+            return true; // Returns true to represent a 'joined' state
+        }
+
         this.logger.info('[Raid] Navigating to backup page...');
         await this.controller.gotoSPA(this.raidBackupUrl);
         await sleep(100);
@@ -571,6 +617,11 @@ class RaidBot {
         while (retryCount < 15) { // 3s total
             if (this.raidErrorType !== null) return 'ended';
 
+            if (this.networkBattleStarted) {
+                this.logger.info('[Status] Battle started via network (start.json). Skipping summon search');
+                return 'success';
+            }
+
             const instantBattle = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
                 const att = document.querySelector('.btn-attack-start');
@@ -803,7 +854,9 @@ class RaidBot {
         }
 
         if (this.controller.network) {
-            this.controller.network.off('raid:error', this.onRaidError);
+            this.controller.network.removeListener('raid:error', this.onRaidError);
+            this.controller.network.removeListener('battle:start', this.onBattleStart);
+            this.controller.network.removeListener('raid:supporter_screen', this.onSupporterScreen);
         }
 
         this.controller.stop().catch(e => this.logger.warn('[Performance] Failed to stop controller', e));

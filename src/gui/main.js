@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
@@ -188,14 +188,24 @@ ipcMain.handle('browser:launch', async (event, profileId, browserType = 'chromiu
     }
 
     try {
-        logger.info(`[System] [${profileId}] Launching ${browserType} browser...`);
+        // Detect display and calculate tiling
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width: screenW, height: screenH } = primaryDisplay.workAreaSize;
+        const halfW = Math.floor(screenW / 2);
 
-        // Override browser type in config
+        // Build browser config — if no custom width is provided, auto-tile profile 1/2
         const browserConfig = {
             ...config.get('browser'),
             browser_type: browserType,
             disable_sandbox: !!deviceSettings.disable_sandbox,
-            emulation: deviceSettings // Pass full settings object
+            emulation: {
+                ...deviceSettings,
+                mode: 'custom', // Force custom mode for browser manager
+                width: deviceSettings.width || halfW,
+                height: deviceSettings.height || screenH,
+                x: deviceSettings.x ?? (profileId === 'p1' ? 0 : halfW),
+                y: deviceSettings.y ?? 0
+            }
         };
 
         // Create new browser manager for this profile

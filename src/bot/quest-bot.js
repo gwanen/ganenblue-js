@@ -25,10 +25,10 @@ class QuestBot {
 
         // Enable performance optimizations
         if (options.blockResources) {
-            this.logger.info('[System] Image blocking: ENABLED');
-            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable resource blocking', e));
+            this.logger.info('[System] Image blocking enabled');
+            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable image blocking', e));
         } else {
-            this.logger.info('[System] Image blocking: DISABLED');
+            this.logger.info('[System] Image blocking disabled');
         }
 
         this.questsCompleted = 0;
@@ -36,11 +36,18 @@ class QuestBot {
         this.isPaused = false;
         this.battleTimes = []; // Array to store battle durations
         this.battleTurns = []; // Array to store turn counts
+        this.totalTurns = 0;
+        this.battleCount = 0;
 
         this.raidErrorType = null;
+        this.networkSupporterScreen = false; // Flag for supporter screen detection via network
         this.onRaidError = (info) => {
-            this.logger.warn(`[Network] Deck or Join error detected: ${info.type}`);
+            this.logger.warn(`[Network] Join error detected: ${info.type}`);
             this.raidErrorType = info.type;
+        };
+        this.onSupporterScreen = () => {
+            this.logger.debug('[Network] Supporter screen detected (BGM request)');
+            this.networkSupporterScreen = true;
         };
     }
 
@@ -50,10 +57,12 @@ class QuestBot {
         this.battleTimes = []; // Reset battle times on start
         this.battleTurns = []; // Reset battle turns on start
         this.raidErrorType = null;
+        this.networkSupporterScreen = false; // Reset for new session
         this.startTime = Date.now();
 
         if (this.controller.network) {
             this.controller.network.on('raid:error', this.onRaidError);
+            this.controller.network.on('raid:supporter_screen', this.onSupporterScreen);
         }
 
         this.logger.info('[Bot] Session started');
@@ -67,7 +76,7 @@ class QuestBot {
 
                 // Check quest limit
                 if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    this.logger.info(`[Status] Quest limit reached: ${this.questsCompleted}/${this.maxQuests}`);
+                    this.logger.info(`[Status] Quest limit reached (${this.questsCompleted}/${this.maxQuests})`);
                     break;
                 }
 
@@ -76,16 +85,16 @@ class QuestBot {
                     this.questsCompleted++;
                 }
 
-                // Short delay between quests - balanced for browser health
+                // Short delay between quests for browser stability
                 await sleep(50);
             }
         } catch (error) {
             // Graceful exit on browser close/disconnect
             if (this.controller.isNetworkError(error) || error.message.includes('Target closed') || error.message.includes('Session closed')) {
-                this.logger.info('[System] Session terminated (Browser closed)');
+                this.logger.info('[System] Session terminated (browser closed)');
             } else {
-                this.logger.error('[Error] [Bot] Quest bot error:', error);
-                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to notify error', e));
+                this.logger.error('[Bot] Quest bot error:', error);
+                notifier.notifyError(this.profileId || 'p1', error.message).catch(e => this.logger.debug('[Notifier] Failed to send error notification', e));
                 throw error;
             }
         } finally {
@@ -94,28 +103,56 @@ class QuestBot {
     }
 
     async runSingleQuest() {
-        this.logger.info(`[Quest] Starting quest (${this.questsCompleted + 1})`);
+        this.logger.info(`[Quest] Initiating quest cycle (${this.questsCompleted + 1})`);
+
+        // Pre-check: If already in battle, skip to battle execution
+        const currentUrl = this.controller.page.url();
+        const isInBattleUrl = currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) !== null;
+
+        if (isInBattleUrl) {
+            // Check if battle UI is present (attack button or auto button)
+            const hasBattleUI = await this.controller.page.evaluate(() => {
+                const att = document.querySelector('.btn-attack-start');
+                const auto = document.querySelector('.btn-auto, .btn-full-auto');
+                const attVisible = att && (att.offsetWidth > 0 || att.classList.contains('display-on'));
+                const autoVisible = auto && auto.offsetWidth > 0;
+                return attVisible || autoVisible;
+            }).catch(() => false);
+
+            if (hasBattleUI) {
+                this.logger.info('[Quest] Battle in progress detected. Skipping summon selection...');
+                const result = await this.battle.executeBattle(this.battleMode);
+                if (result && result.duration > 0) {
+                    this.updateDetailStats(result);
+                }
+                this.logger.info('[Battle] Combat concluded');
+                return true;
+            }
+        }
 
         // Check for Replicard URL
         const isReplicard = this.questUrl.includes('/replicard/');
 
         if (isReplicard) {
             await this.controller.gotoSPA(this.questUrl);
-            await sleep(randomDelay(100, 300));
+            await sleep(randomDelay(100, 200));
             const battleStarted = await this.startReplicardBattle();
             if (!battleStarted) {
-                this.logger.warn('[Quest] Failed to start replicard battle. Retrying');
+                this.logger.warn('[Quest] Failed to initiate replicard battle. Retrying');
                 return false;
             }
         } else {
             // Standard quest navigation
+            this.networkSupporterScreen = false; // Reset for new quest
             await this.controller.gotoSPA(this.questUrl);
-            await sleep(randomDelay(100, 300));
+            // Delay to allow previous battle's result page detection to settle
+            // This prevents race condition where old battle result is detected as error
+            await sleep(randomDelay(200, 400));
 
             const summonStatus = await this.selectSummon();
 
             if (summonStatus === 'pending') {
-                this.logger.info('[System] Pending battles detected. Initializing cleanup...');
+                this.logger.info('[System] Pending battles detected. Initiating cleanup...');
                 await this.clearPendingBattles();
                 return false;
             }
@@ -145,27 +182,41 @@ class QuestBot {
         }
 
         if (result?.raidPending) {
-            this.logger.info('[Quest] Pending battles detected during battle. Initializing cleanup...');
+            this.logger.info('[Quest] Pending battles detected during combat. Initiating cleanup...');
             await this.clearPendingBattles();
         }
 
-        this.logger.info('[Battle] Combat concluded');
+        this.logger.info('**[Battle]** Combat concluded');
+
+        // Post-battle result page check - if on result page, skip to next cycle
+        // The result page will be auto-dismissed when navigating to next quest
+        await sleep(randomDelay(100, 200));
+        const isResultPage = await this.controller.page.evaluate(() => {
+            return window.location.hash.includes('#result') ||
+                !!document.querySelector('.prt-result');
+        }).catch(() => false);
+
+        if (isResultPage) {
+            this.logger.info('[Quest] Result page detected. Proceeding to next cycle...');
+            return true; // Return success, next cycle will handle navigation
+        }
+
         return true;
     }
 
     async startReplicardBattle() {
-        this.logger.info('[Replicard] Engaging monster');
+        this.logger.info('[Replicard] Engaging target');
         const monsterSelector = '.btn-monster.lis-monster';
         const okButton = '.btn-usual-ok';
 
         if (await this.controller.elementExists(monsterSelector, 5000)) {
             await this.controller.clickSafe(monsterSelector);
-            await sleep(800);
+            await sleep(500);
 
             // Check for AP/Confirmation popup
             if (await this.controller.elementExists(okButton, 1000, true)) {
                 await this.controller.clickSafe(okButton);
-                await sleep(500);
+                await sleep(300);
             }
 
             // Select summon
@@ -173,58 +224,63 @@ class QuestBot {
             return summonStatus === 'success';
         }
 
-        this.logger.warn('[Replicard] Monster not found on page');
+        this.logger.warn('[Replicard] Target not found on page');
         return false;
     }
 
     async selectSummon() {
-        this.logger.info('[Summon] Selecting supporter');
+        this.logger.info('[Summon] Awaiting supporter selection');
 
-        // Check for early error popup
-        const earlyError = await this.checkEarlyBattleEndPopup();
-        if (earlyError) {
-            if (earlyError.raidPending) return 'pending';
-            return 'ended';
-        }
+        // Wait for supporter screen via network (BGM request) or DOM fallback
+        // Timeout: 7 seconds
+        const startTime = Date.now();
+        const timeout = 7000;
 
-        // Wait for summon screen - Optimized with single evaluate check
-        let retryCount = 0;
-        while (retryCount < 50) {
+        while (Date.now() - startTime < timeout) {
+            // Check network flag first (fastest)
+            if (this.networkSupporterScreen) {
+                this.logger.debug('[Network] Supporter screen confirmed via BGM request');
+                break;
+            }
+
+            // DOM fallback check
             const state = await this.controller.page.evaluate(() => {
                 const results = {
                     listFound: !!document.querySelector('.prt-supporter-list'),
                     okFound: !!document.querySelector('.btn-usual-ok'),
-                    isResult: window.location.hash.includes('#result') || !!document.querySelector('.prt-result'),
                     isRaid: window.location.hash.match(/#(?:raid|raid_multi)(?:\/|$)/)
                 };
                 return results;
             }).catch(() => ({}));
 
+            // Supporter screen loaded - proceed
             if (state.listFound || state.okFound) break;
 
-            if (state.isResult) {
-                this.logger.info('[Summon] Redirected or battle ended early detected');
-                return 'ended';
-            }
-
+            // Early exit if we're already in battle (quest URL may have redirected)
             if (state.isRaid) {
-                this.logger.info('[Summon] Already in battle, skipping selection');
+                this.logger.info('[Summon] Battle state detected. Skipping selection');
                 return 'success';
             }
 
-            retryCount++;
-            await sleep(300);
+            await sleep(100);
+        }
+
+        // Check for error popups only (skip result page check for quests - stale elements from previous battle)
+        const earlyError = await this.battle.checkEarlyBattleEndPopup(true);
+        if (earlyError) {
+            if (earlyError.raidPending) return 'pending';
+            return 'ended';
         }
 
         const okFound = await this.controller.elementExists('.btn-usual-ok', 300, true);
         if (okFound) {
-            const error = await this.checkEarlyBattleEndPopup();
-            if (error) {
-                if (error.raidPending) return 'pending';
+            // Reuse earlyError result if popup state hasn't changed
+            if (earlyError) {
+                if (earlyError.raidPending) return 'pending';
                 return 'ended';
             }
 
-            this.logger.info('[Summon] Clicking confirmation');
+            this.logger.info('[Summon] Confirming selection');
             await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true }).catch(() => { });
             await sleep(50);
             return await this.validatePostClick();
@@ -243,7 +299,7 @@ class QuestBot {
             }
 
             if (await this.controller.elementExists('.btn-usual-ok', 1500, true)) {
-                this.logger.info('[Summon] Clicking confirmation...');
+                this.logger.info('[Summon] Confirming selection...');
                 await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1, fast: true }).catch(() => { });
                 await sleep(50);
             }
@@ -251,14 +307,14 @@ class QuestBot {
             return await this.validatePostClick();
         }
 
-        this.logger.warn('[Summon] No supporter or party selection found');
+        this.logger.warn('[Summon] No supporter or party selection available');
         return 'failed';
     }
 
     async validatePostClick() {
         if (await this.checkCaptcha()) return 'captcha';
 
-        // Consolidate multiple popup checks to save IPC
+        // Consolidate popup checks into single evaluate
         const popupState = await this.controller.page.evaluate(() => {
             const results = {};
             if (document.querySelector('.pop-deck.pop-show')) results.deck = true;
@@ -269,21 +325,21 @@ class QuestBot {
         }).catch(() => ({}));
 
         if (popupState.deck) {
-            this.logger.warn('[Summon] Stuck on Deck Popup. Clicking OK directly.');
+            this.logger.warn('[Summon] Deck selection popup detected. Dismissing...');
             await this.controller.clickSafe('.pop-deck.pop-show .btn-usual-ok', { silent: true });
             await sleep(800);
         } else if (popupState.party && popupState.ok) {
-            this.logger.warn('[Summon] Stuck on Party screen. Clicking OK directly.');
+            this.logger.warn('[Summon] Party selection popup detected. Dismissing...');
             await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
             await sleep(800);
         } else if (popupState.warning && popupState.ok) {
-            this.logger.warn('[Summon] Warning popup detected. Clicking OK...');
+            this.logger.warn('[Summon] Warning popup detected. Dismissing...');
             await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 });
             await sleep(800);
         }
 
-        // Wait for URL transition - Optimized for IPC relief
-        for (let i = 0; i < 15; i++) {
+        // Wait for URL transition - Reduced iterations and delay for faster completion
+        for (let i = 0; i < 10; i++) {
             if (this.raidErrorType !== null) {
                 const type = this.raidErrorType;
                 this.raidErrorType = null;
@@ -291,6 +347,7 @@ class QuestBot {
                 return 'ended';
             }
 
+            // Consolidate all state checks into single evaluate
             const state = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
                 const url = window.location.href;
@@ -307,14 +364,15 @@ class QuestBot {
             }
 
             if (state.isParty && state.startBtn) {
-                this.logger.info('[Summon] Party screen confirmed. Clicking OK...');
+                this.logger.info('[Summon] Party selection confirmed. Finalizing...');
                 await this.controller.clickSafe('.btn-usual-ok.se-quest-start', { fast: true });
-                await sleep(500);
+                await sleep(300);
             }
 
-            await sleep(300);
+            await sleep(200);
         }
 
+        // Final logout check
         const isLoggedOut = await this.controller.page.evaluate(() => {
             const hasLogin = !!document.querySelector('#login-auth');
             const isHome = window.location.href.includes('#mypage') || window.location.href.includes('#top');
@@ -322,14 +380,14 @@ class QuestBot {
         });
 
         if (isLoggedOut) {
-            this.logger.error('[Safety] Session expired. Stopping');
+            this.logger.error('[Safety] Session expired. Stopping bot');
             this.stop();
             return 'ended';
         }
 
         const finalUrl = this.controller.page.url();
         if (!finalUrl.match(/#(?:raid|raid_multi|quest\/index)(?:\/|$)/) && !finalUrl.includes('#result')) {
-            this.logger.warn('[Status] URL did not transition to battle. Potential error');
+            this.logger.warn('[Status] URL transition failed. Potential error state');
             return 'ended';
         }
 
@@ -340,7 +398,7 @@ class QuestBot {
         const unclaimedUrl = 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0';
         const entrySelector = config.selectors.raid.unclaimedRaidEntry;
 
-        this.logger.info('[System] Initializing pending battle clearance...');
+        this.logger.info('[System] Initiating pending battle clearance');
 
         let clearedCount = 0;
         const maxToClear = 10;
@@ -355,7 +413,7 @@ class QuestBot {
                 break;
             }
 
-            this.logger.info(`[Quest] Clearing unclaimed raid #${clearedCount + 1}`);
+            this.logger.info(`[Quest] Processing unclaimed raid #${clearedCount + 1}`);
             try {
                 await this.controller.clickSafe(entrySelector);
                 const okButtonSelector = '.btn-usual-ok';
@@ -364,19 +422,19 @@ class QuestBot {
                     this.logger.info('[Quest] Result processed');
                     await sleep(500);
                 } else {
-                    this.logger.warn('[System] OK button timeout. Proceeding...');
+                    this.logger.warn('[System] OK button timeout. Proceeding');
                 }
                 clearedCount++;
             } catch (error) {
-                this.logger.error('[Error] Failed to click unclaimed raid:', error);
+                this.logger.error('[Error] Failed to process unclaimed raid', error);
                 break;
             }
         }
-        this.logger.info(`[Quest] Finished clearing ${clearedCount} pending battles`);
+        this.logger.info(`[Quest] Pending battle clearance complete (${clearedCount} cleared)`);
     }
 
     async checkEarlyBattleEndPopup() {
-        return await this.battle.checkEarlyBattleEndPopup();
+        return await this.battle.checkEarlyBattleEndPopup(true);
     }
 
     async checkCaptcha() {
@@ -384,7 +442,7 @@ class QuestBot {
         if (await this.controller.elementExists(selectors.captchaPopup, 1000, true)) {
             const headerText = await this.controller.getText(selectors.captchaHeader);
             if (headerText.includes('Access Verification')) {
-                this.logger.error('[Safety] Captcha detected. Human intervention required');
+                this.logger.error('[Safety] CAPTCHA detected. Human intervention required');
                 notifier.notifyCaptcha(this.profileId || 'p1').catch(() => { });
                 this.stop();
                 return true;
@@ -406,13 +464,14 @@ class QuestBot {
     stop() {
         this.isRunning = false;
         if (this.controller && this.controller.network) {
-            this.controller.network.off('raid:error', this.onRaidError);
+            this.controller.network.removeListener('raid:error', this.onRaidError);
+            this.controller.network.removeListener('raid:supporter_screen', this.onSupporterScreen);
         }
         if (this.battle) {
             this.battle.stop();
         }
         this.controller.stop().catch(() => { });
-        this.logger.info('[System] Shutdown requested');
+        this.logger.info('[System] Shutdown initiated');
         notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(() => { });
     }
 

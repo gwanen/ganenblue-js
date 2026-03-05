@@ -128,8 +128,6 @@ function setupProfileListeners(pid) {
             setLoading(els.btnLaunch, true, '⏳');
             const browserType = els.browserType ? els.browserType.value : 'chromium';
             const settings = {
-                width: 500,
-                height: 850,
                 disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false
             };
 
@@ -244,7 +242,7 @@ function updateProfileUI(pid) {
     const els = dom[pid];
 
     // Status Badge
-    els.statusBadge.textContent = s.isRunning ? '▶' : '⏹';
+    els.statusBadge.textContent = '';
     els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
 
     // Buttons
@@ -401,9 +399,11 @@ function log(pid, message, level = 'info') {
     const time = new Date().toLocaleTimeString();
     const tagColor = pid === 'p1' ? 'var(--accent-blue)' : pid === 'p2' ? 'var(--accent-red)' : 'var(--text-secondary)';
 
-    let coloredMessage = message.replace(/\[([a-zA-Z0-9]+)\]/g, (match, tag) => {
-        const lowerTag = tag.toLowerCase();
-        return `<span class="log-tag log-tag-${lowerTag}">[${tag}]</span>`;
+    let coloredMessage = message.replace(/\[([^\]]+)\]/g, (match, tag) => {
+        const lowerTag = tag.trim().toLowerCase();
+        // Handle tags with spaces by taking the first word for the CSS class
+        const tagClass = lowerTag.split(' ')[0];
+        return `<span class="log-tag log-tag-${tagClass}">[${tag}]</span>`;
     });
 
     const profileLabel = pid !== 'sys' ? `<span class="log-tag" style="color: ${tagColor}">${pid.toUpperCase()}</span>` : '';
@@ -543,6 +543,7 @@ async function loadProfileSettings(pid) {
         if (s.questUrl) els.questUrl.value = s.questUrl;
         if (s.maxRuns) els.maxRuns.value = s.maxRuns;
         if (s.battleMode) els.battleMode.value = s.battleMode;
+        if (s.honorTarget !== undefined && els.honorTarget) els.honorTarget.value = s.honorTarget;
         if (s.raidTarget && els.raidTarget) els.raidTarget.value = s.raidTarget;
         if (s.zoneId && els.zone) els.zone.value = s.zoneId;
         // Browser Settings
@@ -575,6 +576,7 @@ function saveProfileSettings(pid) {
         questUrl: els.questUrl.value,
         maxRuns: els.maxRuns.value,
         battleMode: els.battleMode.value,
+        honorTarget: els.honorTarget ? els.honorTarget.value : '0',
         raidTarget: els.raidTarget ? els.raidTarget.value : '',
         zoneId: els.zone ? els.zone.value : null,
         // Browser Settings
