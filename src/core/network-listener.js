@@ -7,7 +7,6 @@ class NetworkListener extends EventEmitter {
         this.page = page;
         this.logger = scopedLogger || logger;
         this.isListening = false;
-        this.handlers = new Map();
 
         // Increased to 100 to allow headroom for complex monitoring
         this.setMaxListeners(100);
@@ -35,19 +34,34 @@ class NetworkListener extends EventEmitter {
         this.logger.debug('[Network] All internal listeners cleared');
     }
 
+    /**
+     * Returns true if any battle-related listener is active.
+     * Used as a guard to skip expensive response.json() parsing
+     * when no one is subscribed (e.g. during lobby/menu phases).
+     */
+    _hasBattleListeners() {
+        return (
+            this.listenerCount('battle:boss_died') > 0 ||
+            this.listenerCount('battle:party_wiped') > 0 ||
+            this.listenerCount('battle:attack_used') > 0 ||
+            this.listenerCount('battle:summon_used') > 0 ||
+            this.listenerCount('battle:ability_used') > 0
+        );
+    }
 
     async _handleResponse(response) {
         try {
-            const request = response.request();
-            const type = request.resourceType();
             const url = response.url();
 
-            // Filter for API/XHR only. Assets like .png/.css are ignored here.
-            // Certain end-state signals like empty.js require 'script'.
-            if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
-
-            // Fast pre-filter: Only process GBF API endpoints.
+            // Fast pre-filter: bail out immediately for everything outside GBF.
+            // This runs before resourceType() (which has more overhead) to keep
+            // non-GBF responses (fonts, analytics, CDNs) essentially free.
             if (!url.includes('granbluefantasy.jp')) return;
+
+            const type = response.request().resourceType();
+
+            // Accept only fetch/XHR/script. Certain end-state signals like empty.js need 'script'.
+            if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
             // --- Battle end (existing) ---
             if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('js/view/result/empty.js')) {
@@ -114,21 +128,28 @@ class NetworkListener extends EventEmitter {
                 url.includes('summon_result.json') ||
                 url.includes('fatal_chain_result.json')
             )) {
+                // Guard: skip expensive JSON parsing when no battle listeners are active.
+                // During lobby/menu phases this saves deserializing 500KB+ responses.
+                if (!this._hasBattleListeners()) return;
+
                 const json = await response.json().catch(() => null);
                 if (!json) return;
 
                 // Extraction: Honor/Points
                 const honor = json?.status?.point ?? json?.status?.points ?? json?.point ?? null;
 
-                // Check Scenario for Win/Lose signals
+                // Check Scenario for Win/Lose signals.
+                // Array.find() short-circuits on the first match — crucial for large raid scenarios
+                // where the step array can be hundreds of entries long.
                 if (json.scenario && Array.isArray(json.scenario)) {
-                    for (const step of json.scenario) {
-                        if (step.cmd === 'win' || (step.cmd === 'die' && step.to === 'enemy')) {
+                    const terminal = json.scenario.find(s =>
+                        s.cmd === 'win' || (s.cmd === 'die' && (s.to === 'enemy' || s.to === 'boss')) || s.cmd === 'lose'
+                    );
+                    if (terminal) {
+                        if (terminal.cmd === 'win' || (terminal.cmd === 'die' && (terminal.to === 'enemy' || terminal.to === 'boss'))) {
                             this.emit('battle:boss_died', { honor });
-                            break;
-                        } else if (step.cmd === 'lose') {
+                        } else {
                             this.emit('battle:party_wiped', { honor });
-                            break;
                         }
                     }
                 }
@@ -140,7 +161,7 @@ class NetworkListener extends EventEmitter {
                     this.emit('battle:ability_used', { honor });
                 } else if (url.includes('ability_result.json')) {
                     this.emit('battle:ability_used', { honor });
-                } else if (url.includes('_attack_result.json') || url.includes('normal_attack_result.json')) {
+                } else if (url.includes('_attack_result.json')) {
                     this.emit('battle:attack_used', { honor });
                 }
                 return;
