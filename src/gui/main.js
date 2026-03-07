@@ -6,6 +6,7 @@ import yaml from 'js-yaml';
 import BrowserManager from '../core/browser.js';
 import QuestBot from '../bot/quest-bot.js';
 import RaidBot from '../bot/raid-bot.js';
+import SkipBot from '../bot/skip-bot.js';
 import config from '../utils/config.js';
 import logger from '../utils/logger.js';
 
@@ -100,20 +101,35 @@ function startStatsUpdater() {
                     const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
                     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
                     duration = `${hours}:${minutes}:${seconds}`;
-
-                    // Display Actual Rate (Locked-in from last battle completion)
                     rate = instance.stats.lastRate || '0.0/h';
                 }
 
-                mainWindow.webContents.send('bot:status', {
-                    profileId,
-                    status: instance.bot.isPaused ? 'Paused' : 'Running',
-                    stats: {
-                        ...stats,
-                        duration,
-                        rate
-                    }
-                });
+                // Optimization: Skip IPC if stats haven't changed (save CPU/IPC)
+                // We compare key metrics. Duration is updated every second, so we only skip
+                // if they are EXACTLY the same (unlikely for duration, but good for counts)
+                const currentStatus = instance.bot.isPaused ? 'Paused' : 'Running';
+                const last = instance.lastSentStats;
+
+                // If it's the same progress and same status, only updates once per minute (heartbeat)
+                const hasChanged = !last ||
+                    last.status !== currentStatus ||
+                    last.completed !== (stats.completedQuests || stats.raidsCompleted) ||
+                    last.battleCount !== stats.battleCount ||
+                    Date.now() - (last.time || 0) > 60000;
+
+                if (hasChanged) {
+                    mainWindow.webContents.send('bot:status', {
+                        profileId,
+                        status: currentStatus,
+                        stats: { ...stats, duration, rate }
+                    });
+                    instance.lastSentStats = {
+                        status: currentStatus,
+                        completed: stats.completedQuests || stats.raidsCompleted,
+                        battleCount: stats.battleCount,
+                        time: Date.now()
+                    };
+                }
             }
         }
     }, 1000);
@@ -301,6 +317,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             instance.bot = new RaidBot(instance.browser.page, {
                 initialUrl: settings.questUrl || config.get('bot.quest_url'),
                 maxRaids: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                battleMode: settings.battleMode || 'full_auto',
                 honorTarget: parseInt(settings.honorTarget) || 0,
                 targetUser: settings.raidTargetUser || null,
                 onBattleEnd: createStatsCallback(profileId, instance),
@@ -308,6 +325,14 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
                 fastRefresh: settings.fastRefresh,
                 summonRefresh: settings.summonRefresh,
                 refreshOnStart: settings.refreshOnStart,
+                profileId: profileId
+            });
+        } else if (botMode === 'skip') {
+            instance.bot = new SkipBot(instance.browser.page, {
+                questUrl: settings.questUrl || config.get('bot.quest_url'),
+                maxRuns: parseInt(settings.maxRuns) || config.get('bot.max_quests'),
+                blockResources: settings.blockResources,
+                onBattleEnd: createStatsCallback(profileId, instance),
                 profileId: profileId
             });
         } else {
@@ -326,13 +351,13 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             const quests = stats.completedQuests || 0;
             const raids = stats.raidsCompleted || 0;
 
-            logger.info(`[Status] [${profileId}] Finished: Quest ${quests} | Raid ${raids}`);
+            logger.info(`[Status] [${profileId}] Finished: Quest/Skip ${quests} | Raid ${raids}`);
             mainWindow.webContents.send('bot:status', { profileId, status: 'Stopped' });
 
             // Show completion notification
             showNotification(
                 'Farming Complete! 🎉',
-                `[${profileId}] Quest ${quests} | Raid ${raids}`,
+                `[${profileId}] Quest/Skip ${quests} | Raid ${raids}`,
                 true
             );
         }).catch(err => {

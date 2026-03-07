@@ -22,26 +22,92 @@ const profileState = {
 // === DOM Elements Cache ===
 const dom = {
     global: {
-        btnShowLogs: document.getElementById('btn-show-logs'),
-        btnCloseLogs: document.getElementById('btn-close-logs'),
-        btnClearLogs: document.getElementById('btn-clear-logs'),
-        logsPanel: document.getElementById('logs-panel'),
+        btnShowLogs: null,
+        btnCloseLogs: null,
+        btnClearLogs: null,
+        logsPanel: null,
         // Per-profile log containers (tabbed)
         logContainers: {
-            p1: null, // initialized after DOMContentLoaded
+            p1: null,
             p2: null,
             all: null
         },
-        btnToggleP2: document.getElementById('btn-toggle-p2'),
-        btnTestSound: document.getElementById('btn-test-sound'),
-        globalStatus: document.getElementById('global-status')
+        btnToggleP2: null,
+        btnTestSound: null,
+        globalStatus: null
     },
     p1: null,
     p2: null
 };
 
-// Defer DOM fetching until DOMContentLoaded
+// === AudioContext Singleton ===
+let _audioCtx = null;
+function getAudioCtx() {
+    if (!_audioCtx || _audioCtx.state === 'closed') {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        _audioCtx = new AC();
+    }
+    if (_audioCtx.state === 'suspended') {
+        _audioCtx.resume().catch(() => { });
+    }
+    return _audioCtx;
+}
+
+// === Log Batching ===
+const _logQueue = [];
+let _logFlushPending = false;
+function _flushLogs() {
+    _logFlushPending = false;
+    if (_logQueue.length === 0) return;
+
+    // Swap the queue so new logs can accumulate while we render
+    const batch = _logQueue.splice(0, _logQueue.length);
+
+    for (const { profileContainer, allContainer, entryHTML, level } of batch) {
+        _appendEntry(profileContainer, entryHTML, level);
+        _appendEntry(allContainer, entryHTML, level);
+    }
+
+    if (window.updateScrollButton) window.updateScrollButton();
+}
+
+function _appendEntry(container, entryHTML, level) {
+    if (!container) return;
+    const entry = document.createElement('div');
+    entry.className = `log-entry log-level-${level}`;
+    entry.innerHTML = entryHTML;
+    container.appendChild(entry);
+
+    // Auto-scroll only if panel is visible and this is the active tab
+    const panel = dom.global.logsPanel;
+    if (panel && !panel.classList.contains('hidden') &&
+        container === dom.global.logContainers[window.activeLogTab]) {
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // Memory Guard: cap at 300 entries per container
+    if (container.children.length > 300) {
+        container.removeChild(container.firstChild);
+    }
+}
+
+// === Settings Debounce ===
+const _saveTimers = {};
+function debouncedSave(pid) {
+    clearTimeout(_saveTimers[pid]);
+    _saveTimers[pid] = setTimeout(() => saveProfileSettings(pid), 500);
+}
+
+// Populate DOM cache — called after DOMContentLoaded
 function initDomCache() {
+    dom.global.btnShowLogs = document.getElementById('btn-show-logs');
+    dom.global.btnCloseLogs = document.getElementById('btn-close-logs');
+    dom.global.btnClearLogs = document.getElementById('btn-clear-logs');
+    dom.global.logsPanel = document.getElementById('logs-panel');
+    dom.global.btnToggleP2 = document.getElementById('btn-toggle-p2');
+    dom.global.btnTestSound = document.getElementById('btn-test-sound');
+    dom.global.globalStatus = document.getElementById('global-status');
     dom.p1 = getProfileElements('p1');
     dom.p2 = getProfileElements('p2');
 }
@@ -222,7 +288,7 @@ function setupProfileListeners(pid) {
     inputs.forEach(input => {
         if (input) {
             input.addEventListener('change', () => {
-                saveProfileSettings(pid);
+                debouncedSave(pid);
                 updateFormVisibility(pid);
             });
         }
@@ -259,11 +325,13 @@ function updateFormVisibility(pid) {
     const els = dom[pid];
     const mode = els.mode.value;
     const isQuestOrReplicard = mode === 'quest' || mode === 'replicard' || mode === 'xeno_replicard';
+    const isSkip = mode === 'skip';
 
     els.questUrlGroup.style.display = isQuestOrReplicard ? 'block' : 'none';
     els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.raidTargetGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.zoneGroup.style.display = mode === 'xeno_replicard' ? 'block' : 'none';
+    els.battleMode.parentElement.style.display = isSkip ? 'none' : 'block';
 
     const label = els.maxRunsLabel;
     if (label) {
@@ -271,6 +339,7 @@ function updateFormVisibility(pid) {
         else if (mode === 'raid') label.textContent = 'Max Raids';
         else if (mode === 'replicard') label.textContent = 'Max Runs';
         else if (mode === 'xeno_replicard') label.textContent = 'Max Runs';
+        else if (mode === 'skip') label.textContent = 'Max Skips';
     }
 }
 
@@ -401,7 +470,6 @@ function log(pid, message, level = 'info') {
 
     let coloredMessage = message.replace(/\[([^\]]+)\]/g, (match, tag) => {
         const lowerTag = tag.trim().toLowerCase();
-        // Handle tags with spaces by taking the first word for the CSS class
         const tagClass = lowerTag.split(' ')[0];
         return `<span class="log-tag log-tag-${tagClass}">[${tag}]</span>`;
     });
@@ -409,30 +477,17 @@ function log(pid, message, level = 'info') {
     const profileLabel = pid !== 'sys' ? `<span class="log-tag" style="color: ${tagColor}">${pid.toUpperCase()}</span>` : '';
     const entryHTML = `<span class="log-time">${time}</span>${profileLabel}<span class="log-message">${coloredMessage}</span>`;
 
-    // Append to the profile-specific container
+    // Resolve containers
     const targetPid = (pid === 'p1' || pid === 'p2') ? pid : 'p1';
     const profileContainer = dom.global.logContainers[targetPid];
     const allContainer = dom.global.logContainers.all;
 
-    function appendTo(container) {
-        if (!container) return;
-        const entry = document.createElement('div');
-        entry.className = `log-entry log-level-${level}`;
-        entry.innerHTML = entryHTML;
-        container.appendChild(entry);
-        // Auto-scroll only the currently active tab
-        if (container === dom.global.logContainers[window.activeLogTab]) {
-            container.scrollTop = container.scrollHeight;
-        }
-        // Memory Guard: cap at 300 entries per container
-        if (container.children.length > 300) {
-            container.removeChild(container.firstChild);
-        }
-        if (window.updateScrollButton) window.updateScrollButton();
+    // Queue for batched RAF rendering — eliminates per-message layout thrash
+    _logQueue.push({ profileContainer, allContainer, entryHTML, level });
+    if (!_logFlushPending) {
+        _logFlushPending = true;
+        requestAnimationFrame(_flushLogs);
     }
-
-    appendTo(profileContainer);
-    appendTo(allContainer);
 }
 
 // === IPC Event Handlers ===
@@ -498,10 +553,10 @@ if (window.electronAPI) {
 
 function playAlertSound() {
     try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext) return;
+        // Reuse singleton AudioContext — creating a new one on every call leaks memory
+        const ctx = getAudioCtx();
+        if (!ctx) return;
 
-        const ctx = new AudioContext();
         const oscillator = ctx.createOscillator();
         const gainNode = ctx.createGain();
 
