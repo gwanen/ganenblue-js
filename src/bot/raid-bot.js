@@ -22,6 +22,7 @@ class RaidBot {
         this.selectors = config.selectors.raid;
         this.battle = new BattleHandler(page, {
             fastRefresh: options.fastRefresh || false,
+            summonRefresh: options.summonRefresh !== undefined ? options.summonRefresh : true,
             logger: this.logger,
             controller: this.controller
         });
