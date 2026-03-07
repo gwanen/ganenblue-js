@@ -19,6 +19,7 @@ class QuestBot {
         this.selectors = config.selectors.quest;
         this.battle = new BattleHandler(page, {
             fastRefresh: options.fastRefresh || false,
+            summonRefresh: options.summonRefresh !== undefined ? options.summonRefresh : true,
             logger: this.logger,
             controller: this.controller
         });
@@ -80,7 +81,17 @@ class QuestBot {
                     break;
                 }
 
-                const success = await this.runSingleQuest();
+                let success = false;
+                try {
+                    success = await this.runSingleQuest();
+                } catch (cycleError) {
+                    if (this.controller.isNetworkError(cycleError)) {
+                        this.logger.warn(`[Quest] Transient error during cycle. Retrying: ${cycleError.message}`);
+                        await sleep(500);
+                        continue;
+                    }
+                    throw cycleError; // Re-throw fatal errors
+                }
                 if (success) {
                     this.questsCompleted++;
                 }
@@ -186,7 +197,7 @@ class QuestBot {
             await this.clearPendingBattles();
         }
 
-        this.logger.info('**[Battle]** Combat concluded');
+        this.logger.info('[Battle] Combat concluded');
 
         // Post-battle result page check - if on result page, skip to next cycle
         // The result page will be auto-dismissed when navigating to next quest
@@ -231,10 +242,12 @@ class QuestBot {
     async selectSummon() {
         this.logger.info('[Summon] Awaiting supporter selection');
 
-        // Wait for supporter screen via network (BGM request) or DOM fallback
-        // Timeout: 7 seconds
+        // Wait for supporter screen via network (BGM request) or DOM fallback.
+        // Timeout: 7 seconds. Re-navigate up to 2x if GBF's SPA intercepts the
+        // late result.json and redirects us back to #result mid-navigation.
         const startTime = Date.now();
         const timeout = 7000;
+        let renavCount = 0;
 
         while (Date.now() - startTime < timeout) {
             // Check network flag first (fastest)
@@ -243,27 +256,38 @@ class QuestBot {
                 break;
             }
 
-            // DOM fallback check
+            // DOM check: supporter screen, battle already active, or result-page intercept
             const state = await this.controller.page.evaluate(() => {
-                const results = {
+                const hash = window.location.hash;
+                return {
                     listFound: !!document.querySelector('.prt-supporter-list'),
                     okFound: !!document.querySelector('.btn-usual-ok'),
-                    isRaid: window.location.hash.match(/#(?:raid|raid_multi)(?:\/|$)/)
+                    isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
+                    isResult: hash.includes('#result') || !!document.querySelector('.prt-result')
                 };
-                return results;
             }).catch(() => ({}));
 
-            // Supporter screen loaded - proceed
             if (state.listFound || state.okFound) break;
 
-            // Early exit if we're already in battle (quest URL may have redirected)
             if (state.isRaid) {
                 this.logger.info('[Summon] Battle state detected. Skipping selection');
                 return 'success';
             }
 
+            // GBF's SPA intercepted result.json and redirected us back to #result.
+            // Re-navigate to the quest URL immediately instead of waiting the full 7s.
+            if (state.isResult && renavCount < 2) {
+                renavCount++;
+                this.logger.warn(`[Summon] Result page intercept detected. Re-navigating (${renavCount}/2)...`);
+                this.networkSupporterScreen = false;
+                await this.controller.gotoSPA(this.questUrl);
+                await sleep(randomDelay(200, 350));
+                continue;
+            }
+
             await sleep(100);
         }
+
 
         // Check for error popups only (skip result page check for quests - stale elements from previous battle)
         const earlyError = await this.battle.checkEarlyBattleEndPopup(true);
@@ -520,8 +544,6 @@ class QuestBot {
             startTime: this.startTime,
             avgBattleTime: this.getAverageBattleTime(),
             avgTurns: avgTurns,
-            battleTimes: this.battleTimes,
-            battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0,
             lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
             rate: rate

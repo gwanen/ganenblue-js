@@ -133,7 +133,17 @@ class RaidBot {
                     break;
                 }
 
-                const success = await this.runSingleRaid();
+                let success = false;
+                try {
+                    success = await this.runSingleRaid();
+                } catch (cycleError) {
+                    if (this.controller.isNetworkError(cycleError)) {
+                        this.logger.warn(`[Raid] Transient error during cycle. Retrying: ${cycleError.message}`);
+                        await sleep(500);
+                        continue;
+                    }
+                    throw cycleError; // Re-throw fatal errors
+                }
                 if (success) {
                     this.raidsCompleted++;
                 }
@@ -926,8 +936,6 @@ class RaidBot {
             startTime: this.startTime,
             avgBattleTime: this.getAverageBattleTime(),
             avgTurns: avgTurns,
-            battleTimes: this.battleTimes,
-            battleTurns: this.battleTurns,
             battleCount: this.battleCount || 0,
             lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
             rate: rate,

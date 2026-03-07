@@ -138,6 +138,8 @@ class BrowserManager {
             '--disable-default-apps',
             '--no-first-run',
             '--disable-sync',
+            '--disable-component-update', // Save CPU: stop background component updates
+            '--disable-client-side-phishing-detection', // Save CPU: skip safety checks
 
             // Disable password and security popups
             '--password-store=basic',
@@ -147,14 +149,12 @@ class BrowserManager {
             '--disable-notifications',
             '--disable-save-password-bubble', // Disable password manager popup
             '--mute-audio', // Save CPU by silencing browser
-            // Fix for "Access is denied" cache errors on Windows
-            '--disable-gpu-shader-disk-cache',
-            '--disable-gpu-program-cache',
-            '--disable-gpu-watchdog',
-            // STRICTLY disable disk cache to prevent access denied errors
-            '--disk-cache-size=0',
-            '--media-cache-size=0',
-            '--disable-application-cache',
+
+            // Performance: Enable hardware acceleration and shared memory
+            '--ignore-gpu-blocklist',
+            '--enable-gpu-rasterization',
+            '--enable-zero-copy',
+            '--enable-parallel-downloading',
 
             // Lighter: Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
             '--disable-background-timer-throttling',
