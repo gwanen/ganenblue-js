@@ -120,6 +120,53 @@ program.command('raid')
         }
     });
 
+program.command('skip')
+    .description('Start the bot in skip nightmare mode')
+    .option('-u, --url <url>', 'Specific URL of the skip result page to farm')
+    .option('-n, --max <number>', 'Maximum number of skips to run (0 for unlimited)', '0')
+    .option('--headless', 'Run in headless mode')
+    .action(async (options) => {
+        try {
+            logger.info('[Cli] Starting skip bot...');
+
+            // Override config with CLI options
+            if (options.url) config.set('bot.quest_url', options.url);
+            if (options.max) config.set('bot.max_quests', parseInt(options.max));
+            if (options.headless) config.set('browser.headless', true);
+
+            // Initialize Browser
+            const browserManager = new BrowserManager(config.get('browser'));
+            const page = await browserManager.launch();
+
+            // Import dynamically
+            const { default: SkipBot } = await import('../bot/skip-bot.js');
+
+            // Initialize Bot
+            const bot = new SkipBot(page, {
+                questUrl: config.get('bot.quest_url'),
+                maxRuns: config.get('bot.max_quests')
+            });
+
+            // Handle graceful shutdown
+            process.on('SIGINT', async () => {
+                logger.info('[Wait] Stopping bot...');
+                bot.stop();
+                await browserManager.close();
+                process.exit(0);
+            });
+
+            // Start Bot
+            await bot.start();
+
+            await browserManager.close();
+            logger.info('[Cli] Finished successfully.');
+
+        } catch (error) {
+            logger.error('[Error] [Cli] Fatal error:', error);
+            process.exit(1);
+        }
+    });
+
 program.command('config')
     .description('View current configuration')
     .action(() => {

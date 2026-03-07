@@ -45,6 +45,63 @@ class BrowserManager {
         return null;
     }
 
+    /**
+     * Detect Brave browser executable path on Windows
+     */
+    getBravePath() {
+        const possiblePaths = [
+            'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+            'C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+            process.env.LOCALAPPDATA + '\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+        ];
+
+        for (const path of possiblePaths) {
+            if (existsSync(path)) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Detect Chrome browser executable path on Windows
+     */
+    getChromePath() {
+        const possiblePaths = [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe'
+        ];
+
+        for (const path of possiblePaths) {
+            if (existsSync(path)) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Detect Firefox browser executable path on Windows
+     */
+    getFirefoxPath() {
+        const possiblePaths = [
+            'C:\\Program Files\\Mozilla Firefox\\firefox.exe',
+            'C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe',
+            process.env.LOCALAPPDATA + '\\Mozilla Firefox\\firefox.exe'
+        ];
+
+        for (const path of possiblePaths) {
+            if (existsSync(path)) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
     async launch() {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
         const browserType = this.config.browser_type || 'chromium';
@@ -81,6 +138,8 @@ class BrowserManager {
             '--disable-default-apps',
             '--no-first-run',
             '--disable-sync',
+            '--disable-component-update', // Save CPU: stop background component updates
+            '--disable-client-side-phishing-detection', // Save CPU: skip safety checks
 
             // Disable password and security popups
             '--password-store=basic',
@@ -90,14 +149,12 @@ class BrowserManager {
             '--disable-notifications',
             '--disable-save-password-bubble', // Disable password manager popup
             '--mute-audio', // Save CPU by silencing browser
-            // Fix for "Access is denied" cache errors on Windows
-            '--disable-gpu-shader-disk-cache',
-            '--disable-gpu-program-cache',
-            '--disable-gpu-watchdog',
-            // STRICTLY disable disk cache to prevent access denied errors
-            '--disk-cache-size=0',
-            '--media-cache-size=0',
-            '--disable-application-cache',
+
+            // Performance: Enable hardware acceleration and shared memory
+            '--ignore-gpu-blocklist',
+            '--enable-gpu-rasterization',
+            '--enable-zero-copy',
+            '--enable-parallel-downloading',
 
             // Lighter: Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
             '--disable-background-timer-throttling',
@@ -111,9 +168,14 @@ class BrowserManager {
 
             // Modern V8 and Graphics Optimizations
             '--js-flags="--max-old-space-size=512 --expose-gc"', // Limit JS heap memory and expose manual GC
-            '--disable-checker-imaging', // Skip unnecessary image checks to save CPU
             '--disable-new-id-entities-details',
+            '--disable-checker-imaging', // Skip unnecessary image checks to save CPU
         ];
+
+        // Apply Window Position (Auto-Tiling)
+        if (emulation.x !== undefined && emulation.y !== undefined) {
+            launchArgs.push(`--window-position=${emulation.x},${emulation.y}`);
+        }
 
         // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
         if (this.config.disable_sandbox) {
@@ -129,14 +191,55 @@ class BrowserManager {
             userDataDir: this.userDataDir // Explicitly set unique temp dir
         };
 
+        // Custom Browser Executable (e.g., portable Chromium or Firefox)
+        if (this.config.executable_path) {
+            launchOptions.executablePath = this.config.executable_path;
+            this.logger.info(`[System] Using custom browser executable: ${this.config.executable_path}`);
+
+            // Puppeteer needs to be told to explicitly drive Firefox instead of CDXP/Chromium
+            if (this.config.executable_path.toLowerCase().includes('firefox')) {
+                launchOptions.browser = 'firefox'; // or 'product: firefox' in older puppeteer versions
+            }
+        }
         // Use Edge if specified
-        if (browserType === 'edge') {
+        else if (browserType === 'edge') {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
                 this.logger.info(`[System] Using Microsoft Edge: ${edgePath}`);
             } else {
                 this.logger.warn('[Status] Edge not found. Falling back to Chromium...');
+            }
+        }
+        // Use Brave if specified
+        else if (browserType === 'brave') {
+            const bravePath = this.getBravePath();
+            if (bravePath) {
+                launchOptions.executablePath = bravePath;
+                this.logger.info(`[System] Using Brave Browser: ${bravePath}`);
+            } else {
+                this.logger.warn('[Status] Brave not found. Falling back to Chromium...');
+            }
+        }
+        // Use Chrome if specified
+        else if (browserType === 'chrome') {
+            const chromePath = this.getChromePath();
+            if (chromePath) {
+                launchOptions.executablePath = chromePath;
+                this.logger.info(`[System] Using Google Chrome: ${chromePath}`);
+            } else {
+                this.logger.warn('[Status] Chrome not found. Falling back to Chromium...');
+            }
+        }
+        // Use Firefox if specified
+        else if (browserType === 'firefox') {
+            const firefoxPath = this.getFirefoxPath();
+            if (firefoxPath) {
+                launchOptions.executablePath = firefoxPath;
+                launchOptions.browser = 'firefox'; // Explicitly tell puppeteer
+                this.logger.info(`[System] Using Mozilla Firefox: ${firefoxPath}`);
+            } else {
+                this.logger.warn('[Status] Firefox not found. Falling back to Chromium...');
             }
         }
 

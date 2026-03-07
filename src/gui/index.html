@@ -46,20 +46,24 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 10px;
-            /* Reduced from 10px 16px */
+            padding: 10px 14px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            margin-bottom: 8px;
-            /* Reduced margin */
+            margin-bottom: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .logo {
@@ -95,6 +99,18 @@
             transition: all 0.3s ease;
             cursor: pointer;
             user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            flex-shrink: 0;
         }
 
         .status-badge:hover {
@@ -112,7 +128,19 @@
             color: var(--accent-green);
             border: 1px solid rgba(16, 185, 129, 0.2);
             box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-            animation: pulse-green 2s infinite;
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+            }
+
+            50% {
+                box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+            }
         }
 
         .container {
@@ -150,7 +178,8 @@
         }
 
         .form-group {
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+            padding: 0 8px;
         }
 
         label {
@@ -183,31 +212,23 @@
         button {
             width: 100%;
             padding: 6px 8px;
-            /* Reduced from 8px 10px */
             border: none;
             border-radius: 4px;
-            /* Slightly tighter radius */
             font-size: 11px;
-            /* Reduced from 12px */
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
             margin-top: 4px;
-            /* Reduced from 6px */
             text-transform: uppercase;
-            /* Cleaner look for small buttons */
             letter-spacing: 0.5px;
         }
 
         button:hover:not(:disabled) {
-            /* Remove transform to keep size stable */
             filter: brightness(1.1);
         }
 
         button:disabled {
-            filter: grayscale(0.5) contrast(0.8);
-            opacity: 0.6;
-            /* Increased from 0.4 for better visibility and size stability */
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
@@ -234,14 +255,20 @@
 
         .btn-group {
             display: flex;
-            justify-content: flex-start;
             gap: 4px;
-            margin-top: 4px;
+            margin-top: 6px;
+            align-items: stretch;
         }
 
-        .btn-square {
-            width: 34px !important;
-            height: 34px !important;
+        /* All buttons in btn-group inherit uniform size */
+        .btn-group .btn-square,
+        .btn-group .btn-start,
+        .btn-group .btn-stop,
+        .btn-group .btn-launch {
+            width: 32px !important;
+            height: 32px !important;
+            min-height: 32px !important;
+            max-height: 32px !important;
             padding: 0 !important;
             display: inline-flex !important;
             align-items: center;
@@ -410,7 +437,19 @@
             color: #4ade80;
         }
 
-        /* Green */
+        .log-tag-turn {
+            color: var(--accent-red);
+            font-weight: 800;
+        }
+
+        .log-tag-honor {
+            color: var(--accent-yellow);
+        }
+
+        .log-tag-full {
+            color: #fb923c;
+            /* Orange */
+        }
 
         /* Bronze */
 
@@ -741,25 +780,6 @@
             font-family: monospace;
         }
 
-        /* Pulse Animation */
-        @keyframes pulse-green {
-            0% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
-            }
-
-            70% {
-                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-            }
-        }
-
-        .status-Running {
-            animation: pulse-green 2s infinite;
-        }
-
         /* Compact Mode */
         body.compact-mode .controls-panel {
             display: none;
@@ -878,13 +898,6 @@
         }
 
         /* Compact Layout Adjustments */
-        :root {
-            --input-height: 24px;
-            --font-xs: 10px;
-            --font-sm: 11px;
-            --font-md: 12px;
-        }
-
         .panel {
             padding: 4px;
         }
@@ -956,11 +969,18 @@
 
         .btn-group {
             margin-top: 4px;
+            align-items: stretch;
         }
 
-        .btn-square {
-            width: 26px !important;
-            height: 26px !important;
+        /* Compact mode: uniform smaller buttons */
+        .btn-group .btn-square,
+        .btn-group .btn-start,
+        .btn-group .btn-stop,
+        .btn-group .btn-launch {
+            width: 28px !important;
+            height: 28px !important;
+            min-height: 28px !important;
+            max-height: 28px !important;
             font-size: 14px !important;
             display: flex;
             align-items: center;
@@ -969,9 +989,8 @@
         }
 
         /* Collapsible Compact */
-        /* Collapsible Compact */
         .collapsible-header {
-            padding: 3px 0;
+            padding: 4px 8px;
             margin: 4px 0 2px 0;
         }
 
@@ -991,16 +1010,14 @@
             display: flex;
             flex-direction: column;
             height: calc(100vh - 24px);
-            /* Full height minus body padding */
         }
 
         .split-view {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            gap: 10px;
             flex: 1;
             min-height: 0;
-            /* Important for scrolling */
         }
 
         .profile-column {
@@ -1009,7 +1026,7 @@
             gap: 10px;
             background: rgba(255, 255, 255, 0.02);
             border-radius: 12px;
-            padding: 8px;
+            padding: 10px;
             border: 1px solid rgba(255, 255, 255, 0.05);
             overflow-y: auto;
         }
@@ -1018,18 +1035,14 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 4px;
-        }
-
-        .profile-header h2 {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
+            padding: 6px 4px;
+            margin-bottom: 8px;
         }
 
         .stats-summary {
-            background: rgba(0, 0, 0, 0.2);
-            padding: 8px;
+            background: rgba(0, 0, 0, 0.15);
+            padding: 10px 12px;
+            margin: 8px 4px;
             border-radius: 6px;
             font-size: 11px;
         }
@@ -1037,7 +1050,7 @@
         .stat-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
             color: var(--text-secondary);
         }
 
@@ -1159,6 +1172,8 @@
             user-select: none;
             font-size: 11px;
             color: var(--text-secondary);
+            padding: 0 8px;
+            /* Added left/right padding */
         }
 
         .checkbox-container input {
@@ -1174,8 +1189,8 @@
         }
 
         .btn-grow {
-            flex: 1;
-            width: auto !important;
+            flex: none !important;
+            width: 32px !important;
             margin-top: 0 !important;
         }
 
@@ -1254,6 +1269,7 @@
                             <option value="raid">Raid / Multi</option>
                             <option value="replicard">Replicard (Sandbox)</option>
                             <option value="xeno_replicard">Xeno Replicard</option>
+                            <option value="skip">Skip Nightmare</option>
                         </select>
                     </div>
 
@@ -1363,8 +1379,11 @@
                         <div class="form-group">
                             <label for="browser-type-p1">Type</label>
                             <select id="browser-type-p1">
+                                <option value="chrome">Chrome</option>
                                 <option value="chromium">Chromium</option>
                                 <option value="edge">Edge</option>
+                                <option value="firefox">Firefox</option>
+                                <option value="brave">Brave</option>
                             </select>
                         </div>
                         <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
@@ -1387,7 +1406,10 @@
                             <label for="mobage-password-p1">Password</label>
                             <input type="password" id="mobage-password-p1" placeholder="Password">
                         </div>
-                        <button id="btn-save-credentials-p1" class="btn-primary-small">Save</button>
+                        <div class="form-group" style="padding: 0 8px;">
+                            <button id="btn-save-credentials-p1" class="btn-primary-small"
+                                style="width: 100%;">Save</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1420,6 +1442,7 @@
                             <option value="raid">Raid / Multi</option>
                             <option value="replicard">Replicard (Sandbox)</option>
                             <option value="xeno_replicard">Xeno Replicard</option>
+                            <option value="skip">Skip Nightmare</option>
                         </select>
                     </div>
 
@@ -1530,8 +1553,11 @@
                         <div class="form-group">
                             <label for="browser-type-p2">Type</label>
                             <select id="browser-type-p2">
+                                <option value="chrome">Chrome</option>
                                 <option value="chromium">Chromium</option>
                                 <option value="edge">Edge</option>
+                                <option value="firefox">Firefox</option>
+                                <option value="brave">Brave</option>
                             </select>
                         </div>
                         <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
@@ -1554,7 +1580,10 @@
                             <label for="mobage-password-p2">Password</label>
                             <input type="password" id="mobage-password-p2" placeholder="Password">
                         </div>
-                        <button id="btn-save-credentials-p2" class="btn-primary-small">Save</button>
+                        <div class="form-group" style="padding: 0 8px;">
+                            <button id="btn-save-credentials-p2" class="btn-primary-small"
+                                style="width: 100%;">Save</button>
+                        </div>
                     </div>
                 </div>
             </div>

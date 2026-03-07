@@ -48,6 +48,10 @@ class PageController {
             await client.send('Emulation.setFocuslessThrottlingEnabled', { enabled: false });
             // 2. Force the page to stay in 'active' lifecycle state
             await client.send('Page.setWebLifecycleState', { state: 'active' });
+
+            // Memory Optimization: Cleanly close the CDP session
+            await client.detach();
+
             this.logger.debug('[Performance] Background throttling disabled via CDP');
         } catch (error) {
             this.logger.debug('[Performance] CDP Throttling override failed (expected if page closed)', error);
@@ -95,7 +99,11 @@ class PageController {
             message.includes('net::ERR') ||
             message.includes('Protocol error') ||
             message.includes('Session closed') ||
-            message.includes('Target closed');
+            message.includes('Target closed') ||
+            message.includes('Execution context was destroyed') ||
+            message.includes('Execution context is not available in detached frame') ||
+            message.includes('Cannot read properties of null') ||
+            message.includes('detached Frame');
     }
 
     /**
@@ -418,10 +426,10 @@ class PageController {
     async reloadPage() {
         this.logger.info('[Core] Reloading page...');
         const reloadBtn = '.btn-treasure-footer-reload';
-        if (await this.elementExists(reloadBtn, 500)) {
+        if (await this.elementExists(reloadBtn, 200)) {
             try {
                 await this.clickSafe(reloadBtn, { fast: true, silent: true });
-                await sleep(1000);
+                await sleep(200);
                 return;
             } catch (e) {
                 this.logger.debug(`[Core] Footer reload failed, falling back to page.reload: ${e.message}`);

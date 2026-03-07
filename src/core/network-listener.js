@@ -7,7 +7,6 @@ class NetworkListener extends EventEmitter {
         this.page = page;
         this.logger = scopedLogger || logger;
         this.isListening = false;
-        this.handlers = new Map();
 
         // Increased to 100 to allow headroom for complex monitoring
         this.setMaxListeners(100);
@@ -35,13 +34,34 @@ class NetworkListener extends EventEmitter {
         this.logger.debug('[Network] All internal listeners cleared');
     }
 
+    /**
+     * Returns true if any battle-related listener is active.
+     * Used as a guard to skip expensive response.json() parsing
+     * when no one is subscribed (e.g. during lobby/menu phases).
+     */
+    _hasBattleListeners() {
+        return (
+            this.listenerCount('battle:boss_died') > 0 ||
+            this.listenerCount('battle:party_wiped') > 0 ||
+            this.listenerCount('battle:attack_used') > 0 ||
+            this.listenerCount('battle:summon_used') > 0 ||
+            this.listenerCount('battle:ability_used') > 0
+        );
+    }
 
     async _handleResponse(response) {
         try {
             const url = response.url();
 
-            // Fast pre-filter: Only process GBF API endpoints.
+            // Fast pre-filter: bail out immediately for everything outside GBF.
+            // This runs before resourceType() (which has more overhead) to keep
+            // non-GBF responses (fonts, analytics, CDNs) essentially free.
             if (!url.includes('granbluefantasy.jp')) return;
+
+            const type = response.request().resourceType();
+
+            // Accept only fetch/XHR/script. Certain end-state signals like empty.js need 'script'.
+            if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
             // --- Battle end (existing) ---
             if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('js/view/result/empty.js')) {
@@ -108,48 +128,49 @@ class NetworkListener extends EventEmitter {
                 url.includes('summon_result.json') ||
                 url.includes('fatal_chain_result.json')
             )) {
+                // Guard: skip expensive JSON parsing when no battle listeners are active.
+                // During lobby/menu phases this saves deserializing 500KB+ responses.
+                if (!this._hasBattleListeners()) return;
+
                 const json = await response.json().catch(() => null);
                 if (!json) return;
 
-                // Turn number is also in status.turn of attack results
-                const statusTurn = json?.status?.turn ?? null;
-                if (statusTurn !== null) {
-                    this.emit('battle:start', { turn: statusTurn });
-                }
+                // Extraction: Honor/Points
+                const honor = json?.status?.point ?? json?.status?.points ?? json?.point ?? null;
 
-                const scenario = json?.scenario ?? [];
-                let terminalFound = false;
-                for (const entry of scenario) {
-                    if (entry.cmd === 'win') {
-                        // cmd:win is the definitive battle-over signal (follows cmd:die)
-                        this.logger.info('[Network] Battle won (cmd:win detected)');
-                        this.emit('battle:boss_died', {});
-                        terminalFound = true;
-                        break;
-                    }
-                    if (entry.cmd === 'lose') {
-                        this.logger.info('[Network] Party wipe detected (cmd:lose)');
-                        this.emit('battle:party_wiped', {});
-                        terminalFound = true;
-                        break;
+                // Check Scenario for Win/Lose signals.
+                // Array.find() short-circuits on the first match — crucial for large raid scenarios
+                // where the step array can be hundreds of entries long.
+                if (json.scenario && Array.isArray(json.scenario)) {
+                    const terminal = json.scenario.find(s =>
+                        s.cmd === 'win' || (s.cmd === 'die' && (s.to === 'enemy' || s.to === 'boss')) || s.cmd === 'lose'
+                    );
+                    if (terminal) {
+                        if (terminal.cmd === 'win' || (terminal.cmd === 'die' && (terminal.to === 'enemy' || terminal.to === 'boss'))) {
+                            this.emit('battle:boss_died', { honor });
+                        } else {
+                            this.emit('battle:party_wiped', { honor });
+                        }
                     }
                 }
 
-                if (!terminalFound) {
-                    if (url.includes('summon_result.json')) {
-                        this.logger.debug('[Network] summon_result → battle:summon_used');
-                        this.emit('battle:summon_used');
-                    } else if (url.includes('fatal_chain_result.json')) {
-                        this.logger.debug('[Network] fatal_chain_result → battle:ability_used');
-                        this.emit('battle:ability_used');
-                    } else if (url.includes('ability_result.json')) {
-                        this.logger.debug('[Network] ability_result → battle:ability_used');
-                        this.emit('battle:ability_used');
-                    } else if (url.includes('_attack_result.json') || url.includes('normal_attack_result.json')) {
-                        this.logger.debug('[Network] attack_result → battle:attack_used');
-                        this.emit('battle:attack_used');
-                    }
+                // Action Mapping
+                if (url.includes('summon_result.json')) {
+                    this.emit('battle:summon_used', { honor });
+                } else if (url.includes('fatal_chain_result.json')) {
+                    this.emit('battle:ability_used', { honor });
+                } else if (url.includes('ability_result.json')) {
+                    this.emit('battle:ability_used', { honor });
+                } else if (url.includes('_attack_result.json')) {
+                    this.emit('battle:attack_used', { honor });
                 }
+                return;
+            }
+
+            // --- Supporter screen detection ---
+            if (url.includes('/rest/sound/quest_supporter_bgm')) {
+                this.logger.debug('[Network] Supporter BGM detected -> On supporter selection page');
+                this.emit('raid:supporter_screen');
                 return;
             }
 
