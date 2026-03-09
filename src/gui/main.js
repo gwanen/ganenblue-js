@@ -214,6 +214,7 @@ ipcMain.handle('browser:launch', async (event, profileId, browserType = 'chromiu
             ...config.get('browser'),
             browser_type: browserType,
             disable_sandbox: !!deviceSettings.disable_sandbox,
+            save_profile: !!deviceSettings.save_profile,
             emulation: {
                 ...deviceSettings,
                 mode: 'custom', // Force custom mode for browser manager

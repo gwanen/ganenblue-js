@@ -139,6 +139,7 @@ function getProfileElements(pid) {
         // Browser Settings
         browserType: document.getElementById(`browser-type-${pid}`),
         disableSandbox: document.getElementById(`disable-sandbox-${pid}`),
+        saveProfile: document.getElementById(`save-profile-${pid}`),
         // Stats
         statCompleted: document.getElementById(`completed-runs-${pid}`),
         statAvgBattle: document.getElementById(`avg-battle-${pid}`),
@@ -212,7 +213,8 @@ function setupProfileListeners(pid) {
             setLoading(els.btnLaunch, true, '⏳');
             const browserType = els.browserType ? els.browserType.value : 'chromium';
             const settings = {
-                disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false
+                disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false,
+                save_profile: els.saveProfile ? els.saveProfile.checked : false
             };
 
             const res = await window.electronAPI.launchBrowser(pid, browserType, settings);
@@ -297,7 +299,7 @@ function setupProfileListeners(pid) {
         els.nameInput,
         els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget, els.raidTarget,
         els.zone,
-        els.browserType, els.disableSandbox,
+        els.browserType, els.disableSandbox, els.saveProfile,
         document.getElementById(`block-resources-${pid}`),
         document.getElementById(`fast-refresh-${pid}`),
         document.getElementById(`refresh-on-start-${pid}`),
@@ -622,6 +624,7 @@ async function loadProfileSettings(pid) {
         // Browser Settings
         if (s.browserType && els.browserType) els.browserType.value = s.browserType;
         if (s.disableSandbox !== undefined && els.disableSandbox) els.disableSandbox.checked = s.disableSandbox;
+        if (s.saveProfile !== undefined && els.saveProfile) els.saveProfile.checked = s.saveProfile;
         if (s.fastRefresh !== undefined) {
             const frEl = document.getElementById(`fast-refresh-${pid}`);
             if (frEl) frEl.checked = s.fastRefresh;
@@ -655,6 +658,7 @@ function saveProfileSettings(pid) {
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',
         disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
+        saveProfile: els.saveProfile ? els.saveProfile.checked : false,
         blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
         fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
         refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
