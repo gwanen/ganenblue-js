@@ -162,6 +162,13 @@ class PageController {
             await this.page.waitForFunction(fn, { timeout });
             return true;
         } catch (error) {
+            // Check if failure is due to detached context
+            if (error.message.includes('detached') ||
+                error.message.includes('context was destroyed') ||
+                error.message.includes('Target closed')) {
+                this.logger.debug('[Core] waitForFunction: Page context destroyed during wait');
+                return false;
+            }
             this.logger.debug(`[Debug] waitForFunction timed out: ${error.message}`);
             return false;
         }
@@ -298,7 +305,36 @@ class PageController {
      * Get element text
      */
     async getText(selector) {
-        return await this.page.$eval(selector, el => el.textContent);
+        try {
+            return await this.page.$eval(selector, el => el.textContent);
+        } catch (error) {
+            if (error.message.includes('detached') ||
+                error.message.includes('context was destroyed')) {
+                this.logger.debug(`[Core] getText: Context destroyed for ${selector}`);
+                return null;
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Safe evaluate wrapper that handles detached frames
+     */
+    async safeEvaluate(fn, ...args) {
+        if (!this.isAlive()) {
+            throw new Error('Page context is destroyed');
+        }
+        try {
+            return await this.page.evaluate(fn, ...args);
+        } catch (error) {
+            if (error.message.includes('detached') ||
+                error.message.includes('context was destroyed') ||
+                error.message.includes('Target closed')) {
+                this.logger.debug('[Core] safeEvaluate: Context destroyed during evaluation');
+                return null;
+            }
+            throw error;
+        }
     }
 
     /**
@@ -375,6 +411,12 @@ class PageController {
 
         this.logger.info(`[Core] SPA navigate to: ${targetHash}`);
 
+        // Pre-navigation check: Ensure page context is alive
+        if (!this.isAlive()) {
+            this.logger.warn('[Core] gotoSPA: Page not alive, skipping navigation');
+            throw new Error('Page context is destroyed');
+        }
+
         try {
             await this.page.evaluate((target) => {
                 const current = window.location.hash;
@@ -391,9 +433,19 @@ class PageController {
                 window.location.hash = target.replace(/^#/, '');
             }, targetHash);
         } catch (e) {
-            // Page context may be mid-navigation; fall back to hard goto.
-            this.logger.debug(`[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`);
-            return this.goto(url);
+            // Detached frame / context destroyed — page is already navigating
+            const isDetached = e.message.includes('detached') ||
+                               e.message.includes('context was destroyed') ||
+                               e.message.includes('Target closed');
+
+            if (isDetached) {
+                this.logger.debug('[Core] gotoSPA: Context destroyed during navigation (expected)');
+                // Wait briefly for navigation to settle, then continue
+                await sleep(500);
+            } else {
+                this.logger.debug(`[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`);
+                return this.goto(url);
+            }
         }
 
         // Wait for the DOM to actually reflect the new page.

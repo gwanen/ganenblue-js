@@ -197,10 +197,23 @@ class BattleHandler {
             const isNavError = error.message.includes('Execution context was destroyed') ||
                 error.message.includes('Target closed') ||
                 error.message.includes('Session closed') ||
+                error.message.includes('detached Frame') ||
+                error.message.includes('detached') ||
                 this.controller.isNetworkError(error);
 
             if (isNavError) {
                 this.logger.debug('[Battle] Interrupted by browser navigation or stop');
+                // If page is truly dead (not just navigating), try to recover
+                if (!this.controller.isAlive()) {
+                    this.logger.warn('[Battle] Page context destroyed. Attempting recovery...');
+                    try {
+                        // Try to reload the page if it's dead
+                        await this.controller.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+                        await sleep(1000);
+                    } catch (recoverError) {
+                        this.logger.warn('[Battle] Recovery failed, page may need manual intervention');
+                    }
+                }
             } else {
                 this.logger.error(`[Battle] Execution failed: ${error.message}`);
                 if (error.message.includes('Battle failed to load')) {

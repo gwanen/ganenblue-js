@@ -122,7 +122,7 @@ class QuestBot {
 
         if (isInBattleUrl) {
             // Check if battle UI is present (attack button or auto button)
-            const hasBattleUI = await this.controller.page.evaluate(() => {
+            const hasBattleUI = await this.controller.safeEvaluate(() => {
                 const att = document.querySelector('.btn-attack-start');
                 const auto = document.querySelector('.btn-auto, .btn-full-auto');
                 const attVisible = att && (att.offsetWidth > 0 || att.classList.contains('display-on'));
@@ -202,7 +202,9 @@ class QuestBot {
         // Post-battle result page check - if on result page, skip to next cycle
         // The result page will be auto-dismissed when navigating to next quest
         await sleep(randomDelay(100, 200));
-        const isResultPage = await this.controller.page.evaluate(() => {
+
+        // Use safe evaluate to avoid detached frame errors
+        const isResultPage = await this.controller.safeEvaluate(() => {
             return window.location.hash.includes('#result') ||
                 !!document.querySelector('.prt-result');
         }).catch(() => false);
@@ -257,7 +259,7 @@ class QuestBot {
             }
 
             // DOM check: supporter screen, battle already active, or result-page intercept
-            const state = await this.controller.page.evaluate(() => {
+            const state = await this.controller.safeEvaluate(() => {
                 const hash = window.location.hash;
                 return {
                     listFound: !!document.querySelector('.prt-supporter-list'),
@@ -339,7 +341,7 @@ class QuestBot {
         if (await this.checkCaptcha()) return 'captcha';
 
         // Consolidate popup checks into single evaluate
-        const popupState = await this.controller.page.evaluate(() => {
+        const popupState = await this.controller.safeEvaluate(() => {
             const results = {};
             if (document.querySelector('.pop-deck.pop-show')) results.deck = true;
             if (document.querySelector('.prt-deck')) results.party = true;
@@ -372,7 +374,7 @@ class QuestBot {
             }
 
             // Consolidate all state checks into single evaluate
-            const state = await this.controller.page.evaluate(() => {
+            const state = await this.controller.safeEvaluate(() => {
                 const hash = window.location.hash;
                 const url = window.location.href;
                 return {
@@ -397,11 +399,11 @@ class QuestBot {
         }
 
         // Final logout check
-        const isLoggedOut = await this.controller.page.evaluate(() => {
+        const isLoggedOut = await this.controller.safeEvaluate(() => {
             const hasLogin = !!document.querySelector('#login-auth');
             const isHome = window.location.href.includes('#mypage') || window.location.href.includes('#top');
             return hasLogin || isHome;
-        });
+        }).catch(() => false);
 
         if (isLoggedOut) {
             this.logger.error('[Safety] Session expired. Stopping bot');
