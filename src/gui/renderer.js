@@ -173,6 +173,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     dom.global.logContainers.p1 = document.getElementById('log-container-p1');
     dom.global.logContainers.p2 = document.getElementById('log-container-p2');
     dom.global.logContainers.all = document.getElementById('log-container-all');
+
+    // Client-side run timer — ticks every second so the timer is always live
+    // without waiting for IPC updates from the main process.
+    setInterval(() => {
+        for (const pid of profiles) {
+            const s = profileState[pid];
+            if (!s.isRunning || !s.startTime) continue;
+            const diff = Date.now() - s.startTime;
+            const seconds = Math.floor(diff / 1000);
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const sc = seconds % 60;
+            const timerEl = dom[pid] && dom[pid].statRunTimer;
+            if (timerEl) {
+                timerEl.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sc.toString().padStart(2, '0')}`;
+            }
+        }
+    }, 1000);
 });
 
 // === Profile Logic ===

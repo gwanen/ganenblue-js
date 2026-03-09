@@ -87,7 +87,7 @@ class QuestBot {
                 } catch (cycleError) {
                     if (this.controller.isNetworkError(cycleError)) {
                         this.logger.warn(`[Quest] Transient error during cycle. Retrying: ${cycleError.message}`);
-                        await sleep(500);
+                        await sleep(2000); // Increased from 500ms to allow SPA to settle
                         continue;
                     }
                     throw cycleError; // Re-throw fatal errors

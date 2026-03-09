@@ -103,7 +103,8 @@ class PageController {
             message.includes('Execution context was destroyed') ||
             message.includes('Execution context is not available in detached frame') ||
             message.includes('Cannot read properties of null') ||
-            message.includes('detached Frame');
+            message.includes('detached Frame') ||
+            message.includes('Frame was detached');
     }
 
     /**
@@ -305,14 +306,37 @@ class PageController {
      * For GBF hash-based SPA navigation, prefer gotoSPA() instead.
      */
     async goto(url, options = {}) {
-        return this.retryOnNetworkError(async () => {
-            this.logger.info(`[Core] Navigating to: ${url}`);
-            return await this.page.goto(url, {
-                waitUntil: 'domcontentloaded',
-                timeout: 60000, // 60s timeout
-                ...options
-            });
-        }, 3, 'navigation');
+        const { maxRetries = 3 } = options;
+
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                this.logger.info(`[Core] Navigating to: ${url}`);
+                return await this.page.goto(url, {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 60000,
+                    ...options
+                });
+            } catch (error) {
+                const isDetached = error.message.includes('detached Frame') || error.message.includes('context was destroyed');
+
+                if (this.isNetworkError(error) && i < maxRetries - 1) {
+                    const waitTime = 2000 * (i + 1);
+                    this.logger.warn(`[Network] Error during navigation${isDetached ? ' (Detached Frame)' : ''}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+
+                    // If we hit a detached frame, the page state is corrupted. 
+                    // Force a hard reload before the next navigation attempt.
+                    if (isDetached) {
+                        this.logger.info('[Core] Detached frame detected. Performing hard reload to reset context...');
+                        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
+                        await sleep(1000);
+                    }
+
+                    await sleep(waitTime);
+                    continue;
+                }
+                throw error;
+            }
+        }
     }
 
     /**
