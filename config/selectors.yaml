@@ -47,7 +47,8 @@ replicard:
 
 login:
   loginButton: '#login-auth'
-  mobageOption: '#mobage-login'
+  mobageOption: '.btn-auth-platform[data-platform="mobage"]'
+  okButton: '.btn-ok'
   emailField: '#subject-id'
   passwordField: '#subject-password'
   submitButton: '#login'

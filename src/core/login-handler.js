@@ -72,21 +72,32 @@ class LoginHandler {
         this.logger.info('[Login] Selecting Mobage authentication...');
 
         try {
+            // Select Mobage platform
             await this.page.waitForSelector(this.selectors.mobageOption, {
                 visible: true,
                 timeout: 10000
             });
 
             await sleep(1000);
+            await this.page.click(this.selectors.mobageOption);
+            this.logger.info('[Login] Selected Mobage platform');
 
-            // Click Mobage - this will open a new tab
+            // Click OK button
+            await this.page.waitForSelector(this.selectors.okButton, {
+                visible: true,
+                timeout: 10000
+            });
+
+            await sleep(1000);
+
+            // Clicking OK will open a new tab
             const browser = this.page.browser();
             const newPagePromise = new Promise(resolve => {
                 browser.once('targetcreated', target => resolve(target.page()));
             });
 
-            await this.page.click(this.selectors.mobageOption);
-            this.logger.info('[Login] Selected Mobage login');
+            await this.page.click(this.selectors.okButton);
+            this.logger.info('[Login] Clicked OK button to proceed to Mobage');
 
             let timeoutId;
             const timeoutPromise = new Promise(resolve => {
@@ -114,7 +125,8 @@ class LoginHandler {
                 }
             }
         } catch (error) {
-            throw new Error('Mobage login option not found');
+            this.logger.error(`[Login] Mobage selection failed: ${error.message}`);
+            throw new Error('Mobage login option selection failed');
         }
     }
 
