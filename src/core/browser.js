@@ -249,9 +249,6 @@ class BrowserManager {
         const pages = await this.browser.pages();
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
-        // Additional stealth measures
-        await this.applyStealth();
-
         return this.page;
     }
 
@@ -259,29 +256,6 @@ class BrowserManager {
         if (this.page) {
             await this.page.setViewport({ width, height });
         }
-    }
-
-    async applyStealth() {
-        // Force webdriver to undefined (stealth plugin might set it to false)
-        await this.page.evaluateOnNewDocument(() => {
-            try {
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined,
-                });
-            } catch (e) { }
-        });
-
-        // Remove CDC variables (Chrome DevTools Protocol)
-        await this.page.evaluateOnNewDocument(() => {
-            try {
-                // Safer removal, avoid throwing on locked __proto__
-                for (const key of Object.keys(window)) {
-                    if (key.startsWith('cdc_')) {
-                        delete window[key];
-                    }
-                }
-            } catch (e) { }
-        });
     }
 
     /**
