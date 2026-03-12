@@ -532,7 +532,7 @@ class BattleHandler {
             }
         };
 
-        const onBattleResult = () => { this.logger.info('[Network] Battle end detected'); networkFinished = true; };
+        const onBattleResult = () => { networkFinished = true; };
         const onBossDied = ({ honor } = {}) => { updateHonor(honor); bossDied = true; };
         const onPartyWiped = ({ honor } = {}) => { updateHonor(honor); partyWiped = true; };
         const onAttack = ({ honor } = {}) => {
@@ -648,6 +648,23 @@ class BattleHandler {
 
                 // 3. Result Page Detection (URL-based, network-confirmed)
                 if (currentUrl.includes('#result')) {
+                    // Wait for network confirmation to avoid race condition with quest navigation
+                    // The network event may fire after URL change, so we poll networkFinished flag
+                    if (!networkFinished) {
+                        this.logger.debug('[Network] Result page detected, awaiting network confirmation...');
+                        const waitStart = Date.now();
+                        const waitTimeout = 1500;
+                        while (!networkFinished && Date.now() - waitStart < waitTimeout) {
+                            await sleep(50);
+                        }
+                        if (networkFinished) {
+                            this.logger.debug(`[Network] Result network confirmation received (${Date.now() - waitStart}ms)`);
+                        } else {
+                            this.logger.debug(`[Network] Result network confirmation timeout (1.5s), proceeding anyway`);
+                        }
+                    } else {
+                        this.logger.debug('[Network] Result page detected, networkFinished already set');
+                    }
                     // Final honor check before returning from result page
                     if (isRaid && honorTarget > 0 && !honorTargetReached) {
                         const finalHonor = await this.getHonors();
@@ -866,20 +883,37 @@ class BattleHandler {
             return true;
         }
 
-        // 3. Still in battle? Quick wipe pre-check before re-engaging FA to prevent reload loops
+        // 3. Still in battle? Quick pre-check before re-engaging FA to prevent reload loops
         this.logger.debug('[Battle] Checking for battle UI to re-engage FA');
-        const found = await this.controller.elementExists('.btn-attack-start, .btn-auto, .btn-usual-cancel', 6000, false);
+        
+        const foundState = await this.controller.page.waitForFunction(() => {
+            const ui = document.querySelector('.btn-attack-start, .btn-auto, .btn-usual-cancel');
+            if (ui && ui.offsetWidth > 0) return 'battle';
+            
+            const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
+            if (cheer && cheer.offsetWidth > 0) return 'wiped';
+            
+            const ended = document.querySelector('.prt-result, #js-result, .pop-result-assist-raid.pop-show, .pop-usual.pop-show');
+            if (ended && ended.offsetWidth > 0) return 'ended';
+            
+            if (window.location.hash.includes('#result') || window.location.hash.includes('#quest/index')) return 'ended';
+            
+            return null;
+        }, { timeout: 6000 }).then(res => res.jsonValue()).catch(() => null);
+
+        if (foundState === 'wiped') {
+            this.logger.info('[Battle] Party wiped');
+            return true;
+        }
+        
+        if (foundState === 'ended') {
+            // Found a terminal state, don't wait further
+            return true;
+        }
+
+        const found = foundState === 'battle';
 
         if (found && !this.stopped) {
-            const isAlreadyWiped = await this.controller.page.evaluate(() => {
-                const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
-                return cheer && cheer.offsetWidth > 0;
-            }).catch(() => false);
-
-            if (isAlreadyWiped) {
-                this.logger.info('[Battle] Party wiped');
-                return true;
-            }
 
             if (mode === 'full_auto') {
                 // Wait briefly for start.json so [Turn X] is logged before [Full Auto] Activating

@@ -288,8 +288,8 @@ class RaidBot {
         const raidCurrentUrl = this.controller.page.url();
         if (raidCurrentUrl.includes('#raid') || raidCurrentUrl.includes('_raid') || raidCurrentUrl.includes('#result')) {
             await this.controller.gotoSPA(this.raidBackupUrl);
-            await this.controller.elementExists(this.selectors.raidEntry, 5000);
-            await sleep(100);
+            // wait briefly to ensure SPA routing has time to trigger
+            await sleep(300);
         }
 
         return true;
