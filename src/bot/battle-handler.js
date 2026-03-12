@@ -69,12 +69,16 @@ class BattleHandler {
             // Fast Memory Fix: Bind the handler to a variable so removeListener can find it.
             // Using an anonymous arrow function inside once() creates a new reference, 
             // making removeListener fail to clean up if the DOM wins the race.
+            let resolveNetwork;
             const onNetworkStart = (data) => {
-                _networkStartHandler(data);
-                resolve('network');
+                if (data && data.turn) {
+                    networkTurnOnLoad = data.turn;
+                }
+                if (resolveNetwork) resolveNetwork('network');
             };
 
-            const networkReady = new Promise(resolveEvent => {
+            const networkReady = new Promise(resolve => {
+                resolveNetwork = resolve;
                 if (this.controller.network) {
                     this.controller.network.once('battle:start', onNetworkStart);
                 }
@@ -152,13 +156,25 @@ class BattleHandler {
             this._preSummonUsed = false;
             this._preBossDied = false;
             this._prePartyWiped = false;
+            this._preNetworkTurn = 0;
+            this._preNetworkTurnReady = false;
+            this._preNetworkFinished = false;
+
             const _onPreSummon = () => { this._preSummonUsed = true; };
             const _onPreBoss = () => { this._preBossDied = true; };
             const _onPreWipe = () => { this._prePartyWiped = true; };
-            if (this.controller.network && mode === 'full_auto') {
+            const _onPreStart = ({ turn }) => {
+                this._preNetworkTurn = turn;
+                this._preNetworkTurnReady = true;
+            };
+            const _onPreResult = () => { this._preNetworkFinished = true; };
+
+            if (this.controller.network) {
                 this.controller.network.on('battle:summon_used', _onPreSummon);
                 this.controller.network.on('battle:boss_died', _onPreBoss);
                 this.controller.network.on('battle:party_wiped', _onPreWipe);
+                this.controller.network.on('battle:start', _onPreStart);
+                this.controller.network.once('battle:result', _onPreResult);
             }
 
             if (mode === 'full_auto') {
@@ -168,10 +184,12 @@ class BattleHandler {
             }
 
             // Remove pre-listeners — waitForBattleEnd registers its own
-            if (this.controller.network && mode === 'full_auto') {
+            if (this.controller.network) {
                 this.controller.network.off('battle:summon_used', _onPreSummon);
                 this.controller.network.off('battle:boss_died', _onPreBoss);
                 this.controller.network.off('battle:party_wiped', _onPreWipe);
+                this.controller.network.off('battle:start', _onPreStart);
+                this.controller.network.off('battle:result', _onPreResult);
             }
 
             if (this.skipRaid) {
@@ -332,17 +350,14 @@ class BattleHandler {
     }
 
     async handleSemiAuto(buttonAlreadyVisible = false) {
-        // High-speed fixed delay
-        await sleep(100);
-
-        const selAttack = '.btn-attack-start.display-on'; // Specific selector to avoid dummy elements
+        const selAttack = '.btn-attack-start.display-on';
         const selCancel = this.selectors.attackCancel;
 
-        // Step 1: Only wait if we don't already know the button is present
+        // Step 1: Wait for attack button if not already known visible
         if (!buttonAlreadyVisible) {
             this.logger.debug('[Semi Auto] Waiting for attack button');
             const attackReady = await this.controller.page
-                .waitForSelector(selAttack, { timeout: 5000 })
+                .waitForSelector(selAttack, { timeout: 10000 })
                 .then(() => true).catch(() => false);
             if (!attackReady) {
                 this.logger.warn('[Semi Auto] Timeout. Refreshing page');
@@ -351,7 +366,7 @@ class BattleHandler {
             }
         }
 
-        // Step 2: Click immediately via direct page.click (zero latency, same as FA)
+        // Step 2: Click attack button
         try {
             await this.controller.page.click(selAttack);
         } catch (e) {
@@ -361,32 +376,58 @@ class BattleHandler {
         }
         this.logger.info('[Semi Auto] Attack');
 
-        // Step 2.5: Handle "Battle Concluded" popup
-        if (await this.controller.elementExists('.pop-rematch-fail.pop-show', 100)) {
-            this.logger.info('[Battle] Battle concluded. Refreshing page');
-            await this.controller.reloadPage();
-            await sleep(800);
-            return;
-        }
+        // Step 3: Wait for normal_attack network listener (attack confirmation)
+        this.logger.debug('[Semi Auto] Waiting for attack confirmation...');
+        const attackConfirmed = await new Promise(resolve => {
+            let resolved = false;
+            const timeout = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(false);
+                }
+            }, 7000);
 
-        // Step 3: Wait for BOTH attack AND cancel buttons to go display-off
-        // This confirms the attack is fully submitted before reloading.
-        // waitForSelector uses MutationObserver — fires in <1ms, no polling overhead.
-        await Promise.all([
-            this.controller.page.waitForSelector('.btn-attack-start.display-off', { timeout: 1000 }),
-            this.controller.page.waitForSelector(`${selCancel}.display-off`, { timeout: 1000 })
-        ]).catch(() => {
-            this.logger.debug('[Semi Auto] Display-off wait timed out');
+            const onAttack = () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeout);
+                    this.logger.debug('[Semi Auto] Attack confirmed via network');
+                    resolve(true);
+                }
+            };
+
+            if (this.controller.network) {
+                this.controller.network.once('battle:attack_used', onAttack);
+            } else {
+                clearTimeout(timeout);
+                resolve(false);
+            }
         });
 
-        // Step 4: Brief pause to allow in-flight network response (normal_attack_result.json)
-        // to finish parsing before page context is torn down. Prevents missing cmd:win/lose on one-shots.
+        if (!attackConfirmed) {
+            this.logger.warn('[Semi Auto] Network confirmation timeout. Checking state...');
+            // Check if battle ended
+            const ended = await this.controller.page.evaluate(() => {
+                return !!document.querySelector('.prt-result, #js-result, .pop-cheer, .btn-cheer');
+            }).catch(() => false);
+            if (ended) {
+                this.logger.info('[Semi Auto] Battle ended, skipping attack');
+                await sleep(300);
+                return;
+            }
+            this.logger.warn('[Semi Auto] Refreshing anyway');
+        }
+
+        // Step 4: Brief pause for network response parsing
         await sleep(100);
+        if (this.stopped) return;
 
         // Step 5: Refresh to skip animations
+        // Following Full Auto pattern: return immediately after starting reload.
+        // The main waitForBattleEnd loop handles turn signals and battle end.
         this.logger.info('[Semi Auto] Refreshing page');
         await this.controller.reloadPage();
-        await sleep(50);
+        await sleep(50); // Minimal settle
     }
 
     async waitForBattleEnd(mode, initialTurns = null) {
@@ -400,7 +441,6 @@ class BattleHandler {
         let lastFACheckTime = Date.now(); // Start timer from now to avoid immediate fire
         let lastEndStateCheckTime = 0; // Throttle battle-end DOM checks to 1000ms
         let lastCheckTurn = 0;         // Used for Turn-Change Priority Refresh
-        let networkTurnReady = false;  // Set by battle:start; triggers Semi Auto attack
         let lastSkipCheckTime = 0;    // Throttle non-raid menu checks
 
         const currentUrl = this.controller.page.url();
@@ -443,28 +483,42 @@ class BattleHandler {
         }
 
         // Network event flags
-        // Seed from pre-registered flags captured during handleFullAuto() to catch
-        // instant quick-summons that fired before waitForBattleEnd registered its listeners.
-        let networkFinished = false;
+        // Seed from pre-registered flags captured during transitions to catch
+        // signals that fired before waitForBattleEnd registered its listeners.
+        let networkFinished = this._preNetworkFinished || false;
         let bossDied = this._preBossDied || false;
         let partyWiped = this._prePartyWiped || false;
         let attackUsed = false;
         let summonUsed = this._preSummonUsed || false;
+
+        let networkTurn = this._preNetworkTurn > 0 ? this._preNetworkTurn : turnCount;
+        let networkTurnReady = this._preNetworkTurnReady || false;
+
+        // Reset pre-flags immediately after seeding
         this._preSummonUsed = false;
         this._preBossDied = false;
         this._prePartyWiped = false;
+        this._preNetworkTurn = 0;
+        this._preNetworkTurnReady = false;
+        this._preNetworkFinished = false;
         let lastActionTime = Date.now();
         let faInactivityThreshold = 20000; // Synchronized to 20s initial window
         let faReengagementLogged = false; // Track if FA re-engagement has been logged this battle
         let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
+
+        // If turn changed during transition, log it now
+        if (networkTurn > turnCount) {
+            this.logger.info(`[Turn ${networkTurn}]`);
+            turnCount = networkTurn;
+        }
+        let lastAttackEventTime = 0; // Track when attack event was received
+        let lastAttackRefreshTime = 0; // Track last attack-based refresh
 
         const updateHonor = async (netHonor) => {
             // Priority: Always read the actual current honor from the DOM (screen)
             // Local DOM is much more reliable for the TOTAL current honor.
             const honor = await this.getHonors();
 
-            // Safety: Update with NetHonor logic if DOM read fails?? 
-            // Better to stay simple: the screen has the real number.
             if (honor !== null && honor > previousHonors) {
                 const diff = honor - previousHonors;
                 this.logger.info(`[Honor] ${honor.toLocaleString()} (+${diff.toLocaleString()})`);
@@ -501,10 +555,6 @@ class BattleHandler {
             lastFACheckTime = Date.now();
         };
 
-        let networkTurn = turnCount; // Will be updated by battle:start events
-        let lastAttackEventTime = 0; // Track when attack event was received
-        let lastAttackRefreshTime = 0; // Track last attack-based refresh
-
         const onBattleStart = ({ turn }) => {
             // In semi_auto, after an attack the page reloads and start.json re-fires with the
             // SAME turn number (server hasn't advanced yet). We only want to re-arm networkTurnReady
@@ -525,7 +575,7 @@ class BattleHandler {
                 faInactivityThreshold = 20000;
                 lastAttackEventTime = 0;
                 attackUsed = false; // Clear stale attack flag on turn change
-                this.logger.debug(`[Network] Turn ${turn} started (timeout reset)`);
+                this.logger.debug(`[Network] Turn ${turn} started (timeout reset), networkTurnReady=true`);
             }
         };
 
@@ -559,9 +609,10 @@ class BattleHandler {
                 // --- PRIORITY 1: Semi-Auto Detection (network-driven) ---
                 // battle:start fires via start.json when a new turn begins — attack button is ready
                 if (isSemiAuto && networkTurnReady) {
+                    this.logger.debug('[Semi Auto] networkTurnReady detected, attacking...');
                     networkTurnReady = false;
                     lastAttackedTurn = networkTurn; // Mark this turn as attacked so same-turn reloads don't re-arm
-                    await this.handleSemiAuto(false);
+                    await this.handleSemiAuto(true); // Button already confirmed visible by network event
                     continue;
                 }
 

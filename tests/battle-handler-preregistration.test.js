@@ -21,20 +21,32 @@ function setupPreListeners(network, ctx) {
     ctx._preSummonUsed = false;
     ctx._preBossDied = false;
     ctx._prePartyWiped = false;
+    ctx._preNetworkTurn = 0;
+    ctx._preNetworkTurnReady = false;
+    ctx._preNetworkFinished = false;
 
     const _onPreSummon = () => { ctx._preSummonUsed = true; };
     const _onPreBoss = () => { ctx._preBossDied = true; };
     const _onPreWipe = () => { ctx._prePartyWiped = true; };
+    const _onPreStart = ({ turn }) => {
+        ctx._preNetworkTurn = turn;
+        ctx._preNetworkTurnReady = true;
+    };
+    const _onPreResult = () => { ctx._preNetworkFinished = true; };
 
     network.on('battle:summon_used', _onPreSummon);
     network.on('battle:boss_died', _onPreBoss);
     network.on('battle:party_wiped', _onPreWipe);
+    network.on('battle:start', _onPreStart);
+    network.once('battle:result', _onPreResult);
 
     // Return cleanup fn (called after handleFullAuto finishes)
     return () => {
         network.off('battle:summon_used', _onPreSummon);
         network.off('battle:boss_died', _onPreBoss);
         network.off('battle:party_wiped', _onPreWipe);
+        network.off('battle:start', _onPreStart);
+        network.off('battle:result', _onPreResult);
     };
 }
 
@@ -43,10 +55,18 @@ function seedFromPreFlags(ctx) {
     const summonUsed = ctx._preSummonUsed || false;
     const bossDied = ctx._preBossDied || false;
     const partyWiped = ctx._prePartyWiped || false;
+    const networkTurn = ctx._preNetworkTurn || 0;
+    const networkTurnReady = ctx._preNetworkTurnReady || false;
+    const networkFinished = ctx._preNetworkFinished || false;
+
     ctx._preSummonUsed = false;
     ctx._preBossDied = false;
     ctx._prePartyWiped = false;
-    return { summonUsed, bossDied, partyWiped };
+    ctx._preNetworkTurn = 0;
+    ctx._preNetworkTurnReady = false;
+    ctx._preNetworkFinished = false;
+
+    return { summonUsed, bossDied, partyWiped, networkTurn, networkTurnReady, networkFinished };
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +219,34 @@ describe('Pre-registration — flag seeding into waitForBattleEnd', () => {
         expect(summonUsed).toBe(true);
         expect(bossDied).toBe(true);
         expect(partyWiped).toBe(false);
+    });
+
+    test('battle:start captured during transition → networkTurn updated', () => {
+        const network = new EventEmitter();
+        const ctx = {};
+        const cleanup = setupPreListeners(network, ctx);
+
+        network.emit('battle:start', { turn: 5 });
+
+        cleanup();
+
+        const { networkTurn, networkTurnReady } = seedFromPreFlags(ctx);
+
+        expect(networkTurn).toBe(5);
+        expect(networkTurnReady).toBe(true);
+    });
+
+    test('battle:result captured during transition → networkFinished = true', () => {
+        const network = new EventEmitter();
+        const ctx = {};
+        const cleanup = setupPreListeners(network, ctx);
+
+        network.emit('battle:result', {});
+
+        cleanup();
+
+        const { networkFinished } = seedFromPreFlags(ctx);
+
+        expect(networkFinished).toBe(true);
     });
 });
