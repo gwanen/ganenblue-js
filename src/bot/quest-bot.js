@@ -193,23 +193,8 @@ class QuestBot {
         }
 
         if (result?.raidPending) {
-            this.logger.info('[Quest] Pending battles detected during combat. Initiating cleanup...');
+            this.logger.info('[Quest] Pending battles detected. Clearing...');
             await this.clearPendingBattles();
-        }
-
-        this.logger.info('[Battle] Combat concluded');
-
-        // Post-battle result page check - if on result page, skip to next cycle
-        // The result page will be auto-dismissed when navigating to next quest
-        await sleep(randomDelay(100, 200));
-        const isResultPage = await this.controller.page.evaluate(() => {
-            return window.location.hash.includes('#result') ||
-                !!document.querySelector('.prt-result');
-        }).catch(() => false);
-
-        if (isResultPage) {
-            this.logger.info('[Quest] Result page detected. Proceeding to next cycle...');
-            return true; // Return success, next cycle will handle navigation
         }
 
         return true;
@@ -422,39 +407,53 @@ class QuestBot {
         const unclaimedUrl = 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0';
         const entrySelector = config.selectors.raid.unclaimedRaidEntry;
 
-        this.logger.info('[System] Initiating pending battle clearance');
+        this.logger.info('[System] Clearing pending battles');
 
         let clearedCount = 0;
         const maxToClear = 10;
 
         while (clearedCount < maxToClear && this.isRunning) {
             await this.controller.gotoSPA(unclaimedUrl);
-            await sleep(randomDelay(100, 300));
+            await sleep(100);
 
             const hasEntries = await this.controller.elementExists(entrySelector, 3000);
             if (!hasEntries) {
-                this.logger.info('[Quest] Pending battles cleared');
                 break;
             }
 
-            this.logger.info(`[Quest] Processing unclaimed raid #${clearedCount + 1}`);
             try {
                 await this.controller.clickSafe(entrySelector);
-                const okButtonSelector = '.btn-usual-ok';
-                const foundOk = await this.controller.elementExists(okButtonSelector, 10000);
-                if (foundOk) {
-                    this.logger.info('[Quest] Result processed');
-                    await sleep(500);
-                } else {
-                    this.logger.warn('[System] OK button timeout. Proceeding');
-                }
+
+                // Wait for network result event
+                await new Promise(resolve => {
+                    let resolved = false;
+                    const timeout = setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            this.controller.network?.off('battle:result', onResult);
+                            resolve(null);
+                        }
+                    }, 3000);
+
+                    const onResult = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            clearTimeout(timeout);
+                            resolve(null);
+                        }
+                    };
+
+                    this.controller.network?.once('battle:result', onResult);
+                });
+
                 clearedCount++;
             } catch (error) {
                 this.logger.error('[Error] Failed to process unclaimed raid', error);
                 break;
             }
         }
-        this.logger.info(`[Quest] Pending battle clearance complete (${clearedCount} cleared)`);
+
+        this.logger.info(`[System] Cleared ${clearedCount} pending battles`);
     }
 
     async checkEarlyBattleEndPopup() {

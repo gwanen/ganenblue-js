@@ -618,10 +618,8 @@ class BattleHandler {
 
                 // --- PRIORITY 0: Network end-state signals (fastest) ---
                 if (bossDied || partyWiped) {
-                    this.logger.info(`[Network] ${bossDied ? 'Boss defeated' : 'Party wiped'}. Hard refreshing`);
                     await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
                     await sleep(this.fastRefresh ? 200 : 500);
-                    // Check honor target before returning (boss might have died mid-turn)
                     if (isRaid && honorTarget > 0 && !honorTargetReached && previousHonors >= honorTarget) {
                         honorTargetReached = true;
                     }
@@ -630,7 +628,6 @@ class BattleHandler {
 
                 if (networkFinished) {
                     await sleep(50);
-                    // Final honor check before returning (in case async check didn't complete)
                     if (isRaid && honorTarget > 0 && !honorTargetReached && previousHonors < honorTarget) {
                         const finalHonor = await this.getHonors();
                         if (finalHonor > previousHonors) previousHonors = finalHonor;
@@ -649,8 +646,7 @@ class BattleHandler {
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
                 }
 
-                // 3. Combined DOM Checks (End-state + Watchdog)
-                // Consolidate multiple throttled DOM checks into a single evaluate to save IPC
+                // 3. Result Page Detection (URL-based, network-confirmed)
                 if (currentUrl.includes('#result')) {
                     // Final honor check before returning from result page
                     if (isRaid && honorTarget > 0 && !honorTargetReached) {
@@ -661,50 +657,27 @@ class BattleHandler {
                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                 }
 
-                // DOM End-State + Watchdog (throttled to 2s — network events still fire instantly)
+                // Network-Driven End-State Detection (throttled DOM checks removed)
+                // Rely on battle:result network event for primary detection
+                // DOM watchdog kept only for stuck battle recovery
                 if (Date.now() - lastEndStateCheckTime > 2000) {
                     lastEndStateCheckTime = Date.now();
-                    const state = await this.controller.page.evaluate((sel) => {
-                        const results = {};
 
-                        // End states
-                        if (document.querySelector(sel.emptyResultNotice)) results.end = 'empty_result';
-                        else if (document.querySelector('.img-rematch-fail.popup-1, .img-rematch-fail.popup-2')) results.end = 'rematch_fail';
-                        else if (document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute')) results.end = 'wiped';
-                        else if (document.querySelector(sel.raidEndedPopup)) results.end = 'raid_ended';
-
-                        // Watchdog: Check if attack is processing
+                    // Watchdog: Check if attack is processing (for stuck detection)
+                    const attackState = await this.controller.page.evaluate((sel) => {
                         const attBtn = document.querySelector(sel.attackButton);
-                        results.isAttacking = !!(attBtn && attBtn.classList.contains('display-off'));
+                        const isAttacking = !!(attBtn && attBtn.classList.contains('display-off'));
 
-                        // Watchdog: Check if any UI is visible
-                        const ui = document.querySelector('.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto, .btn-usual-ok');
-                        results.uiVisible = !!(ui && ui.offsetWidth > 0);
+                        // Check if any battle UI is visible (to detect stuck state)
+                        const ui = document.querySelector('.btn-attack-start.display-on, .btn-usual-cancel, .btn-auto');
+                        const uiVisible = !!(ui && ui.offsetWidth > 0);
 
-                        return results;
+                        return { isAttacking, uiVisible };
                     }, this.selectors).catch(() => ({}));
 
-                    if (state.end) {
-                        // Check honor target before returning for end states
-                        if (isRaid && honorTarget > 0 && !honorTargetReached && previousHonors >= honorTarget) {
-                            honorTargetReached = true;
-                        }
-                        if (state.end === 'empty_result') return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
-                        if (state.end === 'raid_ended') {
-                            this.logger.info('[Raid] Battle already ended');
-                            await this.controller.clickSafe('.btn-usual-ok', { silent: true });
-                            return { duration: 0, turns: 0, honors: previousHonors, raidEnded: true };
-                        }
-                        // Other end states (wiped, rematch_fail) require reload
-                        this.logger.info(`[Battle] Battle ended (${state.end}). Refreshing`);
-                        await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
-                        await sleep(this.fastRefresh ? 200 : 500);
-                        return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
-                    }
-
-                    // Watchdog Logic
-                    if (!state.isAttacking) {
-                        if (state.uiVisible) {
+                    // Watchdog Logic: Detect stuck battles (no network activity + no UI)
+                    if (!attackState.isAttacking) {
+                        if (attackState.uiVisible) {
                             missingUiCount = 0;
                         } else {
                             missingUiCount++;
@@ -809,11 +782,10 @@ class BattleHandler {
                 }
 
                 if (!currentUrl.includes('#raid') && !currentUrl.includes('_raid')) {
-                    // Throttled menu checks
+                    // Throttled menu checks (network-primary, DOM fallback for empty result)
                     if (Date.now() - lastSkipCheckTime > 1000) {
                         lastSkipCheckTime = Date.now();
-                        if (await this.controller.elementExists(this.selectors.okButton, 300) ||
-                            await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
+                        if (await this.controller.elementExists(this.selectors.emptyResultNotice, 100)) {
                             // Check honor target before returning
                             if (isRaid && honorTarget > 0 && !honorTargetReached && previousHonors >= honorTarget) {
                                 honorTargetReached = true;
@@ -873,10 +845,9 @@ class BattleHandler {
             return true;
         }
 
-        // 2. Check for OK button (completion modal), Empty Result Notice, or Wipe/Cheer popup
+        // 2. Check for Empty Result Notice or Wipe/Cheer popup (network is primary, this is fallback)
         const endState2 = await this.controller.page.evaluate((selectors) => {
-            if (document.querySelector(selectors.okButton)) return 'finished';
-            if (document.querySelector(selectors.emptyResultNotice)) return 'finished';
+            if (document.querySelector(selectors.emptyResultNotice)) return 'empty_result';
             const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
             if (cheer && cheer.offsetWidth > 0) return 'wiped';
             const rematch = document.querySelector('.pop-rematch-fail.pop-show');
@@ -890,8 +861,8 @@ class BattleHandler {
             this.logger.info('[Battle] Party wiped');
             return true;
         }
-        if (endState2 === 'finished') {
-            this.logger.info('[Battle] Combat concluded');
+        if (endState2 === 'empty_result') {
+            this.logger.info('[Battle] Empty result detected');
             return true;
         }
 

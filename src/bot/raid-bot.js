@@ -277,30 +277,19 @@ class RaidBot {
         this.logger.debug(`[Result] honorReached: ${honorReached}, honors: ${honorValue.toLocaleString()}, target: ${this.honorTarget.toLocaleString()}`);
 
         if (honorReached) {
-            this.logger.info(`[Target] Honor goal reached: ${this.honorTarget.toLocaleString()}. Skipping rest of battle`);
-        } else {
-            this.logger.info('[Battle] Combat concluded');
+            this.logger.info(`[Target] Honor goal reached: ${this.honorTarget.toLocaleString()}`);
         }
 
         if (result && result.duration > 0) {
             this.updateDetailStats(result);
         }
 
-        // Always navigate back to assist page after raid completes (fixes bug when max honor > target honor)
+        // Navigate back to assist page for next raid
         const raidCurrentUrl = this.controller.page.url();
-        const isInBattle = raidCurrentUrl.includes('#raid') || raidCurrentUrl.includes('_raid');
-        const isRaidResult = raidCurrentUrl.includes('#result');
-
-        if (isInBattle || isRaidResult) {
-            this.logger.info('[Raid] Navigating back to assist page');
+        if (raidCurrentUrl.includes('#raid') || raidCurrentUrl.includes('_raid') || raidCurrentUrl.includes('#result')) {
             await this.controller.gotoSPA(this.raidBackupUrl);
-            await sleep(500);
-
-            // Verify navigation succeeded
-            const afterUrl = this.controller.page.url();
-            if (!afterUrl.includes('#quest/assist')) {
-                this.logger.warn(`[Raid] Navigation failed. Current URL: ${afterUrl}`);
-            }
+            await this.controller.elementExists(this.selectors.raidEntry, 5000);
+            await sleep(100);
         }
 
         return true;
@@ -356,16 +345,9 @@ class RaidBot {
 
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#result')) {
-                this.logger.info('[Raid] Resolving pending result screen...');
-                const okFound = await this.controller.elementExists('.btn-usual-ok', 500);
-                if (okFound) {
-                    await this.controller.clickSafe('.btn-usual-ok', { fast: true, timeout: 1000, maxRetries: 1 }).catch(() => { });
-                    await sleep(100);
-                } else {
-                    await this.controller.gotoSPA('https://game.granbluefantasy.jp/#mypage');
-                    await sleep(100);
-                    await this.controller.gotoSPA(this.raidBackupUrl);
-                }
+                // Result from previous battle - navigate to assist page
+                await this.controller.gotoSPA(this.raidBackupUrl);
+                await sleep(100);
                 continue;
             }
 
@@ -578,42 +560,53 @@ class RaidBot {
         const unclaimedUrl = 'https://game.granbluefantasy.jp/#quest/assist/unclaimed/0/0';
         const entrySelector = this.selectors.unclaimedRaidEntry;
 
-        this.logger.info('[System] Initializing pending battle clearance...');
+        this.logger.info('[System] Clearing pending battles');
 
         let clearedCount = 0;
         const maxToClear = 10;
 
         while (clearedCount < maxToClear && this.isRunning) {
             await this.controller.gotoSPA(unclaimedUrl);
-            await sleep(randomDelay(100, 300));
+            await sleep(100);
 
             const hasEntries = await this.controller.elementExists(entrySelector, 3000);
             if (!hasEntries) {
-                this.logger.info('[Raid] Pending battles cleared');
                 break;
             }
 
-            this.logger.info(`[Raid] Clearing unclaimed raid #${clearedCount + 1}`);
             try {
                 await this.controller.clickSafe(entrySelector);
-                const okButtonSelector = '.btn-usual-ok';
-                this.logger.debug('[Wait] Waiting for result page');
 
-                const foundOk = await this.controller.elementExists(okButtonSelector, 10000);
-                if (foundOk) {
-                    this.logger.info('[Raid] Result processed');
-                    await sleep(500);
-                } else {
-                    this.logger.warn('[System] OK button timeout. Proceeding...');
-                }
+                // Wait for network result event
+                await new Promise(resolve => {
+                    let resolved = false;
+                    const timeout = setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            this.controller.network?.off('battle:result', onResult);
+                            resolve(null);
+                        }
+                    }, 3000);
+
+                    const onResult = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            clearTimeout(timeout);
+                            resolve(null);
+                        }
+                    };
+
+                    this.controller.network?.once('battle:result', onResult);
+                });
 
                 clearedCount++;
             } catch (error) {
-                this.logger.error('[Error] Failed to click unclaimed raid:', error);
+                this.logger.error('[Error] Failed to process unclaimed raid', error);
                 break;
             }
         }
-        this.logger.info(`[Raid] Finished clearing ${clearedCount} pending battles`);
+
+        this.logger.info(`[System] Cleared ${clearedCount} pending battles`);
         return clearedCount;
     }
 
