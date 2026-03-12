@@ -173,4 +173,15 @@ program.command('config')
         console.log(JSON.stringify(config.config, null, 2));
     });
 
+program.command('test-stealth')
+    .description('Test stealth detection against sannysoft.com')
+    .action(async () => {
+        try {
+            await import('./test-stealth.js');
+        } catch (error) {
+            logger.error('[Error] [Cli] Stealth test failed:', error);
+            process.exit(1);
+        }
+    });
+
 program.parse();
