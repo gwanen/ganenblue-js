@@ -28,6 +28,21 @@ class BattleHandler {
         this.stopped = true;
     }
 
+    /**
+     * Clears any pre-registered network event flags that may have been set by
+     * stale events (e.g. a previous battle's result.json arriving during
+     * navigation to the next quest URL). Call this before executeBattle() when
+     * the caller knows the pre-flags are not valid for the upcoming battle.
+     */
+    resetPreFlags() {
+        this._preNetworkFinished = false;
+        this._preBossDied = false;
+        this._prePartyWiped = false;
+        this._preSummonUsed = false;
+        this._preNetworkTurn = 0;
+        this._preNetworkTurnReady = false;
+    }
+
 
     async executeBattle(mode = 'full_auto', options = {}) {
         this.stopped = false;
@@ -245,9 +260,6 @@ class BattleHandler {
             attempts++;
 
             try {
-                // Brief settle
-                await sleep(100);
-
                 const btnFound = await this.controller.waitForElement(this.selectors.fullAutoButton, 20000);
 
                 if (!btnFound) {
@@ -270,14 +282,11 @@ class BattleHandler {
                     return;
                 }
 
-                // Sharp delay before clicking
-                await sleep(100);
-
                 await this.controller.page.click(this.selectors.fullAutoButton);
                 this.logger.debug('[Battle] Fast-clicked Full Auto');
 
                 // Handle common post-click popups
-                await sleep(500);
+                await sleep(100);
 
                 // 1.5 Handle "Waiting for last turn" popup
                 if (await this.controller.elementExists('.pop-usual.common-pop-error.pop-show', 200)) {
@@ -362,7 +371,7 @@ class BattleHandler {
             if (!attackReady) {
                 this.logger.warn('[Semi Auto] Timeout. Refreshing page');
                 await this.controller.reloadPage();
-                return;
+                return false;
             }
         }
 
@@ -372,7 +381,7 @@ class BattleHandler {
         } catch (e) {
             this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
             await this.controller.reloadPage();
-            return;
+            return false;
         }
         this.logger.info('[Semi Auto] Attack');
 
@@ -413,14 +422,14 @@ class BattleHandler {
             if (ended) {
                 this.logger.info('[Semi Auto] Battle ended, skipping attack');
                 await sleep(300);
-                return;
+                return false;
             }
             this.logger.warn('[Semi Auto] Refreshing anyway');
         }
 
         // Step 4: Brief pause for network response parsing
         await sleep(100);
-        if (this.stopped) return;
+        if (this.stopped) return false;
 
         // Step 5: Refresh to skip animations
         // Following Full Auto pattern: return immediately after starting reload.
@@ -428,6 +437,7 @@ class BattleHandler {
         this.logger.info('[Semi Auto] Refreshing page');
         await this.controller.reloadPage();
         await sleep(50); // Minimal settle
+        return attackConfirmed; // Tell caller whether attack was network-confirmed
     }
 
     async waitForBattleEnd(mode, initialTurns = null) {
@@ -472,13 +482,13 @@ class BattleHandler {
         let lastAttackedTurn = isSemiAuto ? turnCount : -1;
         this.logger.debug(`[Wait] Resolving turns (Mode: ${mode})`);
 
-        if (turnCount > 0) {
+        if (!isSemiAuto && turnCount > 0) {
             const honorLog = (isRaid && previousHonors > 0) ? ` ${previousHonors.toLocaleString()} honor` : '';
             this.logger.info(`[Turn ${turnCount}]${honorLog}`);
 
             if (isRaid && honorTarget > 0 && previousHonors >= honorTarget) {
                 this.logger.info(`[Target] Honor goal reached: ${previousHonors.toLocaleString()} / ${honorTarget.toLocaleString()}`);
-                return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
+                return { duration: (Date.now() - startTime) / 1000, turns: Math.max(turnCount, 1), honors: previousHonors, honorReached: true };
             }
         }
 
@@ -502,19 +512,22 @@ class BattleHandler {
         this._preNetworkTurnReady = false;
         this._preNetworkFinished = false;
         let lastActionTime = Date.now();
-        let faInactivityThreshold = 20000; // Synchronized to 20s initial window
+        let faInactivityThreshold = 10000; // Synchronized to 10s initial window
         let faReengagementLogged = false; // Track if FA re-engagement has been logged this battle
         let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
-        // If turn changed during transition, log it now
-        if (networkTurn > turnCount) {
+        // If turn changed during transition, log it now (full_auto only)
+        if (!isSemiAuto && networkTurn > turnCount) {
             this.logger.info(`[Turn ${networkTurn}]`);
             turnCount = networkTurn;
+        } else if (isSemiAuto && networkTurn > turnCount) {
+            turnCount = networkTurn; // still need turnCount updated for lastAttackedTurn logic
         }
         let lastAttackEventTime = 0; // Track when attack event was received
         let lastAttackRefreshTime = 0; // Track last attack-based refresh
 
         const updateHonor = async (netHonor) => {
+            if (isSemiAuto || !isRaid) return; // Skip honor reads in semi-auto and non-raid modes
             // Priority: Always read the actual current honor from the DOM (screen)
             // Local DOM is much more reliable for the TOTAL current honor.
             const honor = await this.getHonors();
@@ -538,7 +551,7 @@ class BattleHandler {
         const onAttack = ({ honor } = {}) => {
             attackUsed = true;
             lastActionTime = Date.now();
-            faInactivityThreshold = 20000;
+            faInactivityThreshold = 10000;
             lastFACheckTime = Date.now();
             lastAttackEventTime = Date.now();
         };
@@ -562,17 +575,19 @@ class BattleHandler {
             // For a genuine new turn (turn > networkTurn) we always re-arm.
             const isSameTurnReload = isSemiAuto && turn === networkTurn && turn > lastAttackedTurn;
             if (turn > networkTurn || isSameTurnReload) {
-                // Log TURN immediately for UI feedback (only on genuine turn advance)
-                if (turn > turnCount) {
+                // Log TURN immediately for UI feedback (full_auto only — SA doesn't need it)
+                if (!isSemiAuto && turn > turnCount) {
                     this.logger.info(`[Turn ${turn}]`);
                     turnCount = turn; // Update so loop logic doesn't double-log
+                } else if (turn > turnCount) {
+                    turnCount = turn; // Still update for lastAttackedTurn logic
                 }
 
                 networkTurn = turn;
                 networkTurnReady = true; // Signal Semi Auto: new turn, attack button should be ready
                 lastActionTime = Date.now();
                 lastFACheckTime = Date.now();
-                faInactivityThreshold = 20000;
+                faInactivityThreshold = 10000;
                 lastAttackEventTime = 0;
                 attackUsed = false; // Clear stale attack flag on turn change
                 this.logger.debug(`[Network] Turn ${turn} started (timeout reset), networkTurnReady=true`);
@@ -611,8 +626,14 @@ class BattleHandler {
                 if (isSemiAuto && networkTurnReady) {
                     this.logger.debug('[Semi Auto] networkTurnReady detected, attacking...');
                     networkTurnReady = false;
-                    lastAttackedTurn = networkTurn; // Mark this turn as attacked so same-turn reloads don't re-arm
-                    await this.handleSemiAuto(true); // Button already confirmed visible by network event
+                    const attackedTurnAttempt = networkTurn;
+                    const confirmed = await this.handleSemiAuto(true); // Button already confirmed visible by network event
+                    // Only lock lastAttackedTurn when attack was network-confirmed.
+                    // If click silently failed (button not ready yet), keep lastAttackedTurn as-is
+                    // so the same-turn reload re-arms networkTurnReady correctly.
+                    if (confirmed) {
+                        lastAttackedTurn = attackedTurnAttempt;
+                    }
                     continue;
                 }
 
@@ -786,7 +807,7 @@ class BattleHandler {
                     if (mode === 'full_auto' && (Date.now() - lastActionTime > faInactivityThreshold)) {
                         this.logger.warn('[Full Auto] Inactive. Refreshing page');
                         lastActionTime = Date.now();
-                        faInactivityThreshold = 20000; // Reset threshold after recovery refresh
+                        faInactivityThreshold = 10000; // Reset threshold after recovery refresh
                         await this.controller.reloadPage();
                         await sleep(this.fastRefresh ? 300 : 500);
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload

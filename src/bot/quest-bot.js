@@ -186,6 +186,10 @@ class QuestBot {
         }
 
         // Handle battle
+        // Reset stale pre-flags: the previous battle's result.json can arrive
+        // during navigation to questUrl, setting _preNetworkFinished = true and
+        // causing waitForBattleEnd to return immediately without fighting.
+        this.battle.resetPreFlags();
         const result = await this.battle.executeBattle(this.battleMode);
 
         if (result && result.duration > 0) {
@@ -368,8 +372,18 @@ class QuestBot {
                 };
             }).catch(() => ({}));
 
-            if (state.isRaid || state.isResult) {
+            if (state.isRaid) {
                 return 'success';
+            }
+
+            // In quest mode, #result during validatePostClick means GBF's SPA intercepted
+            // the previous battle's result.json and redirected us away from the quest.
+            // Re-navigate to questUrl once to escape it.
+            if (state.isResult) {
+                this.logger.warn('[Summon] Result page intercept in validatePostClick. Re-navigating...');
+                await this.controller.gotoSPA(this.questUrl);
+                await sleep(randomDelay(200, 350));
+                continue;
             }
 
             if (state.isParty && state.startBtn) {

@@ -35,6 +35,14 @@ class NetworkListener extends EventEmitter {
     }
 
     /**
+     * Returns true if the URL belongs to either the solo quest (/rest/raid/)
+     * or co-op raid (/rest/multiraid/) endpoint family.
+     */
+    _isRaidUrl(url) {
+        return url.includes('/rest/multiraid/') || url.includes('/rest/raid/');
+    }
+
+    /**
      * Returns true if any battle-related listener is active.
      * Used as a guard to skip expensive response.json() parsing
      * when no one is subscribed (e.g. during lobby/menu phases).
@@ -76,8 +84,8 @@ class NetworkListener extends EventEmitter {
                 return;
             }
 
-            // --- Turn number (fires on every page refresh in raid) ---
-            if (url.includes('/rest/multiraid/start.json')) {
+            // --- Turn number (fires on every page refresh in raid/quest) ---
+            if (this._isRaidUrl(url) && url.includes('/start.json')) {
                 const json = await response.json().catch(() => null);
                 if (json?.popup) {
                     this.logger.info('[Network] Join error detected (popup in start.json)');
@@ -122,7 +130,8 @@ class NetworkListener extends EventEmitter {
             }
 
             // --- Attack/Ability/Summon/FatalChain result: boss death, party wipe, and turn number ---
-            if (url.includes('/rest/multiraid/') && (
+            // Matches both /rest/raid/ (solo quest) and /rest/multiraid/ (co-op raid)
+            if (this._isRaidUrl(url) && (
                 url.includes('_attack_result.json') ||
                 url.includes('ability_result.json') ||
                 url.includes('summon_result.json') ||

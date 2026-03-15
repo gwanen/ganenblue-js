@@ -452,7 +452,7 @@ class PageController {
         const reloadBtn = '.btn-treasure-footer-reload';
         if (await this.elementExists(reloadBtn, 200)) {
             try {
-                await this.clickSafe(reloadBtn, { fast: true, silent: true });
+                await this.page.click(reloadBtn);
                 await sleep(200);
                 return;
             } catch (e) {
