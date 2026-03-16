@@ -54,6 +54,12 @@ class BattleHandler {
         this.lastHonors = 0; // Reset per-raid so previousHonors starts at 0 for each new raid
         this.logger.info(`[Battle] Engaging (${mode})`);
 
+        // Create ref objects for lastActionTime and threshold so handleFullAuto can update them
+        const lastActionTimeRef = { value: Date.now() };
+        const faThresholdRef = { value: 25000 }; // Start with 25s for initial FA
+        this.options.lastActionTimeRef = lastActionTimeRef;
+        this.options.faThresholdRef = faThresholdRef;
+
         try {
             const currentUrl = this.controller.page.url();
             if (currentUrl.includes('#result')) {
@@ -285,8 +291,18 @@ class BattleHandler {
                 await this.controller.page.click(this.selectors.fullAutoButton);
                 this.logger.debug('[Battle] Fast-clicked Full Auto');
 
+                // Fix: Update lastActionTime AND reset threshold after FA click
+                // GBF lockout after chain bursts can last 10-20s, which is normal
+                // This applies to EVERY FA activation (turn 1, turn 2+, re-engagement)
+                if (this.options && this.options.lastActionTimeRef) {
+                    this.options.lastActionTimeRef.value = Date.now();
+                }
+                if (this.options && this.options.faThresholdRef) {
+                    this.options.faThresholdRef.value = 25000; // 25s after every FA click
+                }
+
                 // Handle common post-click popups
-                await sleep(100);
+                await sleep(150);
 
                 // 1.5 Handle "Waiting for last turn" popup
                 if (await this.controller.elementExists('.pop-usual.common-pop-error.pop-show', 200)) {
@@ -331,6 +347,12 @@ class BattleHandler {
      * 3. Attack Button Visible (display-on) -> FAIL
      */
     async verifyFullAutoState() {
+        // Frame validity guard: check frame is attached before evaluate
+        if (!await this.controller.isFrameAttached()) {
+            this.logger.debug('[Full Auto] Frame detached during verify, assuming active');
+            return true;
+        }
+
         return await this.controller.page.evaluate((selectors) => {
             // 0. Safety: If the page is still in a loading/overlay state, assume FA is active/pending
             const loading = document.querySelector('.prt-loading-container, .prt-popup-back.show, #loading-mask');
@@ -452,6 +474,9 @@ class BattleHandler {
         let lastEndStateCheckTime = 0; // Throttle battle-end DOM checks to 1000ms
         let lastCheckTurn = 0;         // Used for Turn-Change Priority Refresh
         let lastSkipCheckTime = 0;    // Throttle non-raid menu checks
+        let iterationCount = 0;       // Memory: track loop iterations for GC
+        let lastHardReloadTime = Date.now(); // Memory: track last hard reload
+        const hardReloadInterval = 30 * 60 * 1000; // 30 minutes in ms
 
         const currentUrl = this.controller.page.url();
         const isRaid = currentUrl.includes('#raid') || currentUrl.includes('_raid');
@@ -512,7 +537,7 @@ class BattleHandler {
         this._preNetworkTurnReady = false;
         this._preNetworkFinished = false;
         let lastActionTime = Date.now();
-        let faInactivityThreshold = 17000; // Synchronized to 7s initial window
+        let faInactivityThreshold = 25000; // Initial: 25s for OUGI lockout after FA click
         let faReengagementLogged = false; // Track if FA re-engagement has been logged this battle
         let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
@@ -550,21 +575,21 @@ class BattleHandler {
         const onPartyWiped = ({ honor } = {}) => { updateHonor(honor); partyWiped = true; };
         const onAttack = ({ honor } = {}) => {
             attackUsed = true;
-            lastActionTime = Date.now();
-            faInactivityThreshold = 7000;
+            this.options.lastActionTimeRef.value = Date.now();
+            this.options.faThresholdRef.value = 5000; // 5s after attack (skills/summon processing)
             lastFACheckTime = Date.now();
             lastAttackEventTime = Date.now();
         };
         const onAbilityOrSummon = ({ honor } = {}) => {
-            lastActionTime = Date.now();
-            faInactivityThreshold = 7000;
+            this.options.lastActionTimeRef.value = Date.now();
+            this.options.faThresholdRef.value = 5000; // 5s after ability/summon
             lastFACheckTime = Date.now();
         };
         const onSummonUsed = ({ honor } = {}) => {
             updateHonor(honor);
             summonUsed = true;
-            lastActionTime = Date.now();
-            faInactivityThreshold = 7000;
+            this.options.lastActionTimeRef.value = Date.now();
+            this.options.faThresholdRef.value = 5000; // 5s after summon
             lastFACheckTime = Date.now();
         };
 
@@ -585,9 +610,9 @@ class BattleHandler {
 
                 networkTurn = turn;
                 networkTurnReady = true; // Signal Semi Auto: new turn, attack button should be ready
-                lastActionTime = Date.now();
+                this.options.lastActionTimeRef.value = Date.now();
+                this.options.faThresholdRef.value = 5000; // 5s at turn start (skills/summon ready)
                 lastFACheckTime = Date.now();
-                faInactivityThreshold = 7000;
                 lastAttackEventTime = 0;
                 attackUsed = false; // Clear stale attack flag on turn change
                 this.logger.debug(`[Network] Turn ${turn} started (timeout reset), networkTurnReady=true`);
@@ -606,6 +631,10 @@ class BattleHandler {
 
         try {
             while (Date.now() - startTime < maxWaitMs) {
+                // Sync lastActionTime and threshold from refs (may be updated by handleFullAuto)
+                lastActionTime = this.options.lastActionTimeRef.value;
+                faInactivityThreshold = this.options.faThresholdRef.value;
+
                 // Cache the URL once per tick — page.url() is an IPC call; calling it
                 // multiple times in the same 50ms loop iteration wastes CPU.
                 const currentUrl = this.controller.page.url();
@@ -698,7 +727,7 @@ class BattleHandler {
                 // Network-Driven End-State Detection (throttled DOM checks removed)
                 // Rely on battle:result network event for primary detection
                 // DOM watchdog kept only for stuck battle recovery
-                if (Date.now() - lastEndStateCheckTime > 2000) {
+                if (Date.now() - lastEndStateCheckTime > 3000) {
                     lastEndStateCheckTime = Date.now();
 
                     // Watchdog: Check if attack is processing (for stuck detection)
@@ -719,13 +748,15 @@ class BattleHandler {
                             missingUiCount = 0;
                         } else {
                             missingUiCount++;
-                            if (missingUiCount >= 10) { // ~10-20s depending on loop speed
+                            if (missingUiCount >= 6) { // ~18s with 3s checks
                                 this.logger.warn('[Battle] UI missing (stuck). Refreshing');
                                 await this.controller.reloadPage();
                                 await sleep(this.fastRefresh ? 300 : 500);
-                                if (await this.checkStateAndResume(mode)) {
+                                const resumeResult = await this.checkStateAndResume(mode);
+                                if (resumeResult === true) {
                                     return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                                 }
+                                // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
                                 missingUiCount = 0;
                             }
                         }
@@ -747,9 +778,11 @@ class BattleHandler {
                             await sleep(this.fastRefresh ? 200 : 500);
                             lastFACheckTime = Date.now();
 
-                            if (await this.checkStateAndResume(mode)) {
+                            const resumeResult = await this.checkStateAndResume(mode);
+                            if (resumeResult === true) {
                                 return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                             }
+                            // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
                             continue;
                         }
                     }
@@ -783,14 +816,16 @@ class BattleHandler {
                         lastAttackRefreshTime = Date.now();
                         lastFACheckTime = Date.now();
 
-                        if (await this.checkStateAndResume(mode)) {
+                        const resumeResult = await this.checkStateAndResume(mode);
+                        if (resumeResult === true) {
                             return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                         }
+                        // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
                         continue;
                     }
 
                     // 3. FA Persistence Check — runs BEFORE the inactivity watchdog so its continue never masks this
-                    if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 20000)) {
+                    if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 25000)) {
                         lastFACheckTime = Date.now();
                         const isEngaged = await this.verifyFullAutoState();
 
@@ -800,21 +835,24 @@ class BattleHandler {
                                 faReengagementLogged = true;
                             }
                             await this.handleFullAuto();
+                            // lastActionTime is now updated inside handleFullAuto() via lastActionTimeRef
                         }
                     }
 
                     // 4. FA Inactivity Watchdog (Dynamic threshold)
                     if (mode === 'full_auto' && (Date.now() - lastActionTime > faInactivityThreshold)) {
                         this.logger.warn('[Full Auto] Inactive. Refreshing page');
-                        lastActionTime = Date.now();
-                        faInactivityThreshold = 7000; // Reset threshold after recovery refresh
+                        this.options.lastActionTimeRef.value = Date.now();
+                        this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
                         await this.controller.reloadPage();
                         await sleep(this.fastRefresh ? 300 : 500);
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload
 
-                        if (await this.checkStateAndResume(mode)) {
+                        const resumeResult = await this.checkStateAndResume(mode);
+                        if (resumeResult === true) {
                             return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                         }
+                        // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
                         continue;
                     }
                 }
@@ -833,7 +871,25 @@ class BattleHandler {
                     }
                 }
 
-                await sleep(50);
+                // Memory Management: Periodic GC every 100 iterations (~10s)
+                // This prevents heap bloat from accumulated battle objects and closures
+                if (iterationCount % 100 === 0 && global.gc) {
+                    global.gc();
+                }
+                iterationCount++;
+
+                // Memory Management: Hard reload every 30 minutes to clear page context
+                // This clears accumulated DOM nodes, JS heap, and cached responses from GBF SPA
+                if (Date.now() - lastHardReloadTime > hardReloadInterval) {
+                    this.logger.info('[Memory] Periodic hard reload to clear page context');
+                    await this.controller.page.reload({ waitUntil: 'domcontentloaded' });
+                    await sleep(500);
+                    lastHardReloadTime = Date.now();
+                    // Reset iteration counter to avoid immediate GC after reload
+                    iterationCount = 0;
+                }
+
+                await sleep(100);
             }
 
             throw new Error('Battle timeout');
@@ -905,7 +961,13 @@ class BattleHandler {
         }
 
         // 3. Still in battle? Quick pre-check before re-engaging FA to prevent reload loops
-        this.logger.debug('[Battle] Checking for battle UI to re-engage FA');
+        this.logger.debug('[Battle] Checking for battle UI to re-engaging FA');
+
+        // Frame stability guard: ensure frame is attached before waitForFunction
+        if (!await this.controller.isFrameAttached()) {
+            this.logger.warn('[Battle] Frame detached during state check, waiting for stability...');
+            await this.controller.waitForFrameStable(2000);
+        }
 
         const foundState = await this.controller.page.waitForFunction(() => {
             const ui = document.querySelector('.btn-attack-start, .btn-auto, .btn-usual-cancel');
@@ -949,11 +1011,12 @@ class BattleHandler {
                 }
                 this.logger.info('[Battle] Re-engaging Full Auto');
                 await this.handleFullAuto();
-                return false;
+                // Signal caller to update lastActionTime by returning a special value
+                return { faReengaged: true };
             } else if (mode === 'semi_auto') {
                 this.logger.info('[Battle] Re-engaging Semi Auto');
                 await this.handleSemiAuto();
-                return false;
+                return { faReengaged: true };
             }
         }
 

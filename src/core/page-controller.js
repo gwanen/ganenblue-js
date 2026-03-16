@@ -441,6 +441,9 @@ class PageController {
 
         // Extra short yield so any remaining microtasks on the SPA router settle.
         await sleep(100);
+
+        // Frame stability check: ensure frame is reattached after SPA navigation
+        await this.waitForFrameStable(2000);
     }
 
     /**
@@ -460,6 +463,42 @@ class PageController {
             }
         }
         await this.page.reload({ waitUntil: 'domcontentloaded' });
+
+        // Frame stability check: ensure frame is reattached after reload
+        await this.waitForFrameStable(2000);
+    }
+
+    /**
+     * Check if the main frame is still attached and usable.
+     * Returns true if the frame is healthy, false if detached/stale.
+     */
+    async isFrameAttached() {
+        try {
+            // Quick evaluation to test frame health
+            await this.page.evaluate(() => document.readyState, { timeout: 500 });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Wait for frame to be stable after navigation/reload.
+     * This prevents "detached frame" errors by ensuring the frame is reattached
+     * before any interaction attempts.
+     */
+    async waitForFrameStable(timeout = 3000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeout) {
+            if (await this.isFrameAttached()) {
+                // Frame is attached, give it a brief moment to settle
+                await sleep(150);
+                return true;
+            }
+            await sleep(100);
+        }
+        this.logger.warn('[Core] Frame stability wait timed out');
+        return false;
     }
 
     /**

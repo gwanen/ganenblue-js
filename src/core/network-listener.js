@@ -9,7 +9,18 @@ class NetworkListener extends EventEmitter {
         this.isListening = false;
 
         // Increased to 100 to allow headroom for complex monitoring
-        this.setMaxListeners(100);
+        this.setMaxListeners(150);
+
+        // Memory leak detection: Track listener additions
+        this.on('newListener', (eventName) => {
+            const count = this.listenerCount(eventName);
+            if (count > 20) {
+                this.logger.warn(`[Memory] High listener count for '${eventName}': ${count}`);
+            }
+            if (this.listenerCount('battle:result') > 50) {
+                this.logger.warn('[Memory] Potential listener leak detected on battle:result');
+            }
+        });
 
         // Bind handler context
         this._handleResponse = this._handleResponse.bind(this);
