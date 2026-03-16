@@ -702,7 +702,7 @@ class RaidBot {
                         clickSuccess = true;
                     } catch (e) { }
 
-                    if (!await this.controller.elementExists(startBtnSelector, 200, true)) {
+                    if (!await this.controller.elementExists('.btn-usual-ok', 200, true)) {
                         clickSuccess = true;
                         break;
                     }
@@ -713,9 +713,9 @@ class RaidBot {
                 await sleep(300);
             } else {
                 // Fallback: If cancel never appeared but OK is there (e.g. an error popup instead)
-                if (await this.controller.elementExists(startBtnSelector, 200, true)) {
+                if (await this.controller.elementExists('.btn-usual-ok', 200, true)) {
                     this.logger.info('[Wait] Only OK button found (no cancel). Clicking anyway');
-                    await this.controller.clickSafe(startBtnSelector, { timeout: 1000, maxRetries: 1 }).catch(() => { });
+                    await this.controller.clickSafe('.btn-usual-ok', { timeout: 1000, maxRetries: 1 }).catch(() => { });
                     await sleep(300);
                 }
             }

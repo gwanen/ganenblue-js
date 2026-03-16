@@ -512,7 +512,7 @@ class BattleHandler {
         this._preNetworkTurnReady = false;
         this._preNetworkFinished = false;
         let lastActionTime = Date.now();
-        let faInactivityThreshold = 10000; // Synchronized to 10s initial window
+        let faInactivityThreshold = 17000; // Synchronized to 7s initial window
         let faReengagementLogged = false; // Track if FA re-engagement has been logged this battle
         let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
@@ -551,7 +551,7 @@ class BattleHandler {
         const onAttack = ({ honor } = {}) => {
             attackUsed = true;
             lastActionTime = Date.now();
-            faInactivityThreshold = 10000;
+            faInactivityThreshold = 7000;
             lastFACheckTime = Date.now();
             lastAttackEventTime = Date.now();
         };
@@ -587,7 +587,7 @@ class BattleHandler {
                 networkTurnReady = true; // Signal Semi Auto: new turn, attack button should be ready
                 lastActionTime = Date.now();
                 lastFACheckTime = Date.now();
-                faInactivityThreshold = 10000;
+                faInactivityThreshold = 7000;
                 lastAttackEventTime = 0;
                 attackUsed = false; // Clear stale attack flag on turn change
                 this.logger.debug(`[Network] Turn ${turn} started (timeout reset), networkTurnReady=true`);
@@ -807,7 +807,7 @@ class BattleHandler {
                     if (mode === 'full_auto' && (Date.now() - lastActionTime > faInactivityThreshold)) {
                         this.logger.warn('[Full Auto] Inactive. Refreshing page');
                         lastActionTime = Date.now();
-                        faInactivityThreshold = 10000; // Reset threshold after recovery refresh
+                        faInactivityThreshold = 7000; // Reset threshold after recovery refresh
                         await this.controller.reloadPage();
                         await sleep(this.fastRefresh ? 300 : 500);
                         lastFACheckTime = Date.now(); // Reset FA check timer after reload
@@ -906,19 +906,19 @@ class BattleHandler {
 
         // 3. Still in battle? Quick pre-check before re-engaging FA to prevent reload loops
         this.logger.debug('[Battle] Checking for battle UI to re-engage FA');
-        
+
         const foundState = await this.controller.page.waitForFunction(() => {
             const ui = document.querySelector('.btn-attack-start, .btn-auto, .btn-usual-cancel');
             if (ui && ui.offsetWidth > 0) return 'battle';
-            
+
             const cheer = document.querySelector('.pop-cheer.pop-show, .btn-cheer, .btn-salute');
             if (cheer && cheer.offsetWidth > 0) return 'wiped';
-            
+
             const ended = document.querySelector('.prt-result, #js-result, .pop-result-assist-raid.pop-show, .pop-usual.pop-show');
             if (ended && ended.offsetWidth > 0) return 'ended';
-            
+
             if (window.location.hash.includes('#result') || window.location.hash.includes('#quest/index')) return 'ended';
-            
+
             return null;
         }, { timeout: 6000 }).then(res => res.jsonValue()).catch(() => null);
 
@@ -926,7 +926,7 @@ class BattleHandler {
             this.logger.info('[Battle] Party wiped');
             return true;
         }
-        
+
         if (foundState === 'ended') {
             // Found a terminal state, don't wait further
             return true;
