@@ -2,7 +2,7 @@
 
 ## Current Milestone (v3.0): Logging & UI Standardization
 
-### Phase 1: GUI Logging Standardization
+### Phase 3: GUI Logging Standardization
 *Goal: Add success log levels and ensure profile styling is uniform.*
 - **Requirements:** LOG-01, LOG-02
 - **Success Criteria:**
@@ -10,7 +10,7 @@
   2. `main.js` and `renderer.js` use `[System]` instead of `[Gui]` or `[Status]`.
   3. Log output visually aligns with the color specification.
 
-### Phase 2: Core Layer Logging Audit
+### Phase 4: Core Layer Logging Audit
 *Goal: Enforce text styling and remove ambiguous tags from the core backend wrappers.*
 - **Requirements:** LOG-03, LOG-04
 - **Success Criteria:**
@@ -18,7 +18,7 @@
   2. All core handlers use sentence case with no trailing punctuation.
   3. `login-handler.js` properly ends async ongoing events with `...`
 
-### Phase 3: Bot Layer Logging Audit
+### Phase 5: Bot Layer Logging Audit
 *Goal: Standardize high-volume tactical strings.*
 - **Requirements:** LOG-05, LOG-06
 - **Success Criteria:**
