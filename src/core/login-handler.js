@@ -14,7 +14,7 @@ class LoginHandler {
      */
     async performLogin(credentials) {
         try {
-            this.logger.info('[Login] Starting automated flow...');
+            this.logger.info('[Login] Starting automated flow');
 
             // Step 1: Click main login button
             await this.clickLoginButton();
@@ -28,7 +28,7 @@ class LoginHandler {
             // Step 4: Return to GBF page
             await this.returnToGBF();
 
-            this.logger.info('[Login] ✓ Automated login completed successfully!');
+            this.logger.info('[Login] Login complete');
             return true;
         } catch (error) {
             this.logger.error('[Error] [Login] Automation failed:', error.message);
@@ -61,7 +61,7 @@ class LoginHandler {
             // Wait for redirect to #authentication
             await sleep(2000);
         } catch (error) {
-            this.logger.info(`[Status] [Login] Login button not found. Proceeding assuming we are on auth page.`);
+            this.logger.info(`[Login] Login button not found. Proceeding to authentication page`);
         }
     }
 
@@ -245,13 +245,13 @@ class LoginHandler {
             if (closeButton) {
                 await sleep(2000);
                 await closeButton.click();
-                this.logger.info('[Login] ✓ Clicked close button');
+                this.logger.info('[Login] Clicked close button');
                 await sleep(3000);
             }
 
-            this.logger.info('[Login] ✓ Returned to GBF page');
+            this.logger.info('[Login] Returned to GBF page');
         } catch (error) {
-            this.logger.warn('[Status] [Login] Close button not found - login may have completed already');
+            this.logger.warn('[Login] Close button not found - login may have completed already');
         }
     }
 }

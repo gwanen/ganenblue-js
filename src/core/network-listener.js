@@ -15,10 +15,10 @@ class NetworkListener extends EventEmitter {
         this.on('newListener', (eventName) => {
             const count = this.listenerCount(eventName);
             if (count > 20) {
-                this.logger.warn(`[Memory] High listener count for '${eventName}': ${count}`);
+                this.logger.warn(`[System] High listener count for '${eventName}': ${count}`);
             }
             if (this.listenerCount('battle:result') > 50) {
-                this.logger.warn('[Memory] Potential listener leak detected on battle:result');
+                this.logger.warn('[System] Potential listener leak detected on battle:result');
             }
         });
 

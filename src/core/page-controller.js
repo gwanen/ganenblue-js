@@ -38,7 +38,7 @@ class PageController {
         };
 
         this.page.on('request', this.requestHandler);
-        this.logger.info('[Performance] Resource blocking enabled (Images/Media)');
+        this.logger.info('[Browser] Resource blocking enabled (Images/Media)');
     }
 
     async disableBackgroundThrottling() {
@@ -52,9 +52,9 @@ class PageController {
             // Memory Optimization: Cleanly close the CDP session
             await client.detach();
 
-            this.logger.debug('[Performance] Background throttling disabled via CDP');
+            this.logger.debug('[Core] Background throttling disabled via CDP');
         } catch (error) {
-            this.logger.debug('[Performance] CDP Throttling override failed (expected if page closed)', error);
+            this.logger.debug('[Core] CDP Throttling override failed');
         }
     }
 
@@ -70,7 +70,7 @@ class PageController {
             // Only attempt to disable if the page is still open
             if (!this.page.isClosed()) {
                 await this.page.setRequestInterception(false);
-                this.logger.info('[Performance] Resource blocking disabled');
+                this.logger.info('[Browser] Resource blocking disabled');
             }
         } catch (e) {
             // Ignore if context lost or already disabled
@@ -128,7 +128,7 @@ class PageController {
             } catch (error) {
                 if (this.isNetworkError(error) && i < maxRetries - 1) {
                     const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-                    this.logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    this.logger.warn(`[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
                     await sleep(waitTime);
                     continue;
                 }
@@ -240,7 +240,7 @@ class PageController {
                 return true;
             } catch (error) {
                 if (!silent) {
-                    this.logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                    this.logger.warn(`[Core] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
                 }
                 if (attempt === maxRetries) {
                     throw error;

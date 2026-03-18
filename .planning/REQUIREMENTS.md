@@ -18,8 +18,8 @@
 - [x] **LOG-02**: Pass `'success'` log level explicitly from GUI frontend loggers.
 
 ### Core Backend 
-- [ ] **LOG-03**: Consolidate `[Status]`, `[Gui]`, `[Performance]`, etc. tags into single-word domain concepts (`[Browser]`, `[System]`, `[Core]`).
-- [ ] **LOG-04**: Standardize Core log messages (Sentence case, no periods, concise descriptions) across `browser.js`, `login-handler.js`, `network-listener.js`, `page-controller.js`.
+- [x] **LOG-03**: Consolidate `[Status]`, `[Gui]`, `[Performance]`, etc. tags into single-word domain concepts (`[Browser]`, `[System]`, `[Core]`).
+- [x] **LOG-04**: Remove redundant punctuation (trailing periods, emojis) and enforce sentence case., no periods, concise descriptions) across `browser.js`, `login-handler.js`, `network-listener.js`, `page-controller.js`.
 
 ### Bot Logic
 - [ ] **LOG-05**: Standardize Bot log messages (Sentence case, no periods, concise descriptions) across `battle-handler.js`, `quest-bot.js`, `raid-bot.js`, `skip-bot.js`.
