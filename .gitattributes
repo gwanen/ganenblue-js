@@ -1,0 +1,32 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Source files
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
+*.ini text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.asar binary
+
+# Generated directories - exclude from language stats
+node_modules/** linguist-generated=true
+.pnpm-store/** linguist-generated=true
+data/** linguist-generated=true
+logs/** linguist-generated=true
+local/** linguist-generated=true
+coverage/** linguist-generated=true
+
+# Electron
+*.asar linguist-generated=true
+*.asar.unpacked linguist-generated=true
