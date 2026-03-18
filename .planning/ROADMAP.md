@@ -22,7 +22,7 @@
   1. User sees clear, unambiguous notification messages
   2. Notification sound plays once per event (no duplicates)
   3. Notification rendering does not cause UI lag or stutter
-**Status:** Pending
+**Status:** Complete
 
 ---
 
@@ -96,7 +96,7 @@
 | Phase | Plans Complete | Status | Completed |
 +|-------|----------------|--------|-----------|
 +| 12. Discord Cleanup | 1/1 | Complete | 2026-03-19 |
-+| 13. System Notifications | 0/0 | Not started | - |
++| 13. System Notifications | 2/2 | Complete | 2026-03-19 |
 +| 14. Captcha Auto-Pause Flow | 0/0 | Not started | - |
 +| 11. Layout Polish | 1/1 | Complete | 2026-03-18 |
 +| 10. Accessibility | 1/1 | Complete | 2026-03-18 |

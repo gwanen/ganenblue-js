@@ -828,7 +828,7 @@ class RaidBot {
             if (headerText.includes('Access Verification')) {
                 this.logger.error('[Safety] Captcha detected. Human intervention required');
                 notifier.notifyCaptcha(this.profileId || 'p1').catch(e => this.logger.debug('[Notifier] Failed to notify captcha', e));
-                this.stop();
+                this.pause();
                 return true;
             }
         }

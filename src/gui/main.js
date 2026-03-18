@@ -393,6 +393,16 @@ ipcMain.handle('bot:stop', async (event, profileId) => {
     return { success: true };
 });
 
+ipcMain.handle('bot:resume', async (event, profileId) => {
+    const instance = getInstance(profileId);
+    if (instance.bot && instance.bot.isPaused) {
+        instance.bot.resume();
+        logger.info(`[System] [${profileId}] Bot resumed`);
+        return { success: true };
+    }
+    return { success: false, message: 'Bot is not paused' };
+});
+
 ipcMain.handle('bot:get-status', (event, profileId) => {
     const instance = getInstance(profileId);
     if (!instance.bot) return { status: 'Stopped' };

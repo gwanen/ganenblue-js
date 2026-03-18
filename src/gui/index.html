@@ -137,6 +137,23 @@
             animation: pulse-glow 2s infinite;
         }
 
+        .status-Paused {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+            animation: pulse-glow-paused 2s infinite;
+        }
+
+        @keyframes pulse-glow-paused {
+            0%, 100% {
+                box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+            }
+            50% {
+                box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+            }
+        }
+
         @keyframes pulse-glow {
 
             0%,
@@ -306,6 +323,23 @@
 
         .btn-stop:hover:not(:disabled) {
             box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
+        }
+
+        .btn-stop.btn-resume {
+            background: linear-gradient(135deg, #b45309, #92400e) !important;
+            color: #fef3c7;
+            box-shadow: 0 4px 12px rgba(180, 83, 9, 0.3);
+        }
+
+        .btn-stop.btn-resume:hover:not(:disabled) {
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+        }
+
+        .btn-stop.btn-resume::before {
+            content: '▶';
+            background: transparent;
+            font-size: 16px;
+            transform: translate(-45%, -50%);
         }
 
         /* Fix Stop Icon Centering (Square emoji often has built-in offset) */

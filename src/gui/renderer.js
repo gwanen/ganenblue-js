@@ -272,12 +272,20 @@ function setupProfileListeners(pid) {
         }
     });
 
-    // Stop Bot
+    // Stop / Resume Bot
     els.btnStop.addEventListener('click', async () => {
-        await window.electronAPI.stopBot(pid);
-        profileState[pid].isRunning = false;
-        updateProfileUI(pid);
-        log(pid, 'Bot stopped', 'warn');
+        if (profileState[pid].isPaused) {
+            await window.electronAPI.resumeBot(pid);
+            profileState[pid].isPaused = false;
+            updateProfileUI(pid);
+            log(pid, 'Bot resumed', 'info');
+        } else {
+            await window.electronAPI.stopBot(pid);
+            profileState[pid].isRunning = false;
+            profileState[pid].isPaused = false;
+            updateProfileUI(pid);
+            log(pid, 'Bot stopped', 'warn');
+        }
     });
 
 
@@ -326,14 +334,23 @@ function updateProfileUI(pid) {
     const els = dom[pid];
 
     // Status Badge
-    els.statusBadge.textContent = '';
-    els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
+    els.statusBadge.textContent = s.isPaused ? 'CAPTCHA' : (s.isRunning ? 'Running' : 'Stopped');
+    els.statusBadge.className = `status-badge status-${s.isPaused ? 'Paused' : (s.isRunning ? 'Running' : 'Stopped')}`;
 
     // Buttons
     els.btnLaunch.textContent = s.isBrowserOpen ? '❌' : '🌐';
     els.btnLaunch.title = s.isBrowserOpen ? 'Close Browser' : 'Open Browser';
     els.btnStart.disabled = s.isRunning || !s.isBrowserOpen;
     els.btnStop.disabled = !s.isRunning;
+    
+    // Toggle Stop/Resume icon
+    if (s.isPaused) {
+        els.btnStop.classList.add('btn-resume');
+        els.btnStop.title = 'Resume Bot';
+    } else {
+        els.btnStop.classList.remove('btn-resume');
+        els.btnStop.title = 'Stop Bot';
+    }
 
     // Form Visibility
     updateFormVisibility(pid);
@@ -545,6 +562,13 @@ if (window.electronAPI) {
         if (profileState[pid]) {
             if (data.status === 'Stopped' || data.status === 'Error') {
                 profileState[pid].isRunning = false;
+                profileState[pid].isPaused = false;
+            } else if (data.status === 'Paused') {
+                profileState[pid].isRunning = true;
+                profileState[pid].isPaused = true;
+            } else if (data.status === 'Running') {
+                profileState[pid].isRunning = true;
+                profileState[pid].isPaused = false;
             }
 
             // Update stats if provided

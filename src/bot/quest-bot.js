@@ -548,7 +548,7 @@ class QuestBot {
             if (headerText.includes('Access Verification')) {
                 this.logger.error('[Safety] CAPTCHA detected. Human intervention required');
                 notifier.notifyCaptcha(this.profileId || 'p1').catch(() => { });
-                this.stop();
+                this.pause();
                 return true;
             }
         }

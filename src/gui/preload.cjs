@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeBrowser: (profileId) => ipcRenderer.invoke('browser:close', profileId),
     startBot: (profileId, settings) => ipcRenderer.invoke('bot:start', profileId, settings),
     stopBot: (profileId) => ipcRenderer.invoke('bot:stop', profileId),
+    resumeBot: (profileId) => ipcRenderer.invoke('bot:resume', profileId),
     getStatus: (profileId) => ipcRenderer.invoke('bot:get-status', profileId),
     resetStats: (profileId) => ipcRenderer.invoke('bot:reset-stats', profileId),
     restartApp: () => ipcRenderer.invoke('app:restart'),
