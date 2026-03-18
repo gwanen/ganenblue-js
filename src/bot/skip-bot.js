@@ -170,7 +170,6 @@ class SkipBot {
         this.isRunning = false;
         this.controller.stop().catch(() => { });
         this.logger.info('[System] Shutdown initiated');
-        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(() => { });
     }
 
     getStats() {

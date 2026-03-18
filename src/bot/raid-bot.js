@@ -859,7 +859,6 @@ class RaidBot {
 
         this.controller.stop().catch(e => this.logger.warn('[Performance] Failed to stop controller', e));
         this.logger.info('[System] Shutdown requested');
-        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(e => this.logger.debug('[Notifier] Failed to notify completion', e));
     }
 
     updateDetailStats(result) {

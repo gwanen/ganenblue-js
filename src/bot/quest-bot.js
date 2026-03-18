@@ -576,7 +576,6 @@ class QuestBot {
         }
         this.controller.stop().catch(() => { });
         this.logger.info('[System] Shutdown initiated');
-        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(() => { });
     }
 
     updateDetailStats(result) {
