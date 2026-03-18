@@ -181,7 +181,7 @@ class QuestBot {
             await sleep(randomDelay(100, 200));
             const battleStarted = await this.startReplicardBattle();
             if (!battleStarted) {
-                this.logger.warn(`[Quest] Failed to initiate replicard battle. Retrying (${attempts}/${maxAttempts})`);
+                this.logger.warn('[Quest] Failed to initiate replicard battle');
                 return false;
             }
         } else {
@@ -201,7 +201,7 @@ class QuestBot {
             }
 
             if (summonStatus !== 'success') {
-                this.logger.warn(`[Quest] Summon selection failed (${summonStatus}). Retrying (${attempts}/${maxAttempts})`);
+                this.logger.warn(`[Quest] Summon selection failed (${summonStatus})`);
                 return false;
             }
         }

@@ -92,3 +92,5 @@ debug-*.log
 *.AppImage
 *.deb
 *.rpm
+
+scripts/

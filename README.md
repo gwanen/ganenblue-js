@@ -42,6 +42,10 @@ ganenblue-js/
 ├── logs/                 # Application logs
 ├── tests/                # Test files
 ├── .planning/            # Project planning (gitignored)
+│   ├── LOG-STANDARDIZATION-WORKFLOW.md
+│   └── LOG-QUICK-REFERENCE.md
+├── scripts/              # Utility scripts
+│   └── audit-logs.js
 ├── .editorconfig         # Code style
 ├── .gitattributes        # Git metadata
 ├── .gitignore
@@ -63,6 +67,24 @@ ganenblue-js/
 - **Advanced Stealth**: Human-like mouse movement, Gaussian randomized clicks, jitter delays
 - **SPA Navigation**: Smart handling of GBF's hash-based SPA router
 - **Electron GUI**: Desktop interface with IPC bridge for controlling bot execution
+- **Standardized Logging**: Consistent log tags and colors across all bot modes
+
+## Development
+
+### Log Standardization
+
+All log messages follow a standardized tag taxonomy for consistent GUI display.
+
+**Quick Reference:** See `.planning/LOG-QUICK-REFERENCE.md`
+
+**Full Workflow:** See `.planning/LOG-STANDARDIZATION-WORKFLOW.md`
+
+**Audit Logs:** Run `npm run audit:logs` to check for non-compliant log messages.
+
+```bash
+# Check log standardization
+npm run audit:logs
+```
 
 ## Configuration
 

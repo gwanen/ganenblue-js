@@ -176,7 +176,7 @@ class RaidBot {
         const joined = await this.findAndJoinRaid();
 
         if (!joined) {
-            this.logger.warn(`[Raid] Failed to join raid. Retrying (${attempts}/${maxAttempts})`);
+            this.logger.warn('[Raid] Failed to join raid');
             return;
         }
 
