@@ -1,34 +1,39 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.2
-milestone_name: UI Modernization
-current_phase: 11
-status: unknown
-last_updated: "2026-03-18T16:39:58.049Z"
+milestone: v3.3
+milestone_name: Notifications
+current_phase: 13
+status: roadmap-created
+last_updated: "2026-03-19T00:00:00.000Z"
 progress:
-  total_phases: 7
+  total_phases: 3
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 1
+  completed_plans: 1
 ---
 
 # Project State: Ganenblue-JS
 
-**Last Updated:** 2026-03-18
-**Current Milestone:** v3.2: UI Modernization
-**Current Phase:** 11
+**Last Updated:** 2026-03-19
+**Current Milestone:** v3.3: Notifications
+**Current Phase:** 13 (Phase 12 complete)
 
-## 🎯 Current Status
+## Current Status
 
-We are currently polishing the Electron GUI layout. Phases 9 and 10 (Dark Theme, Component Standardization, Accessibility) are complete. Phase 11 targets specific layout artifacts and spacing normalization.
+Roadmap created for v3.3: Notifications milestone. Three phases defined:
+- Phase 12: Discord Cleanup (Complete)
+- Phase 13: System Notifications (NOTIF-01, NOTIF-02, NOTIF-03)
+- Phase 14: Captcha Auto-Pause Flow (CAPT-01, CAPT-02, CAPT-03)
 
-## 📍 Active Position
+All 8 v3.3 requirements mapped with 100% coverage.
 
-- **Phase:** 11: Layout Polish & Spacing Standardization
-- **Wave:** 1
-- **Focus:** Fixing the profile name input gap and standardizing button sizes in the controls panel.
+## Active Position
 
-## 🏗️ Architecture & Decisions
+- **Phase:** 13: System Notifications
+- **Wave:** Not started
+- **Focus:** Improve system notification clarity, fix sound issues, and optimize performance
+
+## Architecture & Decisions
 
 ### UI Layout
 - [x] **Dark Template**: Glassmorphism with `Inter` typography and 16px blur backdrop filter.
@@ -36,10 +41,16 @@ We are currently polishing the Electron GUI layout. Phases 9 and 10 (Dark Theme,
 - [!] **Decision (Phase 11.01)**: Replacing fixed pixel widths (120px) on profile inputs with `flex: 1` + `min-width: 0` to enable responsive filling.
 - [!] **Decision (Phase 11.02)**: Standardizing action button dimensions with a `--btn-sq: 30px` token to avoid `!important` sizing wars.
 
-## 📒 History & Context
+### Notifications (v3.3)
+- [!] **Phase 12**: Discord notifications limited to captcha detection only
+- [!] **Phase 13**: System notification copy, sound, and performance improvements
+- [!] **Phase 14**: Captcha auto-pause with Discord webhook and resume capability
 
-- **v3.1**: Completed repository hygiene (barrel exports, README, .editorconfig).
-- **v3.0**: Completed logging standardization.
+## History & Context
+
+- **v3.2**: Completed UI Modernization (Phases 8-11)
+- **v3.1**: Completed Repository Hygiene (Phases 6-7)
+- **v3.0**: Completed Logging Standardization (Phase 5)
 
 ---
 *Roadmap check: /gsd-progress*

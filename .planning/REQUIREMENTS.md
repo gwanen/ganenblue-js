@@ -1,10 +1,32 @@
-# Requirements
+# Requirements: Ganenblue-JS
 
-## Milestone v3.2 Requirements: UI Modernization
+**Defined:** 2026-03-19
+**Core Value:** Browser automation for Granblue Fantasy that handles quest farming, raid backup, and skip nightmare farming without detection
+
+## v3.3 Requirements: Notifications
+
+### Discord Integration
+
+- [ ] **DISC-01**: Remove raid start/end Discord notifications
+- [ ] **DISC-02**: Send Discord alert only on captcha detection
+
+### System Notifications
+
+- [ ] **NOTIF-01**: Audit and rewrite notification copy for clarity
+- [ ] **NOTIF-02**: Fix duplicate notification sound issue
+- [ ] **NOTIF-03**: Optimize notification performance (reduce lag)
+
+### Captcha Flow
+
+- [ ] **CAPT-01**: Trigger Discord webhook on captcha detection
+- [ ] **CAPT-02**: Auto-stop bot via stop function on captcha
+- [ ] **CAPT-03**: Add resume mechanism after captcha cleared
+
+## v3.2 Requirements: UI Modernization (Complete)
 
 ### Design System
-- [ ] **UI-01**: Create UI-SPEC.md with color palette, typography, spacing system
-- [ ] **UI-02**: Define component patterns (buttons, inputs, panels, badges)
+- [x] **UI-01**: Create UI-SPEC.md with color palette, typography, spacing system
+- [x] **UI-02**: Define component patterns (buttons, inputs, panels, badges)
 
 ### Implementation
 - [x] **UI-03**: Refine dark theme with proper contrast ratios (WCAG AA minimum)
@@ -18,25 +40,7 @@
 ### Layout Polish
 - [x] **UI-11**: Standardize profile-column layout — fix blank space after profile name/status badge, normalize button sizes in btn-group, enforce consistent margin/padding tokens across P1 and P2 columns, replace inline `style=` overrides with CSS classes.
 
-## Traceability
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| UI-01 | Phase 8 | Pending |
-| UI-02 | Phase 8 | Pending |
-| UI-03 | Phase 9 | Complete |
-| UI-04 | Phase 9 | Complete |
-| UI-05 | Phase 9 | Complete |
-| UI-06 | Phase 10 | Complete |
-| UI-07 | Phase 10 | Complete |
-| UI-11 | Phase 11 | Complete |
-
-**Coverage:**
-- v3.2 requirements: 8 total
-- Mapped to phases: 8
-- Unmapped: 0 ✓
-
-## Milestone v3.1 Requirements: Repository Hygiene
+## v3.1 Requirements: Repository Hygiene (Complete)
 
 ### Configuration
 - [x] **CONF-01**: Add .editorconfig with code style standards (indentation, charset, line endings)
@@ -50,44 +54,31 @@
 - [x] **DOCS-01**: Update README.md with project structure diagram showing src/, config/, data/ layout
 - [x] **DOCS-02**: Add CONTRIBUTING.md with setup instructions, coding conventions, and PR guidelines
 
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Push notifications (browser/desktop) | Focus on Discord + system tray only |
+| SMS/Email alerts | Out of scope for browser automation |
+| Captcha auto-solve | Requires user intervention, not bot capability |
+
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONF-01 | Phase 6 | Complete |
-| CONF-02 | Phase 6 | Complete |
-| SRC-01 | Phase 7 | Complete |
-| SRC-02 | Phase 7 | Complete |
-| DOCS-01 | Phase 7 | Complete |
-| DOCS-02 | Phase 7 | Complete |
+| DISC-01 | Phase 12 | Pending |
+| DISC-02 | Phase 12 | Pending |
+| NOTIF-01 | Phase 13 | Pending |
+| NOTIF-02 | Phase 13 | Pending |
+| NOTIF-03 | Phase 13 | Pending |
+| CAPT-01 | Phase 14 | Pending |
+| CAPT-02 | Phase 14 | Pending |
+| CAPT-03 | Phase 14 | Pending |
 
 **Coverage:**
-- v3.1 requirements: 6 total
-- Mapped to phases: 6
+- v3.3 requirements: 8 total
+- Mapped to phases: 8
 - Unmapped: 0 ✓
 
-## Implemented (v1)
-- **[REQ-001] Quest Automation**: `quest-bot.js` capable of running replicard, xeno, and standard quests.
-- **[REQ-002] Raid Backup**: `raid-bot.js` handling join limits, support summons, and honor target stopping.
-- **[REQ-003] Skip Nightmare**: `skip-bot.js` for skipping nightmare prompts and claiming loot.
-- **[REQ-004] Stealth Mechanics**: Mouse movement, delays, and plugin configuration.
-- **[REQ-005] Electron GUI**: Profile management and statistical readouts.
-
-## Implemented (v2)
-- **[REQ-006] Auto logic flow creation**: Streamlining Full Auto and Semi Auto mode boundaries.
-- **[REQ-007] Battle delay reduction**: Optimizing button coordinate caching.
-
-## Milestone v3.0 Requirements: Logging & UI
-
-### Styling
-- [x] **LOG-01**: Implement `.log-level-success` green borders and document P1/P2 tag colors in CSS.
-- [x] **LOG-02**: Pass `'success'` log level explicitly from GUI frontend loggers.
-
-### Core Backend 
-- [x] **LOG-03**: Consolidate `[Status]`, `[Gui]`, `[Performance]`, etc. tags into single-word domain concepts (`[Browser]`, `[System]`, `[Core]`).
-- [x] **LOG-04**: Remove redundant punctuation (trailing periods, emojis) and enforce sentence case., no periods, concise descriptions) across `browser.js`, `login-handler.js`, `network-listener.js`, `page-controller.js`.
-
-### Bot Logic
-- [x] **LOG-05**: Audit and standardize `battle-handler.js` logging (Phase 5).
-- [x] **LOG-06**: Domain-specific tag mapping for `quest-bot.js`, `raid-bot.js`, `skip-bot.js` (Phase 5).
-- [x] **LOG-07**: Ensure all retry loops output clear counts (e.g. `Retrying (1/3)...`).
+---
+*Requirements defined: 2026-03-19*
