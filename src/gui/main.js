@@ -267,7 +267,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
     }
 
     try {
-        logger.info(`[Status] [${profileId}] Starting automation in ${settings.botMode} mode...`);
+        logger.info(`[System] [${profileId}] Starting automation in ${settings.botMode} mode...`);
         logger.debug(`[Bot] [${profileId}] Settings: ${JSON.stringify(settings)}`);
 
         const botMode = settings.botMode || 'quest';
@@ -351,7 +351,7 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
             const quests = stats.completedQuests || 0;
             const raids = stats.raidsCompleted || 0;
 
-            logger.info(`[Status] [${profileId}] Finished: Quest/Skip ${quests} | Raid ${raids}`);
+            logger.info(`[System] [${profileId}] Done — Quests: ${quests} | Raids: ${raids}`);
             mainWindow.webContents.send('bot:status', { profileId, status: 'Stopped' });
 
             // Show completion notification
@@ -415,7 +415,7 @@ ipcMain.handle('bot:reset-stats', (event, profileId) => {
         instance.stats.startTime = null; // Reset timer
         instance.stats.lastRate = '0.0/h'; // Reset rate
 
-        logger.info(`[Gui] [${profileId}] Statistics reset`);
+        logger.info(`[System] [${profileId}] Statistics reset`);
         return { success: true };
     }
     return { success: false, message: 'No bot instance running' };
@@ -448,7 +448,7 @@ ipcMain.handle('credentials:save', async (event, profileId, credentials) => {
         };
 
         writeFileSync(credPath, yaml.dump(data), 'utf8');
-        logger.info(`[Gui] [${profileId}] Credentials updated`);
+        logger.info(`[System] [${profileId}] Credentials updated`);
         return { success: true };
     } catch (error) {
         logger.error(`[Error] [Gui] [${profileId}] Credential update failure:`, error.message);

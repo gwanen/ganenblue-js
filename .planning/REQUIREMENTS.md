@@ -14,8 +14,8 @@
 ## Milestone v3.0 Requirements: Logging & UI
 
 ### Styling
-- [ ] **LOG-01**: Implement `.log-level-success` green borders and document P1/P2 tag colors in CSS.
-- [ ] **LOG-02**: Pass `'success'` log level explicitly from GUI frontend loggers.
+- [x] **LOG-01**: Implement `.log-level-success` green borders and document P1/P2 tag colors in CSS.
+- [x] **LOG-02**: Pass `'success'` log level explicitly from GUI frontend loggers.
 
 ### Core Backend 
 - [ ] **LOG-03**: Consolidate `[Status]`, `[Gui]`, `[Performance]`, etc. tags into single-word domain concepts (`[Browser]`, `[System]`, `[Core]`).
