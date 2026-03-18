@@ -48,28 +48,6 @@ class Notifier {
         }
     }
 
-    async notifySessionStart(profileId, mode) {
-        return this.sendDiscordMessage('', [{
-            title: `🚀 Session Started - [${profileId}]`,
-            description: `Bot mode: **${mode.toUpperCase()}**`,
-            color: 0x3b82f6, // Blue
-            timestamp: new Date().toISOString()
-        }]);
-    }
-
-    async notifySessionComplete(profileId, stats) {
-        return this.sendDiscordMessage('', [{
-            title: `✅ Session Complete - [${profileId}]`,
-            fields: [
-                { name: 'Completed', value: (stats.completedQuests || stats.raidsCompleted || 0).toString(), inline: true },
-                { name: 'Avg Battle', value: (stats.avgBattleTime / 1000).toFixed(1) + 's', inline: true },
-                { name: 'Avg Turns', value: (stats.avgTurns || 0).toString(), inline: true }
-            ],
-            color: 0x10b981, // Green
-            timestamp: new Date().toISOString()
-        }]);
-    }
-
     async notifyError(profileId, errorMsg) {
         return this.sendDiscordMessage('', [{
             title: `⚠️ Error Detected - [${profileId}]`,

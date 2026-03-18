@@ -63,6 +63,7 @@ brain/
 
 # AI Assistant configs
 .gemini/
+.claude/
 
 # GSD Planning (private project - not committed)
 .planning/

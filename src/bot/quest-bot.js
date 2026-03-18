@@ -548,7 +548,7 @@ class QuestBot {
             if (headerText.includes('Access Verification')) {
                 this.logger.error('[Safety] CAPTCHA detected. Human intervention required');
                 notifier.notifyCaptcha(this.profileId || 'p1').catch(() => { });
-                this.stop();
+                this.pause();
                 return true;
             }
         }
@@ -576,7 +576,6 @@ class QuestBot {
         }
         this.controller.stop().catch(() => { });
         this.logger.info('[System] Shutdown initiated');
-        notifier.notifySessionComplete(this.profileId || 'p1', this.getStats()).catch(() => { });
     }
 
     updateDetailStats(result) {

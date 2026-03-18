@@ -272,12 +272,20 @@ function setupProfileListeners(pid) {
         }
     });
 
-    // Stop Bot
+    // Stop / Resume Bot
     els.btnStop.addEventListener('click', async () => {
-        await window.electronAPI.stopBot(pid);
-        profileState[pid].isRunning = false;
-        updateProfileUI(pid);
-        log(pid, 'Bot stopped', 'warn');
+        if (profileState[pid].isPaused) {
+            await window.electronAPI.resumeBot(pid);
+            profileState[pid].isPaused = false;
+            updateProfileUI(pid);
+            log(pid, 'Bot resumed', 'info');
+        } else {
+            await window.electronAPI.stopBot(pid);
+            profileState[pid].isRunning = false;
+            profileState[pid].isPaused = false;
+            updateProfileUI(pid);
+            log(pid, 'Bot stopped', 'warn');
+        }
     });
 
 
@@ -326,14 +334,23 @@ function updateProfileUI(pid) {
     const els = dom[pid];
 
     // Status Badge
-    els.statusBadge.textContent = '';
-    els.statusBadge.className = `status-badge status-${s.isRunning ? 'Running' : 'Stopped'}`;
+    els.statusBadge.textContent = s.isPaused ? 'CAPTCHA' : (s.isRunning ? 'Running' : 'Stopped');
+    els.statusBadge.className = `status-badge status-${s.isPaused ? 'Paused' : (s.isRunning ? 'Running' : 'Stopped')}`;
 
     // Buttons
     els.btnLaunch.textContent = s.isBrowserOpen ? '❌' : '🌐';
     els.btnLaunch.title = s.isBrowserOpen ? 'Close Browser' : 'Open Browser';
     els.btnStart.disabled = s.isRunning || !s.isBrowserOpen;
     els.btnStop.disabled = !s.isRunning;
+    
+    // Toggle Stop/Resume icon
+    if (s.isPaused) {
+        els.btnStop.classList.add('btn-resume');
+        els.btnStop.title = 'Resume Bot';
+    } else {
+        els.btnStop.classList.remove('btn-resume');
+        els.btnStop.title = 'Stop Bot';
+    }
 
     // Form Visibility
     updateFormVisibility(pid);
@@ -531,12 +548,27 @@ if (window.electronAPI) {
         log(pid, msg, data.level);
     });
 
+    const _statusUpdatePending = { p1: false, p2: false };
+
+    function _flushStatusUpdate(pid) {
+        _statusUpdatePending[pid] = false;
+        updateStatsDisplay(pid);
+        updateProfileUI(pid);
+    }
+
     window.electronAPI.onStatusUpdate((data) => {
         // data = { profileId, status, stats }
         const pid = data.profileId;
         if (profileState[pid]) {
             if (data.status === 'Stopped' || data.status === 'Error') {
                 profileState[pid].isRunning = false;
+                profileState[pid].isPaused = false;
+            } else if (data.status === 'Paused') {
+                profileState[pid].isRunning = true;
+                profileState[pid].isPaused = true;
+            } else if (data.status === 'Running') {
+                profileState[pid].isRunning = true;
+                profileState[pid].isPaused = false;
             }
 
             // Update stats if provided
@@ -556,10 +588,13 @@ if (window.electronAPI) {
                     const timerEl = document.getElementById(`run-timer-${pid}`);
                     if (timerEl) timerEl.textContent = s.duration;
                 }
-
-                updateStatsDisplay(pid);
             }
-            updateProfileUI(pid);
+
+            // Throttle UI rendering
+            if (!_statusUpdatePending[pid]) {
+                _statusUpdatePending[pid] = true;
+                requestAnimationFrame(() => _flushStatusUpdate(pid));
+            }
         }
     });
 
@@ -569,7 +604,11 @@ if (window.electronAPI) {
     });
 }
 
+let _lastSoundTime = 0;
 function playAlertSound() {
+    if (Date.now() - _lastSoundTime < 2000) return;
+    _lastSoundTime = Date.now();
+
     try {
         // Reuse singleton AudioContext — creating a new one on every call leaks memory
         const ctx = getAudioCtx();
@@ -688,12 +727,32 @@ function setLoading(btn, isLoading, text) {
     }
 }
 
+let _toastQueue = [];
+let _toastFlushPending = false;
+
+function _flushToasts() {
+    _toastFlushPending = false;
+    if (_toastQueue.length === 0) return;
+
+    const batch = _toastQueue.splice(0, _toastQueue.length);
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    for (const { msg, type } of batch) {
+        const t = document.createElement('div');
+        t.className = `toast toast-${type} show`;
+        t.innerHTML = `<span class="toast-message">${msg}</span>`;
+        container.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
+}
+
 function showToast(msg, type = 'info') {
-    const t = document.createElement('div');
-    t.className = `toast toast-${type} show`;
-    t.innerHTML = `<span class="toast-message">${msg}</span>`;
-    document.getElementById('toast-container').appendChild(t);
-    setTimeout(() => t.remove(), 3000);
+    _toastQueue.push({ msg, type });
+    if (!_toastFlushPending) {
+        _toastFlushPending = true;
+        requestAnimationFrame(_flushToasts);
+    }
 }
 
 // Global scope for collapse toggles (onclick in HTML)
