@@ -48,15 +48,6 @@ class Notifier {
         }
     }
 
-    async notifySessionStart(profileId, mode) {
-        return this.sendDiscordMessage('', [{
-            title: `🚀 Session Started - [${profileId}]`,
-            description: `Bot mode: **${mode.toUpperCase()}**`,
-            color: 0x3b82f6, // Blue
-            timestamp: new Date().toISOString()
-        }]);
-    }
-
     async notifySessionComplete(profileId, stats) {
         return this.sendDiscordMessage('', [{
             title: `✅ Session Complete - [${profileId}]`,
