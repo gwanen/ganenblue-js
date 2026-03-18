@@ -356,8 +356,8 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
 
             // Show completion notification
             showNotification(
-                'Farming Complete! 🎉',
-                `[${profileId}] Quest/Skip ${quests} | Raid ${raids}`,
+                'Farming Complete! 🥳',
+                `[${profileId}] Finished: ${quests} Quests | ${raids} Raids`,
                 true
             );
         }).catch(err => {
@@ -366,8 +366,8 @@ ipcMain.handle('bot:start', async (event, profileId, settings) => {
 
             // Show error notification
             showNotification(
-                'Bot Error',
-                `[${profileId}] An error occurred during farming`,
+                'Bot Stopped',
+                `[${profileId}] Stopped: ${err.message || 'Execution error'}`,
                 true
             );
         });
@@ -511,9 +511,10 @@ class GuiTransport extends winston.Transport {
             // High-priority notification for Captcha/Safety issues
             if (info.level === 'error' && (info.message.includes('Captcha') || info.message.includes('[Safety]'))) {
                 const isLogout = info.message.includes('Logged out') || info.message.includes('Session');
+                const pid = info.profileId || 'sys';
                 showNotification(
-                    isLogout ? '🚨 SESSION EXPIRED 🚨' : '⚠️ CAPTCHA DETECTED ⚠️',
-                    isLogout ? 'The bot was logged out or the session expired. Please log in again.' : 'The bot has stopped for safety. Please solve the verification manually.',
+                    isLogout ? '🚨 SESSION EXPIRED 🚨' : '⚠️ ACTION REQUIRED ⚠️',
+                    isLogout ? `[${pid}] Session expired. Please log in again.` : `[${pid}] Captcha Detected - Manual intervention required.`,
                     true
                 );
             }
