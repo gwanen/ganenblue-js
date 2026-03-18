@@ -38,7 +38,7 @@ class PageController {
         };
 
         this.page.on('request', this.requestHandler);
-        this.logger.info('[Performance] Resource blocking enabled (Images/Media)');
+        this.logger.info('[Browser] Resource blocking enabled (Images/Media)');
     }
 
     async disableBackgroundThrottling() {
@@ -52,9 +52,9 @@ class PageController {
             // Memory Optimization: Cleanly close the CDP session
             await client.detach();
 
-            this.logger.debug('[Performance] Background throttling disabled via CDP');
+            this.logger.debug('[Core] Background throttling disabled via CDP');
         } catch (error) {
-            this.logger.debug('[Performance] CDP Throttling override failed (expected if page closed)', error);
+            this.logger.debug('[Core] CDP Throttling override failed');
         }
     }
 
@@ -70,7 +70,7 @@ class PageController {
             // Only attempt to disable if the page is still open
             if (!this.page.isClosed()) {
                 await this.page.setRequestInterception(false);
-                this.logger.info('[Performance] Resource blocking disabled');
+                this.logger.info('[Browser] Resource blocking disabled');
             }
         } catch (e) {
             // Ignore if context lost or already disabled
@@ -128,7 +128,7 @@ class PageController {
             } catch (error) {
                 if (this.isNetworkError(error) && i < maxRetries - 1) {
                     const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-                    this.logger.warn(`[Network] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+                    this.logger.warn(`[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
                     await sleep(waitTime);
                     continue;
                 }
@@ -240,7 +240,7 @@ class PageController {
                 return true;
             } catch (error) {
                 if (!silent) {
-                    this.logger.warn(`[Wait] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
+                    this.logger.warn(`[Core] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
                 }
                 if (attempt === maxRetries) {
                     throw error;
@@ -441,6 +441,9 @@ class PageController {
 
         // Extra short yield so any remaining microtasks on the SPA router settle.
         await sleep(100);
+
+        // Frame stability check: ensure frame is reattached after SPA navigation
+        await this.waitForFrameStable(2000);
     }
 
     /**
@@ -460,6 +463,42 @@ class PageController {
             }
         }
         await this.page.reload({ waitUntil: 'domcontentloaded' });
+
+        // Frame stability check: ensure frame is reattached after reload
+        await this.waitForFrameStable(2000);
+    }
+
+    /**
+     * Check if the main frame is still attached and usable.
+     * Returns true if the frame is healthy, false if detached/stale.
+     */
+    async isFrameAttached() {
+        try {
+            // Quick evaluation to test frame health
+            await this.page.evaluate(() => document.readyState, { timeout: 500 });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Wait for frame to be stable after navigation/reload.
+     * This prevents "detached frame" errors by ensuring the frame is reattached
+     * before any interaction attempts.
+     */
+    async waitForFrameStable(timeout = 3000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeout) {
+            if (await this.isFrameAttached()) {
+                // Frame is attached, give it a brief moment to settle
+                await sleep(150);
+                return true;
+            }
+            await sleep(100);
+        }
+        this.logger.warn('[Core] Frame stability wait timed out');
+        return false;
     }
 
     /**

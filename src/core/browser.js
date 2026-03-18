@@ -208,7 +208,7 @@ class BrowserManager {
                 launchOptions.executablePath = edgePath;
                 this.logger.info(`[System] Using Microsoft Edge: ${edgePath}`);
             } else {
-                this.logger.warn('[Status] Edge not found. Falling back to Chromium...');
+                this.logger.warn('[Browser] Edge not found. Falling back to Chromium');
             }
         }
         // Use Brave if specified
@@ -218,7 +218,7 @@ class BrowserManager {
                 launchOptions.executablePath = bravePath;
                 this.logger.info(`[System] Using Brave Browser: ${bravePath}`);
             } else {
-                this.logger.warn('[Status] Brave not found. Falling back to Chromium...');
+                this.logger.warn('[Browser] Brave not found. Falling back to Chromium');
             }
         }
         // Use Chrome if specified
@@ -228,7 +228,7 @@ class BrowserManager {
                 launchOptions.executablePath = chromePath;
                 this.logger.info(`[System] Using Google Chrome: ${chromePath}`);
             } else {
-                this.logger.warn('[Status] Chrome not found. Falling back to Chromium...');
+                this.logger.warn('[Browser] Chrome not found. Falling back to Chromium');
             }
         }
         // Use Firefox if specified
@@ -239,7 +239,7 @@ class BrowserManager {
                 launchOptions.browser = 'firefox'; // Explicitly tell puppeteer
                 this.logger.info(`[System] Using Mozilla Firefox: ${firefoxPath}`);
             } else {
-                this.logger.warn('[Status] Firefox not found. Falling back to Chromium...');
+                this.logger.warn('[Browser] Firefox not found. Falling back to Chromium');
             }
         }
 
@@ -284,7 +284,7 @@ class BrowserManager {
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            this.logger.warn(`[Status] Auto-login skipped: ${error.message}`);
+            this.logger.warn(`[Browser] Auto-login skipped: ${error.message}`);
         }
     }
 

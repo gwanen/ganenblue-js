@@ -29,10 +29,14 @@ pnpm-debug.log*
 # OS generated files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # Test artifacts
 stealth_test_result.png
@@ -45,8 +49,48 @@ config/credentials.yaml
 # Screenshots
 screenshots/
 
+# Browser profiles (contain session data, cookies)
+data/profiles/
+
 # Local preferences and temp files
 local/
 .agent/
 brain/
 *.md-checkpoint
+
+# Qwen Code
+.qwen/
+
+# AI Assistant configs
+.gemini/
+
+# GSD Planning (private project - not committed)
+.planning/
+
+# Checkpoints and backups
+*.bak
+*.backup
+*.old
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Electron app data
+*.asar
+*.asar.unpacked
+
+# Debug files
+debug.log
+debug-*.log
+*.pdb
+
+# Platform-specific
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+scripts/

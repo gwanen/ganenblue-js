@@ -24,6 +24,12 @@
             --glow-blue: rgba(96, 165, 250, 0.3);
             --glass-blur: blur(16px);
             --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --btn-sq: 30px;
+            --btn-gap: 6px;
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 12px;
+            --space-lg: 16px;
         }
 
         * {
@@ -90,7 +96,7 @@
         }
 
         .status-badge {
-            padding: 6px 12px;
+            padding: 4px 10px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 600;
@@ -154,7 +160,7 @@
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 12px;
+            padding: var(--space-md);
             box-shadow: var(--card-shadow);
             backdrop-filter: var(--glass-blur);
             -webkit-backdrop-filter: var(--glass-blur);
@@ -178,8 +184,8 @@
         }
 
         .form-group {
-            margin-bottom: 12px;
-            padding: 0 8px;
+            margin-bottom: var(--space-md);
+            padding: 0 var(--space-sm);
         }
 
         label {
@@ -236,12 +242,11 @@
             background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0.05));
             border: 1px solid rgba(96, 165, 250, 0.3);
             color: var(--text-primary);
-            padding: 10px;
-            font-size: 11px;
+            font-size: 15px;
             text-transform: uppercase;
             letter-spacing: 1px;
             font-weight: 700;
-            border-radius: 8px;
+            border-radius: 6px;
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
@@ -255,9 +260,9 @@
 
         .btn-group {
             display: flex;
-            gap: 4px;
+            gap: var(--btn-gap);
             margin-top: 6px;
-            align-items: stretch;
+            align-items: center;
         }
 
         /* All buttons in btn-group inherit uniform size */
@@ -265,22 +270,22 @@
         .btn-group .btn-start,
         .btn-group .btn-stop,
         .btn-group .btn-launch {
-            width: 32px !important;
-            height: 32px !important;
-            min-height: 32px !important;
-            max-height: 32px !important;
-            padding: 0 !important;
-            display: inline-flex !important;
+            width: var(--btn-sq);
+            height: var(--btn-sq);
+            min-height: var(--btn-sq);
+            max-height: var(--btn-sq);
+            padding: 0;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px !important;
-            border-radius: 4px !important;
-            margin: 0 !important;
+            font-size: 15px;
+            border-radius: 6px;
+            margin: 0;
             flex-shrink: 0;
             cursor: pointer;
             position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            transition: all 0.2s ease !important;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.2s ease;
         }
 
         .btn-start {
@@ -388,13 +393,11 @@
         }
 
         /* Rose */
-        .log-tag-status {
-            color: #34d399;
-        }
+        /* P1 Profile uses inline var(--accent-blue) */
+        /* P2 Profile uses inline var(--accent-red) */
 
-        /* Emerald */
-        .log-tag-gui {
-            color: #3b82f6;
+        .log-tag-browser {
+            color: var(--accent-blue);
         }
 
         /* Blue */
@@ -409,6 +412,11 @@
 
         /* Red */
         .log-tag-fa {
+            color: #818cf8;
+        }
+
+        /* Indigo */
+        .log-tag-sa {
             color: #818cf8;
         }
 
@@ -455,12 +463,17 @@
 
         .log-level-info,
         .log-level-warn,
-        .log-level-error {
+        .log-level-error,
+        .log-level-success {
             font-weight: 400 !important;
         }
 
         .log-level-info {
             border-left-color: var(--accent-blue) !important;
+        }
+
+        .log-level-success {
+            border-left-color: var(--accent-green) !important;
         }
 
         .log-level-warn {
@@ -473,7 +486,7 @@
 
         .button-section {
             margin-bottom: 12px;
-            padding: 10px;
+            padding: var(--space-sm) var(--space-md);
             background: var(--bg-glass);
             border-radius: 8px;
             border: 1px solid var(--border);
@@ -894,21 +907,6 @@
 
         .tab-button:hover {
             background: rgba(255, 255, 255, 0.05);
-            color: var(--text-primary);
-        }
-
-        /* Compact Layout Adjustments */
-        .panel {
-            padding: 4px;
-        }
-
-        .form-group {
-            margin-bottom: 4px;
-        }
-
-        input,
-        select {
-            padding: 2px 4px;
             font-size: 11px;
             height: 24px;
         }
@@ -941,7 +939,8 @@
             font-size: 13px;
             font-weight: 600;
             padding: 2px 4px;
-            width: 120px;
+            flex: 1;
+            min-width: 0;
             border-radius: 4px;
             transition: all 0.2s;
         }
@@ -958,35 +957,7 @@
             gap: 6px;
         }
 
-        .btn-launch {
-            padding: 0;
-            font-size: 14px;
-            height: 26px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
 
-        .btn-group {
-            margin-top: 4px;
-            align-items: stretch;
-        }
-
-        /* Compact mode: uniform smaller buttons */
-        .btn-group .btn-square,
-        .btn-group .btn-start,
-        .btn-group .btn-stop,
-        .btn-group .btn-launch {
-            width: 28px !important;
-            height: 28px !important;
-            min-height: 28px !important;
-            max-height: 28px !important;
-            font-size: 14px !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0 !important;
-        }
 
         /* Collapsible Compact */
         .collapsible-header {
@@ -1034,15 +1005,15 @@
         .profile-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 6px 4px;
+            gap: 8px;
+            padding: 6px 8px;
             margin-bottom: 8px;
         }
 
         .stats-summary {
             background: rgba(0, 0, 0, 0.15);
-            padding: 10px 12px;
-            margin: 8px 4px;
+            padding: var(--space-sm) var(--space-md);
+            margin: var(--space-sm) 0;
             border-radius: 6px;
             font-size: 11px;
         }
@@ -1088,7 +1059,42 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: var(--space-sm);
+        }
+
+        .activity-logs-title {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .log-tabs-container {
+            display: flex;
+            gap: var(--space-xs);
+            margin-bottom: var(--space-sm);
+        }
+
+        .log-tab {
+            flex: 1;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+        }
+
+        .log-tab-active {
+            border-color: rgba(96, 165, 250, 0.4);
+            background: rgba(96, 165, 250, 0.15);
+            color: var(--accent-blue);
         }
 
         .btn-header {
@@ -1187,6 +1193,28 @@
         .checkbox-container:hover {
             color: var(--text-primary);
         }
+ 
+        /* Layout utility classes */
+        .mt-xs { margin-top: var(--space-xs); }
+        .mt-sm { margin-top: var(--space-sm); }
+ 
+        .row-between {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: var(--space-xs) 0;
+        }
+ 
+        .row-between label {
+            margin: 0;
+            cursor: pointer;
+        }
+ 
+        .row-between input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            flex-shrink: 0;
+        }
 
         .btn-grow {
             flex: none !important;
@@ -1258,7 +1286,6 @@
                         </div>
                     </div>
 
-                    <hr>
 
                     <h3>Farming Setup</h3>
 
@@ -1322,24 +1349,24 @@
                         <span class="collapsible-chevron" id="options-p1-chevron">▼</span>
                     </div>
                     <div class="collapsible-content" id="options-p1-content">
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="block-resources-p1">
                             <span>Block Images</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="fast-refresh-p1">
                             <span>Fast Refresh</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="refresh-on-start-p1" checked>
                             <span>Refresh on Battle Start</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="summon-refresh-p1" checked>
                             <span>Refresh on Summon</span>
                         </label>
                     </div>
-                    <hr>
+
                     <!-- Stats Summary (Mini) -->
                     <div class="stats-summary">
                         <div class="stat-row">
@@ -1386,9 +1413,9 @@
                                 <option value="brave">Brave</option>
                             </select>
                         </div>
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
-                            <label for="disable-sandbox-p1" style="margin:0; cursor:pointer;">No Sandbox</label>
-                            <input type="checkbox" id="disable-sandbox-p1" style="width:auto; margin:0;">
+                        <div class="row-between">
+                            <label for="disable-sandbox-p1">No Sandbox</label>
+                            <input type="checkbox" id="disable-sandbox-p1">
                         </div>
                     </div>
                     <hr>
@@ -1406,7 +1433,7 @@
                             <label for="mobage-password-p1">Password</label>
                             <input type="password" id="mobage-password-p1" placeholder="Password">
                         </div>
-                        <div class="form-group" style="padding: 0 8px;">
+                        <div class="form-group">
                             <button id="btn-save-credentials-p1" class="btn-primary-small"
                                 style="width: 100%;">Save</button>
                         </div>
@@ -1432,7 +1459,7 @@
                         </div>
                     </div>
 
-                    <hr>
+
                     <h3>Farming Setup</h3>
 
                     <div class="form-group">
@@ -1496,24 +1523,24 @@
                         <span class="collapsible-chevron" id="options-p2-chevron">▼</span>
                     </div>
                     <div class="collapsible-content" id="options-p2-content">
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="block-resources-p2">
                             <span>Block Images</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="fast-refresh-p2">
                             <span>Fast Refresh</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="refresh-on-start-p2" checked>
                             <span>Refresh on Battle Start</span>
                         </label>
-                        <label class="checkbox-container" style="margin-top: 4px;">
+                        <label class="checkbox-container mt-xs">
                             <input type="checkbox" id="summon-refresh-p2" checked>
                             <span>Refresh on Summon</span>
                         </label>
                     </div>
-                    <hr>
+
                     <!-- Stats Summary (Mini) -->
                     <div class="stats-summary">
                         <div class="stat-row">
@@ -1560,9 +1587,9 @@
                                 <option value="brave">Brave</option>
                             </select>
                         </div>
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0;">
-                            <label for="disable-sandbox-p2" style="margin:0; cursor:pointer;">No Sandbox</label>
-                            <input type="checkbox" id="disable-sandbox-p2" style="width:auto; margin:0;">
+                        <div class="row-between">
+                            <label for="disable-sandbox-p2">No Sandbox</label>
+                            <input type="checkbox" id="disable-sandbox-p2">
                         </div>
                     </div>
                     <hr>
@@ -1580,7 +1607,7 @@
                             <label for="mobage-password-p2">Password</label>
                             <input type="password" id="mobage-password-p2" placeholder="Password">
                         </div>
-                        <div class="form-group" style="padding: 0 8px;">
+                        <div class="form-group">
                             <button id="btn-save-credentials-p2" class="btn-primary-small"
                                 style="width: 100%;">Save</button>
                         </div>
@@ -1592,24 +1619,18 @@
         <!-- Shared Logs Section (Collapsible/Modal) -->
         <div id="logs-panel" class="panel logs-panel hidden">
             <div id="logs-resize-handle" class="logs-resize-handle"></div>
-            <div class="panel-header"
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h3 style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Activity Logs</h3>
+            <div class="panel-header">
+                <h3 class="activity-logs-title">Activity Logs</h3>
                 <div class="log-controls">
                     <button id="btn-clear-logs" class="btn-header" title="Clear Logs">🗑️</button>
                     <button id="btn-close-logs" class="btn-header">Close</button>
                 </div>
             </div>
             <!-- Profile Log Tabs -->
-            <div id="log-tabs" style="display: flex; gap: 4px; margin-bottom: 8px;">
-                <button id="log-tab-p1" class="log-tab log-tab-active" onclick="switchLogTab('p1')"
-                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(96,165,250,0.4); background:rgba(96,165,250,0.15); color:#60a5fa; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">Profile
-                    1</button>
-                <button id="log-tab-p2" class="log-tab" onclick="switchLogTab('p2')"
-                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:#64748b; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">Profile
-                    2</button>
-                <button id="log-tab-all" class="log-tab" onclick="switchLogTab('all')"
-                    style="flex:1; padding:5px 8px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid rgba(255,255,255,0.05); background:transparent; color:#64748b; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s;">All</button>
+            <div id="log-tabs" class="log-tabs-container">
+                <button id="log-tab-p1" class="log-tab log-tab-active" onclick="switchLogTab('p1')">Profile 1</button>
+                <button id="log-tab-p2" class="log-tab" onclick="switchLogTab('p2')">Profile 2</button>
+                <button id="log-tab-all" class="log-tab" onclick="switchLogTab('all')">All</button>
             </div>
             <!-- Per-profile log containers -->
             <div id="log-container-p1" class="log-container-tab">

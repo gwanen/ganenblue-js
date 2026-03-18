@@ -42,7 +42,7 @@ class SkipBot {
                 }
 
                 if (this.maxRuns > 0 && this.runsCompleted >= this.maxRuns) {
-                    this.logger.info(`[Status] Skip limit reached (${this.runsCompleted}/${this.maxRuns})`);
+                    this.logger.info(`[Skip] Limit reached (${this.runsCompleted}/${this.maxRuns})`);
                     break;
                 }
 
@@ -158,12 +158,12 @@ class SkipBot {
 
     pause() {
         this.isPaused = true;
-        this.logger.info('[Status] Bot paused');
+        this.logger.info('[Skip] Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        this.logger.info('[Status] Bot resumed');
+        this.logger.info('[Skip] Bot resumed');
     }
 
     stop() {

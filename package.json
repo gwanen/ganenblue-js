@@ -11,7 +11,8 @@
     "cli": "node src/cli/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dist": "electron-builder",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "audit:logs": "node scripts/audit-logs.js"
   },
   "build": {
     "appId": "com.ganenblue.js",
