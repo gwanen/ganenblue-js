@@ -15,6 +15,25 @@ class BattleHandler {
         this.fastRefresh = options.fastRefresh || false;
         this.summonRefresh = options.summonRefresh !== undefined ? options.summonRefresh : true;
         this.logger = options.logger || logger;
+        this.cachedCoords = new Map();
+    }
+
+    async fastCacheClick(selector) {
+        let box = this.cachedCoords.get(selector);
+        if (!box) {
+            const el = await this.controller.page.$(selector);
+            if (el) {
+                box = await el.boundingBox();
+                if (box) this.cachedCoords.set(selector, box);
+            }
+        }
+        if (box) {
+            const x = box.x + box.width / 2 + (Math.random() * 4 - 2);
+            const y = box.y + box.height / 2 + (Math.random() * 4 - 2);
+            await this.controller.page.mouse.click(x, y);
+        } else {
+            await this.controller.page.click(selector);
+        }
     }
 
     formatTime(milliseconds) {
@@ -52,6 +71,7 @@ class BattleHandler {
         this.lastAttackTurn = 0;
         this.lastReloadTurn = 0;
         this.lastHonors = 0; // Reset per-raid so previousHonors starts at 0 for each new raid
+        this.cachedCoords.clear(); // Flush cache on new battle engagement
         this.logger.info(`[Battle] Engaging (${mode})`);
 
         // Create ref objects for lastActionTime and threshold so handleFullAuto can update them
@@ -62,7 +82,11 @@ class BattleHandler {
 
         try {
             const currentUrl = this.controller.page.url();
-            if (currentUrl.includes('#result')) {
+            // Check for result page (both hash-based and path-based URLs)
+            const isResultUrl = currentUrl.includes('#result') ||
+                currentUrl.includes('/result/content/index/') ||
+                currentUrl.includes('/result_multi/content/index/');
+            if (isResultUrl) {
                 return await this.waitForBattleEnd(mode);
             }
 
@@ -255,9 +279,13 @@ class BattleHandler {
 
     async handleFullAuto() {
         const url = this.controller.page.url();
-        if (url.includes('#result') || url.includes('#quest/index')) return;
+        // Check for result page (both hash-based and path-based URLs)
+        const isResultUrl = url.includes('#result') ||
+            url.includes('/result/content/index/') ||
+            url.includes('/result_multi/content/index/');
+        if (isResultUrl || url.includes('#quest/index')) return;
 
-        this.logger.info('[Full Auto] Activating');
+        this.logger.info('[Battle] Activating Full Auto');
 
         let attempts = 0;
         const maxAttempts = 3;
@@ -273,22 +301,22 @@ class BattleHandler {
                     const dismissed = await this.dismissSalutePopup();
                     if (dismissed) {
                         if (this.options.skipOnSalute) {
-                            this.logger.info('[Full Auto] Salute detected. Skipping raid as requested');
+                            this.logger.info('[Battle] Salute detected. Skipping raid as requested');
                             this.skipRaid = true;
                             return;
                         }
-                        this.logger.info(`[Full Auto] Salute dismissed. Retry ${attempts}/${maxAttempts}`);
+                        this.logger.info(`[Battle] Salute dismissed. Retry ${attempts}/${maxAttempts}`);
                         continue; // Try again in this while loop
                     }
 
-                    this.logger.warn('[Full Auto] Button not found. Refreshing page');
+                    this.logger.warn('[Battle] Auto button not found. Refreshing page');
                     await this.controller.reloadPage();
                     await sleep(800);
                     await this.checkStateAndResume('full_auto');
                     return;
                 }
 
-                await this.controller.page.click(this.selectors.fullAutoButton);
+                await this.fastCacheClick(this.selectors.fullAutoButton);
                 this.logger.debug('[Battle] Fast-clicked Full Auto');
 
                 // Fix: Update lastActionTime AND reset threshold after FA click
@@ -386,7 +414,7 @@ class BattleHandler {
 
         // Step 1: Wait for attack button if not already known visible
         if (!buttonAlreadyVisible) {
-            this.logger.debug('[Semi Auto] Waiting for attack button');
+            this.logger.debug('[Battle] Waiting for attack button');
             const attackReady = await this.controller.page
                 .waitForSelector(selAttack, { timeout: 10000 })
                 .then(() => true).catch(() => false);
@@ -399,16 +427,16 @@ class BattleHandler {
 
         // Step 2: Click attack button
         try {
-            await this.controller.page.click(selAttack);
+            await this.fastCacheClick(selAttack);
         } catch (e) {
             this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
             await this.controller.reloadPage();
             return false;
         }
-        this.logger.info('[Semi Auto] Attack');
+        this.logger.info('[Battle] Attack');
 
         // Step 3: Wait for normal_attack network listener (attack confirmation)
-        this.logger.debug('[Semi Auto] Waiting for attack confirmation...');
+        this.logger.debug('[Battle] Waiting for attack confirmation...');
         const attackConfirmed = await new Promise(resolve => {
             let resolved = false;
             const timeout = setTimeout(() => {
@@ -442,7 +470,7 @@ class BattleHandler {
                 return !!document.querySelector('.prt-result, #js-result, .pop-cheer, .btn-cheer');
             }).catch(() => false);
             if (ended) {
-                this.logger.info('[Semi Auto] Battle ended, skipping attack');
+                this.logger.info('[Battle] Battle ended, skipping attack');
                 await sleep(300);
                 return false;
             }
@@ -456,7 +484,7 @@ class BattleHandler {
         // Step 5: Refresh to skip animations
         // Following Full Auto pattern: return immediately after starting reload.
         // The main waitForBattleEnd loop handles turn signals and battle end.
-        this.logger.info('[Semi Auto] Refreshing page');
+        this.logger.info('[Battle] Refreshing page');
         await this.controller.reloadPage();
         await sleep(50); // Minimal settle
         return attackConfirmed; // Tell caller whether attack was network-confirmed
@@ -505,7 +533,7 @@ class BattleHandler {
         // reload (start.json re-firing turn N after reload) doesn't incorrectly re-arm networkTurnReady
         // and cause a double-attack on the same turn.
         let lastAttackedTurn = isSemiAuto ? turnCount : -1;
-        this.logger.debug(`[Wait] Resolving turns (Mode: ${mode})`);
+        this.logger.debug(`[Battle] Resolving turns (Mode: ${mode})`);
 
         if (!isSemiAuto && turnCount > 0) {
             const honorLog = (isRaid && previousHonors > 0) ? ` ${previousHonors.toLocaleString()} honor` : '';
@@ -538,7 +566,6 @@ class BattleHandler {
         this._preNetworkFinished = false;
         let lastActionTime = Date.now();
         let faInactivityThreshold = 25000; // Initial: 25s for OUGI lockout after FA click
-        let faReengagementLogged = false; // Track if FA re-engagement has been logged this battle
         let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
         // If turn changed during transition, log it now (full_auto only)
@@ -697,7 +724,11 @@ class BattleHandler {
                 }
 
                 // 3. Result Page Detection (URL-based, network-confirmed)
-                if (currentUrl.includes('#result')) {
+                // Check both hash-based (#result) and path-based (/result/content/index/) URLs
+                const isResultUrl = currentUrl.includes('#result') ||
+                    currentUrl.includes('/result/content/index/') ||
+                    currentUrl.includes('/result_multi/content/index/');
+                if (isResultUrl) {
                     // Wait for network confirmation to avoid race condition with quest navigation
                     // The network event may fire after URL change, so we poll networkFinished flag
                     if (!networkFinished) {
@@ -824,19 +855,20 @@ class BattleHandler {
                         continue;
                     }
 
-                    // 3. FA Persistence Check — runs BEFORE the inactivity watchdog so its continue never masks this
+                    // 3. FA Persistence Check — refresh after 25s of no FA activity
                     if (mode === 'full_auto' && !this.stopped && (Date.now() - lastFACheckTime > 25000)) {
+                        this.logger.info('[Full Auto] Inactive 25s. Refreshing');
                         lastFACheckTime = Date.now();
-                        const isEngaged = await this.verifyFullAutoState();
+                        this.options.lastActionTimeRef.value = Date.now();
+                        this.options.faThresholdRef.value = 5000;
+                        await this.controller.reloadPage();
+                        await sleep(this.fastRefresh ? 300 : 500);
 
-                        if (!isEngaged) {
-                            if (!faReengagementLogged) {
-                                this.logger.info('[Full Auto] Re-activating');
-                                faReengagementLogged = true;
-                            }
-                            await this.handleFullAuto();
-                            // lastActionTime is now updated inside handleFullAuto() via lastActionTimeRef
+                        const resumeResult = await this.checkStateAndResume(mode);
+                        if (resumeResult === true) {
+                            return { duration: (Date.now() - startTime) / 1000, turns: isSemiAuto ? 'N/A' : Math.max(turnCount, 1), honors: previousHonors, honorReached: honorTargetReached };
                         }
+                        continue;
                     }
 
                     // 4. FA Inactivity Watchdog (Dynamic threshold)
@@ -935,7 +967,13 @@ class BattleHandler {
             return true; // Stop execution
         }
 
-        if (url.includes('#result') || url.includes('#quest/index')) {
+        // Check both hash-based and path-based result/quest index URLs
+        const isResultUrl = url.includes('#result') ||
+            url.includes('/result/content/index/') ||
+            url.includes('/result_multi/content/index/') ||
+            url.includes('#quest/index') ||
+            url.includes('/quest/index/content/index/');
+        if (isResultUrl) {
             return true;
         }
 
@@ -979,7 +1017,9 @@ class BattleHandler {
             const ended = document.querySelector('.prt-result, #js-result, .pop-result-assist-raid.pop-show, .pop-usual.pop-show');
             if (ended && ended.offsetWidth > 0) return 'ended';
 
-            if (window.location.hash.includes('#result') || window.location.hash.includes('#quest/index')) return 'ended';
+            const href = window.location.href;
+            if (href.includes('#result') || href.includes('/result/content/index/') ||
+                href.includes('#quest/index') || href.includes('/quest/index/content/index/')) return 'ended';
 
             return null;
         }, { timeout: 6000 }).then(res => res.jsonValue()).catch(() => null);
@@ -1021,7 +1061,12 @@ class BattleHandler {
         }
 
         const finalUrl = this.controller.page.url();
-        if (finalUrl.includes('#result') || finalUrl.includes('#quest/index')) {
+        // Check both hash-based and path-based result/quest index URLs
+        const isFinalResultUrl = finalUrl.includes('#result') ||
+            finalUrl.includes('/result/content/index/') ||
+            finalUrl.includes('/result_multi/content/index/') ||
+            finalUrl.includes('#quest/index');
+        if (isFinalResultUrl) {
             await sleep(50); // SPA navigation buffer
             return true;
         }
@@ -1079,7 +1124,10 @@ class BattleHandler {
         const popupData = await this.controller.page.evaluate((skipResultElement) => {
             // Skip result page check in quest mode - elements may be stale from previous battle
             if (!skipResultElement) {
-                const isResultUrl = window.location.href.includes('#result');
+                const href = window.location.href;
+                const isResultUrl = href.includes('#result') ||
+                    href.includes('/result/content/index/') ||
+                    href.includes('/result_multi/content/index/');
                 const resultElement = document.querySelector('.prt-result, .cnt-result');
                 if (isResultUrl || (resultElement && resultElement.offsetWidth > 0)) {
                     return { state: 'ended', text: 'Result page detected' };

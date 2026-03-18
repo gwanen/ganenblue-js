@@ -77,7 +77,7 @@ class QuestBot {
 
                 // Check quest limit
                 if (this.maxQuests > 0 && this.questsCompleted >= this.maxQuests) {
-                    this.logger.info(`[Status] Quest limit reached (${this.questsCompleted}/${this.maxQuests})`);
+                    this.logger.info(`[Quest] Limit reached (${this.questsCompleted}/${this.maxQuests})`);
                     break;
                 }
 
@@ -120,9 +120,25 @@ class QuestBot {
         const currentUrl = this.controller.page.url();
         const isInBattleUrl = currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) !== null;
 
+        // Check if we're on result page (should navigate away, not fight)
+        const isResultUrl = currentUrl.includes('#result') ||
+            currentUrl.includes('/result/content/index/') ||
+            currentUrl.includes('/result_multi/content/index/');
+
+        if (isResultUrl) {
+            this.logger.info('[Quest] Result page detected. Navigating to quest URL...');
+            await this.controller.gotoSPA(this.questUrl);
+            await sleep(randomDelay(300, 500));
+        }
+
         if (isInBattleUrl) {
             // Check if battle UI is present (attack button or auto button)
+            // BUT exclude result page elements to avoid false positives
             const hasBattleUI = await this.controller.page.evaluate(() => {
+                // First check if we're on result page
+                const isResultPage = !!document.querySelector('.prt-result, #js-result, .cnt-result');
+                if (isResultPage) return false; // Don't fight on result page
+
                 const att = document.querySelector('.btn-attack-start');
                 const auto = document.querySelector('.btn-auto, .btn-full-auto');
                 const attVisible = att && (att.offsetWidth > 0 || att.classList.contains('display-on'));
@@ -137,7 +153,23 @@ class QuestBot {
                     this.updateDetailStats(result);
                 }
                 this.logger.info('[Battle] Combat concluded');
+                // Navigate to quest URL after battle ends (don't stay on result page)
+                await sleep(randomDelay(300, 500)); // Brief wait for network
+                this.logger.info('[Quest] Navigating to next quest...');
+                await this.controller.gotoSPA(this.questUrl);
+                await sleep(randomDelay(300, 500));
                 return true;
+            }
+
+            // No battle UI but we're in battle URL - check if it's a result page
+            const isResultPage = await this.controller.page.evaluate(() => {
+                return !!document.querySelector('.prt-result, #js-result, .cnt-result');
+            }).catch(() => false);
+
+            if (isResultPage) {
+                this.logger.info('[Quest] Result page detected in battle URL. Navigating away...');
+                await this.controller.gotoSPA(this.questUrl);
+                await sleep(randomDelay(300, 500));
             }
         }
 
@@ -149,7 +181,7 @@ class QuestBot {
             await sleep(randomDelay(100, 200));
             const battleStarted = await this.startReplicardBattle();
             if (!battleStarted) {
-                this.logger.warn('[Quest] Failed to initiate replicard battle. Retrying');
+                this.logger.warn(`[Quest] Failed to initiate replicard battle. Retrying (${attempts}/${maxAttempts})`);
                 return false;
             }
         } else {
@@ -169,7 +201,7 @@ class QuestBot {
             }
 
             if (summonStatus !== 'success') {
-                this.logger.warn(`[Quest] Summon selection failed (${summonStatus}). Retrying`);
+                this.logger.warn(`[Quest] Summon selection failed (${summonStatus}). Retrying (${attempts}/${maxAttempts})`);
                 return false;
             }
         }
@@ -200,6 +232,12 @@ class QuestBot {
             this.logger.info('[Quest] Pending battles detected. Clearing...');
             await this.clearPendingBattles();
         }
+
+        // Navigate back to quest URL so the next cycle starts on the supporter page,
+        // not on the stale #raid URL with lingering result page UI.
+        this.logger.info('[Quest] Navigating to next quest...');
+        await this.controller.gotoSPA(this.questUrl);
+        await sleep(randomDelay(300, 500));
 
         return true;
     }
@@ -245,14 +283,17 @@ class QuestBot {
                 break;
             }
 
-            // DOM check: supporter screen, battle already active, or result-page intercept
+            // URL-only check: supporter screen, battle active, or result-page intercept
+            // We do NOT check DOM (.prt-result) here — stale result page elements linger
+            // during SPA transitions even after the URL has moved to #quest/supporter.
             const state = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
+                const href = window.location.href;
                 return {
                     listFound: !!document.querySelector('.prt-supporter-list'),
                     okFound: !!document.querySelector('.btn-usual-ok'),
                     isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
-                    isResult: hash.includes('#result') || !!document.querySelector('.prt-result')
+                    isResult: hash.includes('#result') || href.includes('/result/content/index/') || href.includes('/result_multi/content/index/')
                 };
             }).catch(() => ({}));
 
@@ -360,13 +401,13 @@ class QuestBot {
                 return 'ended';
             }
 
-            // Consolidate all state checks into single evaluate
+            // URL-only state check — no DOM result detection to avoid stale element false positives
             const state = await this.controller.page.evaluate(() => {
                 const hash = window.location.hash;
                 const url = window.location.href;
                 return {
                     isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
-                    isResult: hash.includes('#result') || !!document.querySelector('.prt-result'),
+                    isResult: hash.includes('#result') || url.includes('/result/content/index/') || url.includes('/result_multi/content/index/'),
                     isParty: url.includes('supporter_raid'),
                     startBtn: !!document.querySelector('.btn-usual-ok.se-quest-start')
                 };
@@ -377,13 +418,34 @@ class QuestBot {
             }
 
             // In quest mode, #result during validatePostClick means GBF's SPA intercepted
-            // the previous battle's result.json and redirected us away from the quest.
-            // Re-navigate to questUrl once to escape it.
+            // the previous battle's result.json. Wait for it to settle instead of re-navigating.
             if (state.isResult) {
-                this.logger.warn('[Summon] Result page intercept in validatePostClick. Re-navigating...');
-                await this.controller.gotoSPA(this.questUrl);
-                await sleep(randomDelay(200, 350));
-                continue;
+                this.logger.warn('[Summon] Result page intercept detected. Waiting for network to settle...');
+                await sleep(randomDelay(500, 800));
+                // Re-check state after waiting — URL only
+                const recheckState = await this.controller.page.evaluate(() => {
+                    const hash = window.location.hash;
+                    const url = window.location.href;
+                    return {
+                        isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
+                        isResult: hash.includes('#result') || url.includes('/result/content/index/') || url.includes('/result_multi/content/index/'),
+                    };
+                }).catch(() => ({}));
+
+                if (recheckState.isRaid) {
+                    // Resolved to battle during wait — good, carry on
+                    return 'success';
+                }
+
+                if (recheckState.isResult) {
+                    // Still on result page — re-navigate and let runSingleQuest retry from scratch
+                    this.logger.warn('[Summon] Still on result page after wait. Re-navigating...');
+                    await this.controller.gotoSPA(this.questUrl);
+                    await sleep(randomDelay(200, 350));
+                    return 'ended';
+                }
+                // State cleared, continue with normal flow
+                break;
             }
 
             if (state.isParty && state.startBtn) {
@@ -409,8 +471,13 @@ class QuestBot {
         }
 
         const finalUrl = this.controller.page.url();
-        if (!finalUrl.match(/#(?:raid|raid_multi|quest\/index)(?:\/|$)/) && !finalUrl.includes('#result')) {
-            this.logger.warn('[Status] URL transition failed. Potential error state');
+        // Check for valid battle/quest URLs (including path-based result URLs)
+        const isValidUrl = finalUrl.match(/#(?:raid|raid_multi|quest\/index)(?:\/|$)/) ||
+            finalUrl.includes('#result') ||
+            finalUrl.includes('/result/content/index/') ||
+            finalUrl.includes('/result_multi/content/index/');
+        if (!isValidUrl) {
+            this.logger.warn('[Quest] URL transition failed. Potential error state');
             return 'ended';
         }
 
@@ -490,12 +557,12 @@ class QuestBot {
 
     pause() {
         this.isPaused = true;
-        this.logger.info('[Status] Bot paused');
+        this.logger.info('[Quest] Bot paused');
     }
 
     resume() {
         this.isPaused = false;
-        this.logger.info('[Status] Bot resumed');
+        this.logger.info('[Quest] Bot resumed');
     }
 
     stop() {
