@@ -64,6 +64,9 @@ brain/
 # AI Assistant configs
 .gemini/
 
+# GSD Planning (private project - not committed)
+.planning/
+
 # Checkpoints and backups
 *.bak
 *.backup
@@ -89,9 +92,3 @@ debug-*.log
 *.AppImage
 *.deb
 *.rpm
-
-# GSD Planning (generated per-session, not committed)
-.planning/phases/*/CONTEXT.md
-.planning/phases/*/UAT.md
-.planning/phases/*/VERIFICATION.md
-.planning/ui-reviews/
