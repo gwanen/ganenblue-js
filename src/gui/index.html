@@ -24,6 +24,8 @@
             --glow-blue: rgba(96, 165, 250, 0.3);
             --glass-blur: blur(16px);
             --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --btn-sq: 30px;
+            --btn-gap: 6px;
         }
 
         * {
@@ -236,12 +238,11 @@
             background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0.05));
             border: 1px solid rgba(96, 165, 250, 0.3);
             color: var(--text-primary);
-            padding: 10px;
-            font-size: 11px;
+            font-size: 15px;
             text-transform: uppercase;
             letter-spacing: 1px;
             font-weight: 700;
-            border-radius: 8px;
+            border-radius: 6px;
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
@@ -255,9 +256,9 @@
 
         .btn-group {
             display: flex;
-            gap: 4px;
+            gap: var(--btn-gap);
             margin-top: 6px;
-            align-items: stretch;
+            align-items: center;
         }
 
         /* All buttons in btn-group inherit uniform size */
@@ -265,22 +266,22 @@
         .btn-group .btn-start,
         .btn-group .btn-stop,
         .btn-group .btn-launch {
-            width: 32px !important;
-            height: 32px !important;
-            min-height: 32px !important;
-            max-height: 32px !important;
-            padding: 0 !important;
-            display: inline-flex !important;
+            width: var(--btn-sq);
+            height: var(--btn-sq);
+            min-height: var(--btn-sq);
+            max-height: var(--btn-sq);
+            padding: 0;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px !important;
-            border-radius: 4px !important;
-            margin: 0 !important;
+            font-size: 15px;
+            border-radius: 6px;
+            margin: 0;
             flex-shrink: 0;
             cursor: pointer;
             position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            transition: all 0.2s ease !important;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.2s ease;
         }
 
         .btn-start {
@@ -967,35 +968,7 @@
             gap: 6px;
         }
 
-        .btn-launch {
-            padding: 0;
-            font-size: 14px;
-            height: 26px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
 
-        .btn-group {
-            margin-top: 4px;
-            align-items: stretch;
-        }
-
-        /* Compact mode: uniform smaller buttons */
-        .btn-group .btn-square,
-        .btn-group .btn-start,
-        .btn-group .btn-stop,
-        .btn-group .btn-launch {
-            width: 28px !important;
-            height: 28px !important;
-            min-height: 28px !important;
-            max-height: 28px !important;
-            font-size: 14px !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0 !important;
-        }
 
         /* Collapsible Compact */
         .collapsible-header {
