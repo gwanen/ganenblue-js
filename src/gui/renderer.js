@@ -569,7 +569,11 @@ if (window.electronAPI) {
     });
 }
 
+let _lastSoundTime = 0;
 function playAlertSound() {
+    if (Date.now() - _lastSoundTime < 2000) return;
+    _lastSoundTime = Date.now();
+
     try {
         // Reuse singleton AudioContext — creating a new one on every call leaks memory
         const ctx = getAudioCtx();
