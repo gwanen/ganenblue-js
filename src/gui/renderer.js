@@ -251,7 +251,8 @@ function setupProfileListeners(pid) {
             blockResources: blockResourcesEl ? blockResourcesEl.checked : false,
             fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
             refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
-            summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true
+            summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
+            skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -309,7 +310,8 @@ function setupProfileListeners(pid) {
         document.getElementById(`block-resources-${pid}`),
         document.getElementById(`fast-refresh-${pid}`),
         document.getElementById(`refresh-on-start-${pid}`),
-        document.getElementById(`summon-refresh-${pid}`)
+        document.getElementById(`summon-refresh-${pid}`),
+        document.getElementById(`skill-refresh-${pid}`)
     ];
     inputs.forEach(input => {
         if (input) {
@@ -673,6 +675,10 @@ async function loadProfileSettings(pid) {
             const srEl = document.getElementById(`summon-refresh-${pid}`);
             if (srEl) srEl.checked = s.summonRefresh;
         }
+        if (s.skillRefresh !== undefined) {
+            const skrEl = document.getElementById(`skill-refresh-${pid}`);
+            if (skrEl) skrEl.checked = s.skillRefresh;
+        }
         if (s.blockResources !== undefined) {
             const brEl = document.getElementById(`block-resources-${pid}`);
             if (brEl) brEl.checked = s.blockResources;
@@ -697,7 +703,8 @@ function saveProfileSettings(pid) {
         blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
         fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
         refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
-        summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true
+        summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
+        skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }
