@@ -18,25 +18,7 @@ class BattleHandler {
     this.skillRefresh =
       options.skillRefresh !== undefined ? options.skillRefresh : false;
     this.logger = options.logger || logger;
-    this.cachedCoords = new Map();
-  }
-
-  async fastCacheClick(selector) {
-    let box = this.cachedCoords.get(selector);
-    if (!box) {
-      const el = await this.controller.page.$(selector);
-      if (el) {
-        box = await el.boundingBox();
-        if (box) this.cachedCoords.set(selector, box);
-      }
-    }
-    if (box) {
-      const x = box.x + box.width / 2 + (Math.random() * 4 - 2);
-      const y = box.y + box.height / 2 + (Math.random() * 4 - 2);
-      await this.controller.page.mouse.click(x, y);
-    } else {
-      await this.controller.page.click(selector);
-    }
+    this.faActive = false;
   }
 
   formatTime(milliseconds) {
@@ -73,7 +55,7 @@ class BattleHandler {
     this.lastAttackTurn = 0;
     this.lastReloadTurn = 0;
     this.lastHonors = 0; // Reset per-raid so previousHonors starts at 0 for each new raid
-    this.cachedCoords.clear(); // Flush cache on new battle engagement
+    this.controller.clearClickCache(); // Flush cache on new battle engagement
     this.logger.info(`[Battle] Engaging (${mode})`);
 
     // Create ref objects for lastActionTime and threshold so handleFullAuto can update them
@@ -96,7 +78,7 @@ class BattleHandler {
       if (options.refreshOnStart) {
         this.logger.info("[Battle] Refreshing to skip animations");
         await this.controller.reloadPage();
-        await sleep(this.fastRefresh ? 200 : 500);
+        await sleep(this.fastRefresh ? 100 : 200);
 
         const earlyStateAfterRefresh = await this.checkEarlyBattleEndPopup();
         if (earlyStateAfterRefresh) {
@@ -170,7 +152,7 @@ class BattleHandler {
               return { skipRaid: true, duration: 0, turns: 0 };
             }
             this.logger.info("[Battle] Salute popup dismissed. Re-checking");
-            await sleep(800);
+            await sleep(300);
             battleLoaded = await this.controller.waitForElement(
               loadSelector,
               10000,
@@ -200,7 +182,7 @@ class BattleHandler {
               "[Battle] Late confirmation button detected. Clicking",
             );
             await this.controller.clickSafe(okBtn, { fast: true });
-            await sleep(1000);
+            await sleep(400);
             battleLoaded = await this.controller.waitForElement(
               loadSelector,
               10000,
@@ -319,6 +301,7 @@ class BattleHandler {
     if (isResultUrl || url.includes("#quest/index")) return;
 
     this.logger.info("[Battle] Activating Full Auto");
+    this.faActive = false; // Reset — will be set true after successful click
 
     let attempts = 0;
     const maxAttempts = 3;
@@ -327,6 +310,19 @@ class BattleHandler {
       attempts++;
 
       try {
+        // Quick pre-check: if page is already on result/login, skip 20s wait
+        const preUrl = this.controller.page.url();
+        if (
+          preUrl.includes("#result") ||
+          preUrl.includes("/result/content/index/") ||
+          preUrl.includes("/result_multi/content/index/") ||
+          preUrl.includes("#quest/index") ||
+          preUrl.includes("#mypage") ||
+          preUrl.includes("#top")
+        ) {
+          return; // Battle ended or redirected — don't wait for FA button
+        }
+
         const btnFound = await this.controller.waitForElement(
           this.selectors.fullAutoButton,
           20000,
@@ -351,13 +347,14 @@ class BattleHandler {
 
           this.logger.warn("[Battle] Auto button not found. Refreshing page");
           await this.controller.reloadPage();
-          await sleep(800);
+          await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
         }
 
-        await this.fastCacheClick(this.selectors.fullAutoButton);
+        await this.controller.cachedClick(this.selectors.fullAutoButton);
         this.logger.debug("[Battle] Fast-clicked Full Auto");
+        this.faActive = true;
 
         // Fix: Update lastActionTime AND reset threshold after FA click
         // GBF lockout after chain bursts can last 10-20s, which is normal
@@ -370,13 +367,13 @@ class BattleHandler {
         }
 
         // Handle common post-click popups
-        await sleep(150);
+        await sleep(50);
 
         // 1.5 Handle "Waiting for last turn" popup
         if (
           await this.controller.elementExists(
             ".pop-usual.common-pop-error.pop-show",
-            200,
+            100,
           )
         ) {
           const errorText = await this.controller.getText(
@@ -384,7 +381,7 @@ class BattleHandler {
           );
           if (errorText.includes("Waiting for last turn")) {
             await this.controller.reloadPage();
-            await sleep(800);
+            await sleep(200);
             await this.checkStateAndResume("full_auto");
             return;
           }
@@ -392,10 +389,10 @@ class BattleHandler {
 
         // 1.6 Handle "Battle Concluded" popup
         if (
-          await this.controller.elementExists(".pop-rematch-fail.pop-show", 200)
+          await this.controller.elementExists(".pop-rematch-fail.pop-show", 100)
         ) {
           await this.controller.reloadPage();
-          await sleep(800);
+          await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
         }
@@ -404,7 +401,7 @@ class BattleHandler {
       } catch (e) {
         this.logger.warn(`[Full Auto] Click failed: ${e.message}`);
         await this.controller.reloadPage();
-        await sleep(800);
+        await sleep(200);
         await this.checkStateAndResume("full_auto");
         return;
       }
@@ -414,17 +411,20 @@ class BattleHandler {
       `[Full Auto] Failed after ${maxAttempts} attempts. Refreshing`,
     );
     await this.controller.reloadPage();
-    await sleep(800);
+    await sleep(200);
     await this.checkStateAndResume("full_auto");
   }
 
   /**
-   * Verifies if FA is actually running based on User Logic:
-   * 1. Skill Rail Visible (AND not 'hide') -> SUCCESS
-   * 2. Attack Button Hidden (display-off) -> SUCCESS (Attacking)
-   * 3. Attack Button Visible (display-on) -> FAIL
+   * Verifies if FA is actually running.
+   * Since GBF doesn't change the DOM when FA is clicked (no class toggle),
+   * we track state internally via this.faActive flag set by handleFullAuto.
    */
   async verifyFullAutoState() {
+    // Internal state tracking: if handleFullAuto clicked the button without error,
+    // FA is running. GBF provides no reliable DOM signal for FA state.
+    if (this.faActive) return true;
+
     // Frame validity guard: check frame is attached before evaluate
     if (!(await this.controller.isFrameAttached())) {
       this.logger.debug(
@@ -435,37 +435,19 @@ class BattleHandler {
 
     return await this.controller.page
       .evaluate((selectors) => {
-        // 0. Safety: If the page is still in a loading/overlay state, assume FA is active/pending
+        // Safety: If the page is still in a loading/overlay state, assume FA is active/pending
         const loading = document.querySelector(
           ".prt-loading-container, .prt-popup-back.show, #loading-mask",
         );
         if (loading && loading.offsetHeight > 0) return true;
 
-        // 1. Primary Signal: Auto Button marked as 'pushed'
+        // Check for explicit FA-active signals (some GBF versions may add 'pushed')
         const autoBtn = document.querySelector(selectors.fullAutoButton);
-        if (autoBtn && autoBtn.classList.contains("pushed")) {
-          return true;
-        }
-
-        // 2. Secondary Signal: Skill Rail is active (something is being used)
-        const skillRail = document.querySelector(selectors.skillRail);
-        if (
-          skillRail &&
-          skillRail.offsetWidth > 0 &&
-          !skillRail.style.display.includes("none")
-        ) {
-          return true;
-        }
-
-        // 3. Fallback: If Attack button is hidden, something is processing
-        const attackBtn = document.querySelector(selectors.attackButton);
-        if (attackBtn && attackBtn.classList.contains("display-off")) {
-          return true;
-        }
+        if (autoBtn && autoBtn.classList.contains("pushed")) return true;
 
         return false;
       }, this.selectors)
-      .catch(() => false);
+      .catch(() => true); // If evaluate fails, assume active (don't reload on frame issues)
   }
 
   async handleSemiAuto(buttonAlreadyVisible = false) {
@@ -488,7 +470,7 @@ class BattleHandler {
 
     // Step 2: Click attack button
     try {
-      await this.fastCacheClick(selAttack);
+      await this.controller.cachedClick(selAttack);
     } catch (e) {
       this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
       await this.controller.reloadPage();
@@ -538,14 +520,14 @@ class BattleHandler {
         .catch(() => false);
       if (ended) {
         this.logger.info("[Battle] Battle ended, skipping attack");
-        await sleep(300);
+        await sleep(100);
         return false;
       }
       this.logger.warn("[Semi Auto] Refreshing anyway");
     }
 
     // Step 4: Brief pause for network response parsing
-    await sleep(100);
+    await sleep(50);
     if (this.stopped) return false;
 
     // Step 5: Refresh to skip animations
@@ -805,7 +787,7 @@ class BattleHandler {
         // --- PRIORITY 0: Network end-state signals (fastest) ---
         if (bossDied || partyWiped) {
           await this.controller.page.reload({ waitUntil: "domcontentloaded" });
-          await sleep(this.fastRefresh ? 200 : 500);
+          await sleep(this.fastRefresh ? 100 : 200);
           if (
             isRaid &&
             honorTarget > 0 &&
@@ -932,17 +914,16 @@ class BattleHandler {
                 // ~18s with 3s checks
                 this.logger.warn("[Battle] UI missing (stuck). Refreshing");
                 await this.controller.reloadPage();
-                await sleep(this.fastRefresh ? 300 : 500);
-                const resumeResult = await this.checkStateAndResume(mode);
-                if (resumeResult === true) {
-                  return {
-                    duration: (Date.now() - startTime) / 1000,
-                    turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                    honors: previousHonors,
-                    honorReached: honorTargetReached,
-                  };
+                await sleep(this.fastRefresh ? 100 : 200);
+                this.controller.clearClickCache();
+                try {
+                  await this.handleFullAuto();
+                } catch (e) {
+                  this.logger.warn(
+                    `[Battle] Re-engagement failed: ${e.message}`,
+                  );
                 }
-                // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
+                lastFACheckTime = Date.now();
                 missingUiCount = 0;
               }
             }
@@ -961,19 +942,14 @@ class BattleHandler {
             if (this.summonRefresh) {
               this.logger.info("[Summon] Refreshing page after summon");
               await this.controller.reloadPage();
-              await sleep(this.fastRefresh ? 200 : 500);
-              lastFACheckTime = Date.now();
-
-              const resumeResult = await this.checkStateAndResume(mode);
-              if (resumeResult === true) {
-                return {
-                  duration: (Date.now() - startTime) / 1000,
-                  turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                  honors: previousHonors,
-                  honorReached: honorTargetReached,
-                };
+              await sleep(this.fastRefresh ? 100 : 200);
+              this.controller.clearClickCache();
+              try {
+                await this.handleFullAuto();
+              } catch (e) {
+                this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
               }
-              // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
+              lastFACheckTime = Date.now();
               continue;
             }
           }
@@ -984,19 +960,14 @@ class BattleHandler {
             if (this.skillRefresh) {
               this.logger.info("[Ability] Refreshing page after skill usage");
               await this.controller.reloadPage();
-              await sleep(this.fastRefresh ? 200 : 500);
-              lastFACheckTime = Date.now();
-
-              const resumeResult = await this.checkStateAndResume(mode);
-              if (resumeResult === true) {
-                return {
-                  duration: (Date.now() - startTime) / 1000,
-                  turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                  honors: previousHonors,
-                  honorReached: honorTargetReached,
-                };
+              await sleep(this.fastRefresh ? 100 : 200);
+              this.controller.clearClickCache();
+              try {
+                await this.handleFullAuto();
+              } catch (e) {
+                this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
               }
-              // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
+              lastFACheckTime = Date.now();
               continue;
             }
           }
@@ -1031,20 +1002,15 @@ class BattleHandler {
             }
 
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 200 : 500);
+            await sleep(this.fastRefresh ? 100 : 200);
+            this.controller.clearClickCache();
+            try {
+              await this.handleFullAuto();
+            } catch (e) {
+              this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
+            }
             lastAttackRefreshTime = Date.now();
             lastFACheckTime = Date.now();
-
-            const resumeResult = await this.checkStateAndResume(mode);
-            if (resumeResult === true) {
-              return {
-                duration: (Date.now() - startTime) / 1000,
-                turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                honors: previousHonors,
-                honorReached: honorTargetReached,
-              };
-            }
-            // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
             continue;
           }
 
@@ -1059,17 +1025,14 @@ class BattleHandler {
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 300 : 500);
-
-            const resumeResult = await this.checkStateAndResume(mode);
-            if (resumeResult === true) {
-              return {
-                duration: (Date.now() - startTime) / 1000,
-                turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                honors: previousHonors,
-                honorReached: honorTargetReached,
-              };
+            await sleep(this.fastRefresh ? 150 : 300);
+            this.controller.clearClickCache();
+            try {
+              await this.handleFullAuto();
+            } catch (e) {
+              this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }
+            lastFACheckTime = Date.now();
             continue;
           }
 
@@ -1082,19 +1045,14 @@ class BattleHandler {
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 300 : 500);
-            lastFACheckTime = Date.now(); // Reset FA check timer after reload
-
-            const resumeResult = await this.checkStateAndResume(mode);
-            if (resumeResult === true) {
-              return {
-                duration: (Date.now() - startTime) / 1000,
-                turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-                honors: previousHonors,
-                honorReached: honorTargetReached,
-              };
+            await sleep(this.fastRefresh ? 150 : 300);
+            this.controller.clearClickCache();
+            try {
+              await this.handleFullAuto();
+            } catch (e) {
+              this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }
-            // FA was re-engaged, lastActionTime updated via ref in handleFullAuto
+            lastFACheckTime = Date.now();
             continue;
           }
         }
@@ -1173,6 +1131,17 @@ class BattleHandler {
    * Standardized state detection after refresh.
    */
   async checkStateAndResume(mode) {
+    try {
+      return await this._checkStateAndResume(mode);
+    } catch (e) {
+      this.logger.warn(
+        `[Battle] State check failed: ${e.message}. Will continue loop`,
+      );
+      return false;
+    }
+  }
+
+  async _checkStateAndResume(mode) {
     const url = this.controller.page.url();
 
     // 1. Check URL and Login Button (Most reliable)
@@ -1274,7 +1243,7 @@ class BattleHandler {
 
           return null;
         },
-        { timeout: 6000 },
+        { timeout: 2000 },
       )
       .then((res) => res.jsonValue())
       .catch(() => null);
@@ -1296,7 +1265,7 @@ class BattleHandler {
         // Wait briefly for start.json so [Turn X] is logged before [Full Auto] Activating
         if (this.controller.network) {
           await new Promise((resolve) => {
-            const t = setTimeout(resolve, 500); // max 500ms wait
+            const t = setTimeout(resolve, 200); // max 200ms wait (was 500ms)
             this.controller.network.once("battle:start", () => {
               clearTimeout(t);
               resolve();
@@ -1304,6 +1273,7 @@ class BattleHandler {
           });
         }
         this.logger.info("[Battle] Re-engaging Full Auto");
+        this.faActive = false; // Reset before re-engagement — handleFullAuto sets true on success
         await this.handleFullAuto();
         // Signal caller to update lastActionTime by returning a special value
         return { faReengaged: true };
