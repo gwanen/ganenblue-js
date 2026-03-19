@@ -1,95 +1,39 @@
-# Ganenblue-JS
+# 🚀 Ganenblue-JS
+### YOUR ULTIMATE GRINDING PARTNER 🎮
 
-A highly capable, stealth-focused browser automation bot for Granblue Fantasy that handles complex tasks like quest farming, raid backup joining, and skip nightmare farming without detection.
+**Ganenblue-JS** is a high-speed, sleek Granblue Fantasy automation tool built to handle the heavy farm so you don't have to! Optimized for dual-profile grinding with a professional, symmetrical dash.
 
-## Project Structure
+> [!WARNING]
+> This project is for educational & personal research only. Grinding is serious business—use at your own risk! 🛡️
 
-```
-ganenblue-js/
-├── src/
-│   ├── bot/              # Bot implementations
-│   │   ├── battle-handler.js
-│   │   ├── quest-bot.js
-│   │   ├── raid-bot.js
-│   │   ├── skip-bot.js
-│   │   └── index.js      # Barrel export
-│   ├── cli/              # CLI entry points
-│   │   ├── index.js      # Main CLI (gbf-bot)
-│   │   └── test-stealth.js
-│   ├── core/             # Core browser automation
-│   │   ├── browser.js
-│   │   ├── login-handler.js
-│   │   ├── network-listener.js
-│   │   ├── page-controller.js
-│   │   └── index.js      # Barrel export
-│   ├── gui/              # Electron GUI
-│   │   ├── index.html
-│   │   ├── main.js
-│   │   ├── preload.cjs
-│   │   ├── renderer.js
-│   │   └── index.js      # Barrel export
-│   └── utils/            # Shared utilities
-│       ├── config.js
-│       ├── logger.js
-│       ├── notifier.js
-│       ├── random.js
-│       └── index.js      # Barrel export
-├── config/               # Configuration files
-│   ├── default.yaml
-│   ├── selectors.yaml
-│   └── credentials.example.yaml
-├── data/                 # Browser profiles, user data
-├── logs/                 # Application logs
-├── tests/                # Test files
-├── .planning/            # Project planning (gitignored)
-│   ├── LOG-STANDARDIZATION-WORKFLOW.md
-│   └── LOG-QUICK-REFERENCE.md
-├── scripts/              # Utility scripts
-│   └── audit-logs.js
-├── .editorconfig         # Code style
-├── .gitattributes        # Git metadata
-├── .gitignore
-├── package.json
-└── README.md
-```
+## ✨ Epic Features
 
-## Quick Start
+- **Slick Dual Dash**: Symmetrical layout with compact logic icons (🌐/❌/⏳). Easy on the eyes, heavy on the farm!
+- **Never-Stop Grinder**: Unified 20s Heartbeat! If the game lags or freezes, the bot jumps right back in.
+- **Turbo Stealth**: Modern evasion and optimized 100ms reactions. Fast, quiet, and efficient. 🥷
+- **Pro-Stats & Logs**: Real-time tracking (Avg Time/Turns/Rate) and a high-speed log with a "Scroll to Bottom" button for quick check-ins.
+- **Smart Battle**: Auto-tracks turns, skips animations, and stops exactly at your honor target. Blue chest secured! 💎
 
-1. **Clone**: `git clone https://github.com/gwanen/ganenblue-js.git`
-2. **Install**: `npm install`
-3. **Launch GUI**: `npm start`
-4. **CLI Usage**: `npm run cli -- raid --max 100`
+## 🛠️ Get Grinding (Setup)
 
-## Features
+1. **Clone it**: `git clone https://github.com/gwanen/ganenblue-js.git`
+2. **Setup**: `npm install`
+3. **Launch**: `npm start`
+4. **Build (Optional)**: `npm run dist`
 
-- **Dual-Profile Support**: Run two instances simultaneously (p1, p2) with isolated browsers
-- **Network State Detection**: Intercepts GBF API responses for battle states
-- **Advanced Stealth**: Human-like mouse movement, Gaussian randomized clicks, jitter delays
-- **SPA Navigation**: Smart handling of GBF's hash-based SPA router
-- **Electron GUI**: Desktop interface with IPC bridge for controlling bot execution
-- **Standardized Logging**: Consistent log tags and colors across all bot modes
+## ⚙️ Quick Tweaks
 
-## Development
+- **UI Settings**: Managed directly in the dash (saves automatically!).
+- **Advanced Config**: Check `config/default.yaml` for the deep stuff.
+- **Selectors**: Tweak `config/selectors.yaml` if the game UI updates.
 
-### Log Standardization
+## 📂 The Lab
 
-All log messages follow a standardized tag taxonomy for consistent GUI display.
+- `src/bot`: The grinding brain.
+- `src/gui`: The shiny control panel.
+- `src/core`: The engine under the hood.
 
-**Quick Reference:** See `.planning/LOG-QUICK-REFERENCE.md`
+---
+**License**: CC BY-NC 4.0 — For personal research only.
 
-**Full Workflow:** See `.planning/LOG-STANDARDIZATION-WORKFLOW.md`
 
-**Audit Logs:** Run `npm run audit:logs` to check for non-compliant log messages.
-
-```bash
-# Check log standardization
-npm run audit:logs
-```
-
-## Configuration
-
-Edit `config/default.yaml` for bot settings.Selectors in `config/selectors.yaml` may need updates if GBF UI changes.
-
-## License
-
-CC BY-NC 4.0 — Educational and personal research only.
