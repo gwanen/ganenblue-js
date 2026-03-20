@@ -558,7 +558,7 @@ class PageController {
     await sleep(10);
 
     // Frame stability check: ensure frame is reattached after SPA navigation
-    await this.waitForFrameStable(2000);
+    await this.waitForFrameStable(500);
   }
 
   /**
@@ -583,7 +583,7 @@ class PageController {
     await this.page.reload({ waitUntil: "domcontentloaded" });
 
     // Frame stability check: ensure frame is reattached after reload
-    await this.waitForFrameStable(2000);
+    await this.waitForFrameStable(1000);
   }
 
   /**
@@ -615,7 +615,7 @@ class PageController {
         await sleep(20);
         return true;
       }
-      await sleep(100);
+      await sleep(20);
     }
     this.logger.warn("[Warn] Core: Frame stability timeout");
     return false;

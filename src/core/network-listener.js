@@ -83,7 +83,7 @@ class NetworkListener extends EventEmitter {
             if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
             // --- Battle end (existing) ---
-            if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('js/view/result/empty.js')) {
+            if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js')) {
                 // For JSON check only if it's the result.json endpoint
                 if (url.includes('.json')) {
                     const contentType = response.headers()['content-type'];
@@ -188,8 +188,9 @@ class NetworkListener extends EventEmitter {
             }
 
             // --- Supporter screen detection ---
-            if (url.includes('/rest/sound/quest_supporter_bgm')) {
-                this.logger.debug('[Status] Signal: Supporter BGM detected (Location: Supporter Selection)');
+            // Standard quest supporter BGM or Replicard supporter content (Quick Selection / standard list)
+            if (url.includes('/rest/sound/quest_supporter_bgm') || url.includes('/quest/content/supporter/')) {
+                this.logger.debug(`[Status] Signal: Supporter screen detected (Source: ${url.includes('sound') ? 'BGM' : 'Content'})`);
                 this.emit('raid:supporter_screen');
                 return;
             }

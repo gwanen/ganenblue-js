@@ -218,8 +218,8 @@ class QuestBot {
       }
     }
 
-    // Check for Replicard URL
-    const isReplicard = this.questUrl.includes("/replicard/");
+    // Check for Replicard URL (supports both /replicard/ and #replicard/ patterns)
+    const isReplicard = this.questUrl.includes("replicard");
 
     if (isReplicard) {
       await this.controller.gotoSPA(this.questUrl);
@@ -296,7 +296,8 @@ class QuestBot {
     const monsterSelector = ".btn-monster.lis-monster";
     const okButton = ".btn-usual-ok";
 
-    if (await this.controller.elementExists(monsterSelector, 5000)) {
+    // Case 1: On map, look for target monster
+    if (await this.controller.elementExists(monsterSelector, 500)) {
       await this.controller.clickSafe(monsterSelector);
       await sleep(500);
 
@@ -307,6 +308,17 @@ class QuestBot {
       }
 
       // Select summon
+      const summonStatus = await this.selectSummon();
+      return summonStatus === "success";
+    }
+
+    // Case 2: Already on supporter/deck selection (direct link/bookmark)
+    const isEngagementScreen = await this.controller.page.evaluate(() => {
+      return !!document.querySelector(".prt-supporter-list, .btn-usual-ok, .se-quest-start");
+    }).catch(() => false);
+
+    if (isEngagementScreen) {
+      this.logger.info("[Replicard] Engagement screen detected");
       const summonStatus = await this.selectSummon();
       return summonStatus === "success";
     }
@@ -343,7 +355,7 @@ class QuestBot {
       }),
       // 2. Reactive DOM Signal (List or OK button)
       this.controller.waitForElement(
-        ".prt-supporter-list, .btn-usual-ok",
+        ".prt-supporter-list, .btn-usual-ok, .se-quest-start",
         timeout,
       ).then((found) => (found ? { type: "dom" } : { type: "timeout" })),
       // 3. State Polling (isRaid, isResult, isParty) - Slowest fallback
@@ -375,7 +387,7 @@ class QuestBot {
             this.networkSupporterScreen = false;
             await this.controller.gotoSPA(this.questUrl);
           }
-          await sleep(250); // Slower polling for state changes since network/DOM are reactive
+          await sleep(50); // Faster polling for state changes
         }
         return { type: "timeout" };
       })(),
@@ -394,8 +406,8 @@ class QuestBot {
     }
 
     const okFound = await this.controller.elementExists(
-      ".btn-usual-ok",
-      300,
+      ".btn-usual-ok, .se-quest-start",
+      1000,
       true,
     );
     if (okFound) {
@@ -406,7 +418,8 @@ class QuestBot {
       }
 
       this.logger.info("[Quest] Supporter selection confirmed");
-      await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => {});
+      const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
+      await this.controller.cachedClick(okSelector, 0).catch(() => {});
       await sleep(50);
       return await this.validatePostClick();
     }
@@ -438,7 +451,7 @@ class QuestBot {
 
   async validatePostClick() {
     // Frame stability check after confirmation click (reduced from 1500ms for speed)
-    await this.controller.waitForFrameStable(500);
+    await this.controller.waitForFrameStable(50);
 
     if (await this.checkCaptcha()) return "captcha";
 
@@ -460,7 +473,7 @@ class QuestBot {
       await this.controller.clickSafe(".pop-deck.pop-show .btn-usual-ok", {
         silent: true,
       });
-      await sleep(800);
+      await sleep(50);
     } else if (popupState.party && popupState.ok) {
       this.logger.warn(
         "[Summon] Party selection popup detected. Dismissing...",
@@ -470,7 +483,7 @@ class QuestBot {
         timeout: 1000,
         maxRetries: 1,
       });
-      await sleep(800);
+      await sleep(50);
     } else if (popupState.warning && popupState.ok) {
       this.logger.warn("[Summon] Warning popup detected. Dismissing...");
       await this.controller.clickSafe(".btn-usual-ok", {
@@ -478,7 +491,7 @@ class QuestBot {
         timeout: 1000,
         maxRetries: 1,
       });
-      await sleep(800);
+      await sleep(50);
     }
 
     // Wait for URL transition - Patient polling (2s total)

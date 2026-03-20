@@ -1032,7 +1032,7 @@ class BattleHandler {
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 150 : 300);
+            await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
               await this.handleFullAuto();
@@ -1052,7 +1052,7 @@ class BattleHandler {
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 150 : 300);
+            await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
               await this.handleFullAuto();
@@ -1112,7 +1112,7 @@ class BattleHandler {
           // Reset iteration counter to avoid immediate GC after reload
           iterationCount = 0;
         }
-        await sleep(30);
+        await sleep(10);
       }
 
       throw new Error("Battle timeout");
