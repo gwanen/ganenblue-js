@@ -370,11 +370,6 @@ class PageController {
         // Move mouse to target
         await this.moveMouseHumanLike(randomX, randomY, fast);
 
-        // Security-03: Variable "Hesitation" Jitter (50-100ms)
-        // This breaks the robotic pattern of immediate clicking after arrival
-        const hesitation = 50 + Math.random() * 50; 
-        await sleep(hesitation);
-
         // Perform randomized click
         await this.page.mouse.click(randomX, randomY);
         this.logger.debug(
@@ -426,10 +421,6 @@ class PageController {
 
       for (const point of activePoints) {
         await this.page.mouse.move(point.x, point.y).catch(() => {});
-        if (!fast) {
-          // Tiny variable delay between points for human-like speed jitter
-          await sleep(getRandomInRange(2, 8));
-        }
       }
 
       this.lastMousePos = end;

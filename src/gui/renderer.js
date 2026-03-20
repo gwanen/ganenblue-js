@@ -126,6 +126,9 @@ function getProfileElements(pid) {
         questUrl: document.getElementById(`quest-url-${pid}`),
         questUrlGroup: document.getElementById(`quest-url-group-${pid}`),
         questUrlError: document.getElementById(`quest-url-error-${pid}`),
+        replicardUrl: document.getElementById(`replicard-url-${pid}`),
+        replicardUrlGroup: document.getElementById(`replicard-url-group-${pid}`),
+        replicardUrlError: document.getElementById(`replicard-url-error-${pid}`),
         honorTarget: document.getElementById(`honor-target-${pid}`),
         honorGroup: document.getElementById(`honor-target-group-${pid}`),
         raidTarget: document.getElementById(`raid-target-${pid}`),
@@ -265,6 +268,16 @@ function setupProfileListeners(pid) {
             return;
         }
 
+        if ((settings.botMode === 'replicard' || settings.botMode === 'xeno_replicard') && !els.replicardUrl.value.trim()) {
+            showToast('Replicard URL required', 'error');
+            return;
+        }
+
+        // Differentiate URL sent to main process
+        if (settings.botMode === 'replicard' || settings.botMode === 'xeno_replicard') {
+            settings.questUrl = els.replicardUrl.value.trim();
+        }
+
         profileState[pid].isRunning = true;
         profileState[pid].startTime = Date.now();
         updateProfileUI(pid);
@@ -318,7 +331,8 @@ function setupProfileListeners(pid) {
         document.getElementById(`summon-refresh-${pid}`),
         document.getElementById(`skill-refresh-${pid}`),
         document.getElementById(`turbo-mode-${pid}`),
-        document.getElementById(`memory-watchdog-${pid}`)
+        document.getElementById(`memory-watchdog-${pid}`),
+        els.replicardUrl
     ];
     inputs.forEach(input => {
         if (input) {
@@ -335,6 +349,13 @@ function setupProfileListeners(pid) {
         const valid = !url || url.includes('game.granbluefantasy.jp');
         els.questUrlError.classList.toggle('show', !valid);
         els.questUrl.classList.toggle('input-error', !valid);
+    });
+
+    els.replicardUrl.addEventListener('input', () => {
+        const url = els.replicardUrl.value;
+        const valid = !url || url.includes('game.granbluefantasy.jp');
+        els.replicardUrlError.classList.toggle('show', !valid);
+        els.replicardUrl.classList.toggle('input-error', !valid);
     });
 }
 
@@ -368,10 +389,12 @@ function updateProfileUI(pid) {
 function updateFormVisibility(pid) {
     const els = dom[pid];
     const mode = els.mode.value;
-    const isQuestOrReplicard = mode === 'quest' || mode === 'replicard' || mode === 'xeno_replicard';
+    const isQuest = mode === 'quest';
+    const isReplicard = mode === 'replicard' || mode === 'xeno_replicard';
     const isSkip = mode === 'skip';
 
-    els.questUrlGroup.style.display = isQuestOrReplicard ? 'block' : 'none';
+    els.questUrlGroup.style.display = isQuest ? 'block' : 'none';
+    els.replicardUrlGroup.style.display = isReplicard ? 'block' : 'none';
     els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.raidTargetGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.zoneGroup.style.display = mode === 'xeno_replicard' ? 'block' : 'none';
@@ -675,6 +698,7 @@ async function loadProfileSettings(pid) {
         if (s.profileName && els.nameInput) els.nameInput.value = s.profileName; // Restore Name
         if (s.botMode) els.mode.value = s.botMode;
         if (s.questUrl) els.questUrl.value = s.questUrl;
+        if (s.replicardUrl && els.replicardUrl) els.replicardUrl.value = s.replicardUrl;
         if (s.maxRuns) els.maxRuns.value = s.maxRuns;
         if (s.battleMode) els.battleMode.value = s.battleMode;
         if (s.honorTarget !== undefined && els.honorTarget) els.honorTarget.value = s.honorTarget;
@@ -714,6 +738,7 @@ function saveProfileSettings(pid) {
         profileName: els.nameInput ? els.nameInput.value : `Profile ${pid === 'p1' ? '1' : '2'}`,
         botMode: els.mode.value,
         questUrl: els.questUrl.value,
+        replicardUrl: els.replicardUrl ? els.replicardUrl.value : '',
         maxRuns: els.maxRuns.value,
         battleMode: els.battleMode.value,
         honorTarget: els.honorTarget ? els.honorTarget.value : '0',

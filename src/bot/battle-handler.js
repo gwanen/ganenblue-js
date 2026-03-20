@@ -932,8 +932,6 @@ class BattleHandler {
             summonUsed = false;
             if (this.summonRefresh) {
               this.logger.info("[Summon] Refreshing page after summon");
-              // Security-04: Variable Refresh Jitter
-              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -952,8 +950,6 @@ class BattleHandler {
             abilityUsed = false;
             if (this.skillRefresh) {
               this.logger.info("[Ability] Refreshing page after skill usage");
-              // Security-04: Variable Refresh Jitter
-              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -997,7 +993,6 @@ class BattleHandler {
             }
 
             // Security-04: Variable Refresh Jitter
-            await sleep(50 + Math.random() * 50);
             await this.controller.reloadPage();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1021,8 +1016,6 @@ class BattleHandler {
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
-            // Security-04: Variable Refresh Jitter
-            await sleep(50 + Math.random() * 50);
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1043,8 +1036,6 @@ class BattleHandler {
             this.logger.warn("[Full Auto] Inactive. Performing Hard Reload");
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
-            // Security-04: Variable Refresh Jitter
-            await sleep(50 + Math.random() * 50);
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1100,8 +1091,6 @@ class BattleHandler {
           this.logger.info(
             "[Memory] Periodic Hard Reload to clear page context",
           );
-          // Security-04: Variable Refresh Jitter
-          await sleep(50 + Math.random() * 50);
           await this.controller.reloadHard();
           await sleep(500);
           lastHardReloadTime = Date.now();
@@ -1481,13 +1470,42 @@ class BattleHandler {
         const turnElem = document.querySelector(selectors.turnCounter);
         if (turnElem) {
           res.turn = parseInt(turnElem.textContent, 10) || 0;
+        } else {
+          // Fallback turn detection (older/alternative UI)
+          const turnCounter = document.querySelector(
+            ".prt-turn-info, #js-turn-num, #js-turn-num-count",
+          );
+          if (turnCounter) {
+            const digits = turnCounter.querySelectorAll('div[class*="num-info"]');
+            if (digits && digits.length > 0) {
+              let str = "";
+              for (const d of digits) {
+                const match = d.className.match(/num-info(\d)/);
+                if (match) str += match[1];
+              }
+              res.turn = parseInt(str, 10) || 0;
+            }
+          }
         }
 
-        // 2. Honors
-        const honorElem = document.querySelector(".prt-total-honor");
-        if (honorElem) {
-          res.honors =
-            parseInt(honorElem.textContent.replace(/[,/]/g, ""), 10) || 0;
+        // 2. Honors (Robust Detection)
+        // Priority 1: User row in contribution list (most reliable across all raid types)
+        const userRow = document.querySelector(".lis-user.guild-member");
+        if (userRow) {
+          const pointEl = userRow.querySelector(".txt-point");
+          if (pointEl) {
+            res.honors =
+              parseInt(pointEl.textContent.replace(/[,/pt]/g, ""), 10) || 0;
+          }
+        }
+
+        // Priority 2: Total honor counter (fallback for GW/Events where user row might be hidden or delayed)
+        if (!res.honors) {
+          const honorElem = document.querySelector(".prt-total-honor");
+          if (honorElem) {
+            res.honors =
+              parseInt(honorElem.textContent.replace(/[,/]/g, ""), 10) || 0;
+          }
         }
 
         // 3. Terminal States

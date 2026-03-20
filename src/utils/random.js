@@ -8,7 +8,7 @@ export function randomDelay(min = 500, max = 1500) {
 }
 
 // Sleep with random jitter
-export async function sleep(baseMs, jitterPercent = 20) {
+export async function sleep(baseMs, jitterPercent = 0) {
   const jitter = baseMs * (jitterPercent / 100);
   const actualDelay = baseMs + (Math.random() * jitter * 2 - jitter);
   return new Promise(resolve => setTimeout(resolve, actualDelay));
