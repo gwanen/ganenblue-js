@@ -171,6 +171,8 @@ class QuestBot {
       this.logger.info(
         "[Quest] State: Result page detected (Navigating to quest target)",
       );
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.questUrl);
       hasNavigated = true;
       await sleep(50);
@@ -226,6 +228,8 @@ class QuestBot {
         this.logger.info(
           "[Quest] State: Result page detected (Exiting battle URL)",
         );
+        // Security-04: Variable Jitter
+        await sleep(50 + Math.random() * 50);
         await this.controller.gotoSPA(this.questUrl);
         hasNavigated = true;
         await sleep(50);
@@ -236,6 +240,8 @@ class QuestBot {
     const isReplicard = this.questUrl.includes("replicard");
 
     if (isReplicard) {
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.questUrl);
       await sleep(randomDelay(100, 200));
       const battleStarted = await this.startReplicardBattle();
@@ -247,6 +253,8 @@ class QuestBot {
       // Standard quest navigation
       this.networkSupporterScreen = false;
       if (!hasNavigated) {
+        // Security-04: Variable Jitter
+        await sleep(50 + Math.random() * 50);
         await this.controller.gotoSPA(this.questUrl);
       }
 

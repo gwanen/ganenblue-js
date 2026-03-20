@@ -932,6 +932,8 @@ class BattleHandler {
             summonUsed = false;
             if (this.summonRefresh) {
               this.logger.info("[Summon] Refreshing page after summon");
+              // Security-04: Variable Refresh Jitter
+              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -950,6 +952,8 @@ class BattleHandler {
             abilityUsed = false;
             if (this.skillRefresh) {
               this.logger.info("[Ability] Refreshing page after skill usage");
+              // Security-04: Variable Refresh Jitter
+              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -992,6 +996,8 @@ class BattleHandler {
               };
             }
 
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
             await this.controller.reloadPage();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1015,6 +1021,8 @@ class BattleHandler {
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1035,6 +1043,8 @@ class BattleHandler {
             this.logger.warn("[Full Auto] Inactive. Performing Hard Reload");
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1090,6 +1100,8 @@ class BattleHandler {
           this.logger.info(
             "[Memory] Periodic Hard Reload to clear page context",
           );
+          // Security-04: Variable Refresh Jitter
+          await sleep(50 + Math.random() * 50);
           await this.controller.reloadHard();
           await sleep(500);
           lastHardReloadTime = Date.now();
