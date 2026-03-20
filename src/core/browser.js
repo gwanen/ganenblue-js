@@ -114,16 +114,16 @@ class BrowserManager {
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 850;
-            this.logger.info(`[System] Custom window size: ${windowWidth}x${windowHeight}`);
+            this.logger.info(`[Core] Viewport resolution: ${windowWidth}x${windowHeight}`);
         } else {
-            this.logger.info('[System] Using default desktop mode');
+            this.logger.info('[Core] Device mode: Desktop (Default)');
         }
 
         // Create unique temp directory for this session to avoid file locking collisions
         const tempDir = os.tmpdir();
         const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
-        this.logger.info(`[System] Launching with profile: ${this.userDataDir}`);
+        this.logger.info(`[Core] Browser process initialized (Profile: ${this.userDataDir})`);
 
 
         // Prepare launch options
@@ -194,7 +194,7 @@ class BrowserManager {
         // Custom Browser Executable (e.g., portable Chromium or Firefox)
         if (this.config.executable_path) {
             launchOptions.executablePath = this.config.executable_path;
-            this.logger.info(`[System] Using custom browser executable: ${this.config.executable_path}`);
+            this.logger.info(`[Core] Browser executable: ${this.config.executable_path}`);
 
             // Puppeteer needs to be told to explicitly drive Firefox instead of CDXP/Chromium
             if (this.config.executable_path.toLowerCase().includes('firefox')) {
@@ -206,9 +206,9 @@ class BrowserManager {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
-                this.logger.info(`[System] Using Microsoft Edge: ${edgePath}`);
+                this.logger.info('[Core] Browser: Microsoft Edge');
             } else {
-                this.logger.warn('[Browser] Edge not found. Falling back to Chromium');
+                this.logger.warn('[Core] Browser detection: Edge not found (Falling back to Chromium)');
             }
         }
         // Use Brave if specified
@@ -216,9 +216,9 @@ class BrowserManager {
             const bravePath = this.getBravePath();
             if (bravePath) {
                 launchOptions.executablePath = bravePath;
-                this.logger.info(`[System] Using Brave Browser: ${bravePath}`);
+                this.logger.info('[Core] Browser: Brave Browser');
             } else {
-                this.logger.warn('[Browser] Brave not found. Falling back to Chromium');
+                this.logger.warn('[Core] Browser detection: Brave not found (Falling back to Chromium)');
             }
         }
         // Use Chrome if specified
@@ -226,9 +226,9 @@ class BrowserManager {
             const chromePath = this.getChromePath();
             if (chromePath) {
                 launchOptions.executablePath = chromePath;
-                this.logger.info(`[System] Using Google Chrome: ${chromePath}`);
+                this.logger.info('[Core] Browser: Google Chrome');
             } else {
-                this.logger.warn('[Browser] Chrome not found. Falling back to Chromium');
+                this.logger.warn('[Core] Browser detection: Chrome not found (Falling back to Chromium)');
             }
         }
         // Use Firefox if specified
@@ -237,9 +237,9 @@ class BrowserManager {
             if (firefoxPath) {
                 launchOptions.executablePath = firefoxPath;
                 launchOptions.browser = 'firefox'; // Explicitly tell puppeteer
-                this.logger.info(`[System] Using Mozilla Firefox: ${firefoxPath}`);
+                this.logger.info('[Core] Browser: Mozilla Firefox');
             } else {
-                this.logger.warn('[Browser] Firefox not found. Falling back to Chromium');
+                this.logger.warn('[Core] Browser detection: Firefox not found (Falling back to Chromium)');
             }
         }
 
@@ -272,7 +272,7 @@ class BrowserManager {
                 timeout: 60000
             });
         } catch (error) {
-            this.logger.error(`[Error] [Browser] Navigation failed: ${error.message}`);
+            this.logger.error(`[Error] Core: Navigation failure (Fault: ${error.message})`);
             return false;
         }
 
@@ -284,7 +284,7 @@ class BrowserManager {
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            this.logger.warn(`[Browser] Auto-login skipped: ${error.message}`);
+            this.logger.warn(`[Warn] Core: Auto-login bypass (Reason: ${error.message})`);
         }
     }
 
@@ -318,7 +318,7 @@ class BrowserManager {
             // Fallback to legacy structure
             return data;
         } catch (error) {
-            this.logger.error(`[Error] [Core] Failed to load credentials: ${error.message}`);
+            this.logger.error(`[Error] Storage: Credential load failure (Fault: ${error.message})`);
             return null;
         }
     }
@@ -333,9 +333,9 @@ class BrowserManager {
         if (this.userDataDir && existsSync(this.userDataDir)) {
             try {
                 rmSync(this.userDataDir, { recursive: true, force: true });
-                this.logger.info(`[System] Cleaned up profile: ${this.userDataDir}`);
+                this.logger.info(`[Core] Profile directory purged: ${this.userDataDir}`);
             } catch (e) {
-                this.logger.warn(`[System] Failed to cleanup profile: ${e.message}`);
+                this.logger.warn(`[Warn] Core: Profile purge failure (Fault: ${e.message})`);
             }
         }
     }

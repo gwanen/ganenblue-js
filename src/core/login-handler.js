@@ -14,7 +14,7 @@ class LoginHandler {
      */
     async performLogin(credentials) {
         try {
-            this.logger.info('[Login] Starting automated flow');
+            this.logger.info('[Auth] Authentication procedure initiated');
 
             // Step 1: Click main login button
             await this.clickLoginButton();
@@ -28,7 +28,7 @@ class LoginHandler {
             // Step 4: Return to GBF page
             await this.returnToGBF();
 
-            this.logger.info('[Login] Login complete');
+            this.logger.info('[Auth] Authentication procedure: Complete');
             return true;
         } catch (error) {
             this.logger.error('[Error] [Login] Automation failed:', error.message);
@@ -42,11 +42,11 @@ class LoginHandler {
     async clickLoginButton() {
         const currentUrl = this.page.url();
         if (currentUrl.includes('#authentication')) {
-            this.logger.info('[Login] Already on authentication page. Skipping login button click.');
+            this.logger.info('[Auth] State: Redirect bypassed (Already authenticated)');
             return;
         }
 
-        this.logger.info('[Login] Waiting for login button...');
+        this.logger.info('[Auth] Awaiting authentication interface');
 
         try {
             await this.page.waitForSelector(this.selectors.loginButton, {
@@ -56,12 +56,12 @@ class LoginHandler {
 
             await sleep(1000);
             await this.page.click(this.selectors.loginButton);
-            this.logger.info('[Login] Clicked login button');
+            this.logger.info('[Auth] Action: Login interface engaged');
 
             // Wait for redirect to #authentication
             await sleep(2000);
         } catch (error) {
-            this.logger.info(`[Login] Login button not found. Proceeding to authentication page`);
+            this.logger.info('[Auth] State: Proceeding to authentication protocol');
         }
     }
 
@@ -69,7 +69,7 @@ class LoginHandler {
      * Select Mobage authentication option
      */
     async selectMobageAuth() {
-        this.logger.info('[Login] Selecting Mobage authentication...');
+        this.logger.info('[Auth] Platform selection: Mobage');
 
         try {
             // Select Mobage platform
@@ -80,7 +80,7 @@ class LoginHandler {
 
             await sleep(1000);
             await this.page.click(this.selectors.mobageOption);
-            this.logger.info('[Login] Selected Mobage platform');
+            this.logger.info('[Auth] Platform state: Mobage selected');
 
             // Click OK button
             await this.page.waitForSelector(this.selectors.okButton, {
@@ -97,7 +97,7 @@ class LoginHandler {
             });
 
             await this.page.click(this.selectors.okButton);
-            this.logger.info('[Login] Clicked OK button to proceed to Mobage');
+            this.logger.info('[Auth] Action: Redirect to platform interface');
 
             let timeoutId;
             const timeoutPromise = new Promise(resolve => {
@@ -113,15 +113,15 @@ class LoginHandler {
 
             if (newPage) {
                 this.page = newPage;
-                this.logger.info('[Login] Switched to Mobage login tab reliably');
+                this.logger.info('[Auth] State: Tab synchronization complete');
             } else {
                 // Fallback check
                 const pages = await browser.pages();
                 if (pages.length > 1) {
                     this.page = pages[pages.length - 1];
-                    this.logger.info('[Login] Switched to Mobage login tab (fallback)');
+                    this.logger.info('[Auth] State: Tab synchronization (Fallback)');
                 } else {
-                    this.logger.info('[Login] Page opened in same tab');
+                    this.logger.info('[Auth] State: Single-tab authentication active');
                 }
             }
         } catch (error) {
@@ -134,11 +134,11 @@ class LoginHandler {
      * Handle Mobage login page (might be in new tab or iframe)
      */
     async handleMobageLogin(credentials) {
-        this.logger.info('[Login] Handling Mobage login page...');
+        this.logger.info('[Auth] Platform interface: Analyzing...');
 
         try {
             // Wait longer for page navigation
-            this.logger.info('[Login] Waiting for login page to load...');
+                this.logger.info('[Auth] Awaiting platform interface load');
 
             // Wait for email field to appear (indicates login page loaded)
             await this.page.waitForSelector(this.selectors.emailField, {
@@ -146,7 +146,7 @@ class LoginHandler {
                 timeout: 30000
             });
 
-            this.logger.info('[Login] Mobage login page loaded');
+            this.logger.info('[Auth] State: Platform interface ready');
             await sleep(3000);
 
             const fillField = async (selector, value, fieldName) => {

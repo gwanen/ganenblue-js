@@ -191,6 +191,17 @@ describe('NetworkListener — battle result', () => {
         await handle(nl, res);
         await expect(waiting).resolves.toBeDefined();
     });
+
+    test('result/content/index → emits battle:result', async () => {
+        const nl = makeListener();
+        const waiting = once(nl, 'battle:result');
+        const res = makeResponse({
+            url: 'https://game.granbluefantasy.jp/result/content/index/1959222574',
+            type: 'fetch',
+        });
+        await handle(nl, res);
+        await expect(waiting).resolves.toBeDefined();
+    });
 });
 
 describe('NetworkListener — start.json', () => {
@@ -216,5 +227,20 @@ describe('NetworkListener — start.json', () => {
         await handle(nl, res);
         const data = await waiting;
         expect(data.type).toBe('start_popup');
+    });
+});
+
+describe('NetworkListener — Replicard signals', () => {
+    test('replicard supporter content → emits raid:supporter_screen', async () => {
+        const nl = makeListener();
+        let emitted = false;
+        nl.on('raid:supporter_screen', () => { emitted = true; });
+        
+        const res = makeResponse({
+            url: 'https://game.granbluefantasy.jp/quest/content/supporter/819221/25/0',
+            type: 'fetch',
+        });
+        await handle(nl, res);
+        expect(emitted).toBe(true);
     });
 });

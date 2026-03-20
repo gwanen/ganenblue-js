@@ -1,1777 +1,2003 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GANENBLUE</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-        :root {
-            --bg-primary: #05060b;
-            --bg-secondary: rgba(13, 14, 24, 0.8);
-            --bg-tertiary: rgba(22, 23, 38, 0.7);
-            --bg-glass: rgba(255, 255, 255, 0.02);
-            --text-primary: #e2e8f0;
-            --text-secondary: #64748b;
-            --accent-blue: #60a5fa;
-            --accent-green: #34d399;
-            --accent-red: #f87171;
-            --accent-yellow: #fbbf24;
-            --accent-purple: #a78bfa;
-            --border: rgba(255, 255, 255, 0.05);
-            --glow-blue: rgba(96, 165, 250, 0.3);
-            --glass-blur: blur(16px);
-            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            --btn-sq: 30px;
-            --btn-gap: 6px;
-            --space-xs: 4px;
-            --space-sm: 8px;
-            --space-md: 12px;
-            --space-lg: 16px;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1b3e 100%);
-            color: var(--text-primary);
-            padding: 12px;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 14px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            margin-bottom: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .logo {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, var(--accent-blue), #6366f1);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 18px;
-            box-shadow: 0 0 15px var(--glow-blue);
-        }
-
-        h1 {
-            font-size: 20px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-blue), #6366f1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -0.5px;
-        }
-
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            user-select: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status-badge::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
-            flex-shrink: 0;
-        }
-
-        .status-badge:hover {
-            filter: brightness(1.2);
-        }
-
-        .status-Stopped {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--accent-red);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .status-Running {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-green);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-            animation: pulse-glow 2s infinite;
-        }
-
-        .status-Paused {
-            background: rgba(245, 158, 11, 0.1);
-            color: #f59e0b;
-            border: 1px solid rgba(245, 158, 11, 0.2);
-            box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
-            animation: pulse-glow-paused 2s infinite;
-        }
-
-        @keyframes pulse-glow-paused {
-            0%, 100% {
-                box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
-            }
-            50% {
-                box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
-            }
-        }
-
-        @keyframes pulse-glow {
-
-            0%,
-            100% {
-                box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-            }
-
-            50% {
-                box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
-            }
-        }
-
-        .container {
-            display: grid;
-            grid-template-columns: 240px 1fr;
-            gap: 12px;
-            height: calc(100vh - 80px);
-        }
-
-        .panel {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: var(--space-md);
-            box-shadow: var(--card-shadow);
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            overflow-y: auto;
-            overflow-x: hidden;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .panel:hover {
-            border-color: rgba(255, 255, 255, 0.1);
-            background: rgba(13, 14, 24, 0.9);
-        }
-
-        .panel h3 {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .form-group {
-            margin-bottom: var(--space-md);
-            padding: 0 var(--space-sm);
-        }
-
-        label {
-            display: block;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 4px;
-        }
-
-        input,
-        select {
-            width: 100%;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            padding: 6px 8px;
-            border-radius: 6px;
-            font-size: 13px;
-            transition: all 0.2s ease;
-        }
-
-        input:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        button {
-            width: 100%;
-            padding: 6px 8px;
-            border: none;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        button:hover:not(:disabled) {
-            filter: brightness(1.1);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-launch {
-            background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0.05));
-            border: 1px solid rgba(96, 165, 250, 0.3);
-            color: var(--text-primary);
-            font-size: 15px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 700;
-            border-radius: 6px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-
-        .btn-launch:hover:not(:disabled) {
-            background: rgba(96, 165, 250, 0.2);
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 20px rgba(96, 165, 250, 0.2);
-            transform: translateY(-1px);
-        }
-
-        .btn-group {
-            display: flex;
-            gap: var(--btn-gap);
-            margin-top: 6px;
-            align-items: center;
-        }
-
-        /* All buttons in btn-group inherit uniform size */
-        .btn-group .btn-square,
-        .btn-group .btn-start,
-        .btn-group .btn-stop,
-        .btn-group .btn-launch {
-            width: var(--btn-sq);
-            height: var(--btn-sq);
-            min-height: var(--btn-sq);
-            max-height: var(--btn-sq);
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 15px;
-            border-radius: 6px;
-            margin: 0;
-            flex-shrink: 0;
-            cursor: pointer;
-            position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            transition: all 0.2s ease;
-        }
-
-        .btn-start {
-            background: linear-gradient(135deg, #065f46, #064e3b) !important;
-            color: #d1fae5;
-            box-shadow: 0 4px 12px rgba(6, 95, 70, 0.3);
-        }
-
-        .btn-start:hover:not(:disabled) {
-            box-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
-        }
-
-        .btn-stop {
-            background: linear-gradient(135deg, #991b1b, #7f1d1d) !important;
-            color: #fee2e2;
-            box-shadow: 0 4px 12px rgba(153, 27, 27, 0.3);
-        }
-
-        .btn-stop:hover:not(:disabled) {
-            box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
-        }
-
-        .btn-stop.btn-resume {
-            background: linear-gradient(135deg, #b45309, #92400e) !important;
-            color: #fef3c7;
-            box-shadow: 0 4px 12px rgba(180, 83, 9, 0.3);
-        }
-
-        .btn-stop.btn-resume:hover:not(:disabled) {
-            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
-        }
-
-        .btn-stop.btn-resume::before {
-            content: '▶';
-            background: transparent;
-            font-size: 16px;
-            transform: translate(-45%, -50%);
-        }
-
-        /* Fix Stop Icon Centering (Square emoji often has built-in offset) */
-        .btn-stop::before {
-            content: '';
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            background: currentColor;
-            border-radius: 1px;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        .btn-reset {
-            background: #2e3b5c !important;
-            color: #e0e7ff;
-        }
-
-        #log-container {
-            height: 300px;
-            /* Adjusted for better history visibility */
-            overflow-y: auto;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            font-size: 13px;
-            background: var(--bg-tertiary);
-            padding: 10px;
-            border-radius: 8px;
-            line-height: 1.4;
-            border: 1px solid var(--border);
-        }
-
-        .log-entry {
-            margin-bottom: 2px;
-            padding: 3px 6px;
-            border-radius: 4px;
-            border-left: 2px solid transparent;
-            transition: all 0.15s ease;
-            font-size: 12px;
-        }
-
-        .log-entry:hover {
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .log-time {
-            color: var(--text-secondary);
-            font-size: 11px;
-            font-weight: 500;
-            margin-right: 8px;
-        }
-
-
-        .log-tag {
-            font-weight: 700;
-            margin-right: 2px;
-            text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.5px;
-        }
-
-        .log-tag-system {
-            color: #94a3b8;
-        }
-
-        /* Slate */
-        .log-tag-battle {
-            color: #60a5fa;
-        }
-
-        /* Blue */
-        .log-tag-quest {
-            color: #a78bfa;
-        }
-
-        /* Purple */
-        .log-tag-raid {
-            color: #f472b6;
-        }
-
-        /* Pink */
-        .log-tag-safety {
-            color: #fb7185;
-        }
-
-        /* Rose */
-        /* P1 Profile uses inline var(--accent-blue) */
-        /* P2 Profile uses inline var(--accent-red) */
-
-        .log-tag-browser {
-            color: var(--accent-blue);
-        }
-
-        /* Blue */
-        .log-tag-wait {
-            color: #fbbf24;
-        }
-
-        /* Amber */
-        .log-tag-error {
-            color: #ef4444;
-        }
-
-        /* Red */
-        .log-tag-fa {
-            color: #818cf8;
-        }
-
-        /* Indigo */
-        .log-tag-sa {
-            color: #818cf8;
-        }
-
-        /* Indigo */
-        .log-tag-summon {
-            color: #c084fc;
-        }
-
-        /* Fuchsia */
-        .log-tag-core {
-            color: #2dd4bf;
-        }
-
-        /* Teal */
-        .log-tag-performance {
-            color: #a3e635;
-        }
-
-        /* Lime */
-        .log-tag-target {
-            color: #facc15;
-        }
-
-        /* Yellow */
-        .log-tag-cleared {
-            color: #4ade80;
-        }
-
-        .log-tag-turn {
-            color: var(--accent-red);
-            font-weight: 800;
-        }
-
-        .log-tag-honor {
-            color: var(--accent-yellow);
-        }
-
-        .log-tag-full {
-            color: #fb923c;
-            /* Orange */
-        }
-
-        /* Bronze */
-
-        .log-level-info,
-        .log-level-warn,
-        .log-level-error,
-        .log-level-success {
-            font-weight: 400 !important;
-        }
-
-        .log-level-info {
-            border-left-color: var(--accent-blue) !important;
-        }
-
-        .log-level-success {
-            border-left-color: var(--accent-green) !important;
-        }
-
-        .log-level-warn {
-            border-left-color: var(--accent-yellow) !important;
-        }
-
-        .log-level-error {
-            border-left-color: var(--accent-red) !important;
-        }
-
-        .button-section {
-            margin-bottom: 12px;
-            padding: var(--space-sm) var(--space-md);
-            background: var(--bg-glass);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-
-        .button-section h4 {
-            margin: 0 0 6px 0;
-            padding: 0;
-            border: none;
-        }
-
-        .button-section button {
-            margin-top: 0;
-        }
-
-        .button-section button+button {
-            margin-top: 8px;
-        }
-
-        hr {
-            border: none;
-            border-top: 1px solid var(--border);
-            margin: 12px 0;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent-blue);
-        }
-
-        /* Toast Notifications */
-        .toast-container {
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            pointer-events: none;
-        }
-
-        .toast {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 14px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            transform: translateX(400px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            min-width: 260px;
-            pointer-events: auto;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .toast.show {
-            transform: translateX(0);
-            opacity: 1;
-        }
-
-        .toast-success {
-            border-left: 3px solid var(--accent-green);
-        }
-
-        .toast-warning {
-            border-left: 3px solid var(--accent-yellow);
-        }
-
-        .toast-error {
-            border-left: 3px solid var(--accent-red);
-        }
-
-        .toast-info {
-            border-left: 3px solid var(--accent-blue);
-        }
-
-        .toast-icon {
-            font-size: 16px;
-            flex-shrink: 0;
-        }
-
-        .toast-message {
-            flex: 1;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        /* Stats Cards */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 4px;
-            text-align: center;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .stat-card:hover {
-            transform: translateY(-1px);
-            border-color: var(--accent-blue);
-        }
-
-        .stat-value {
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 1px;
-        }
-
-        .stat-label {
-            font-size: 9px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            font-weight: 500;
-        }
-
-        /* Progress Bar */
-        .progress-section {
-            margin-bottom: 20px;
-        }
-
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .progress-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .progress-percent {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--accent-blue);
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent-blue), #6366f1);
-            border-radius: 4px;
-            transition: width 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .progress-shine {
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-            animation: shine 2s infinite;
-        }
-
-        @keyframes shine {
-            to {
-                left: 100%;
-            }
-        }
-
-        .progress-meta {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 6px;
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            vertical-align: middle;
-            margin-right: 6px;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        button.loading {
-            pointer-events: none;
-            opacity: 0.8;
-        }
-
-        /* Input Validation */
-        .input-error {
-            border-color: var(--accent-red) !important;
-            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
-        }
-
-        .error-message {
-            color: var(--accent-red);
-            font-size: 11px;
-            margin-top: 4px;
-            display: none;
-            font-weight: 500;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .input-success {
-            border-color: var(--accent-green) !important;
-        }
-
-        /* Collapsible Sections */
-        .collapsible-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            padding: 10px 0;
-            margin: 16px 0 8px 0;
-            border-top: 1px solid var(--border);
-            user-select: none;
-        }
-
-        .collapsible-header:hover {
-            color: var(--accent-blue);
-        }
-
-        .collapsible-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .collapsible-chevron {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        .collapsible-header:hover .collapsible-chevron {
-            color: var(--accent-blue);
-        }
-
-        .collapsible-content {
-            display: none;
-        }
-
-        .collapsible-content.open {
-            display: block;
-        }
-
-        /* Keyboard Shortcut Hint */
-        .kbd {
-            display: inline-block;
-            padding: 2px 6px;
-            font-size: 10px;
-            font-weight: 600;
-            line-height: 1;
-            color: var(--text-secondary);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            margin-left: 8px;
-            font-family: monospace;
-        }
-
-        /* Compact Mode */
-        body.compact-mode .controls-panel {
-            display: none;
-        }
-
-        body.compact-mode .container {
-            grid-template-columns: 1fr;
-            height: calc(100vh - 80px);
-            /* Fill space */
-        }
-
-
-
-        /* Log Highlights */
-        .log-highlight-battle {
-            color: var(--accent-red);
-            font-weight: bold;
-        }
-
-        .log-highlight-loot {
-            color: var(--accent-yellow);
-            font-weight: bold;
-        }
-
-        .log-highlight-success {
-            color: var(--accent-green);
-            font-weight: bold;
-        }
-
-        /* Header Actions */
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn-icon {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            width: 30px;
-            height: 30px;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            margin-top: 0;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-icon:hover {
-            border-color: var(--accent-blue);
-            color: var(--accent-blue);
-        }
-
-        /* Log Filter Buttons */
-        .log-filters {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 8px;
-        }
-
-        .btn-filter {
-            width: auto;
-            min-width: 45px;
-            padding: 3px 6px;
-            font-size: 9px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            margin: 0;
-            opacity: 0.8;
-        }
-
-        .btn-filter.active {
-            background: var(--accent-blue);
-            color: white;
-            border-color: var(--accent-blue);
-            opacity: 1;
-        }
-
-        .btn-filter:hover {
-            opacity: 1;
-            border-color: var(--accent-blue);
-        }
-
-        /* Profile Tabs */
-        .profile-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-            padding: 0 4px;
-        }
-
-        .tab-button {
-            padding: 8px 16px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            user-select: none;
-            flex: 1;
-            text-align: center;
-        }
-
-        .tab-button:hover {
-            background: rgba(255, 255, 255, 0.05);
-            font-size: 11px;
-            height: 24px;
-        }
-
-        label {
-            font-size: 10px;
-            margin-bottom: 1px;
-        }
-
-        h3 {
-            font-size: 12px;
-            margin-bottom: 4px;
-            padding-bottom: 2px;
-        }
-
-        .profile-header h2 {
-            font-size: 13px;
-            margin: 0;
-        }
-
-        .profile-header {
-            margin-bottom: 4px;
-            padding: 0 4px;
-        }
-
-        .profile-name-input {
-            background: transparent;
-            border: 1px solid transparent;
-            color: var(--text-primary);
-            font-size: 13px;
-            font-weight: 600;
-            padding: 2px 4px;
-            flex: 1;
-            min-width: 0;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .profile-name-input:hover,
-        .profile-name-input:focus {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.1);
-            outline: none;
-        }
-
-        .log-controls {
-            display: flex;
-            gap: 6px;
-        }
-
-
-
-        /* Collapsible Compact */
-        .collapsible-header {
-            padding: 4px 8px;
-            margin: 4px 0 2px 0;
-        }
-
-        .collapsible-title {
-            font-size: 11px;
-        }
-
-        .tab-button.active {
-            background: var(--accent-blue);
-            color: white;
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-        }
-
-        /* Split View Layout */
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            height: calc(100vh - 24px);
-        }
-
-        .split-view {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            flex: 1;
-            min-height: 0;
-        }
-
-        .profile-column {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 12px;
-            padding: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            overflow-y: auto;
-        }
-
-        .profile-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px;
-            margin-bottom: 8px;
-        }
-
-        .stats-summary {
-            background: rgba(0, 0, 0, 0.15);
-            padding: var(--space-sm) var(--space-md);
-            margin: var(--space-sm) 0;
-            border-radius: 6px;
-            font-size: 11px;
-        }
-
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 6px;
-            color: var(--text-secondary);
-        }
-
-        .stat-val {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .stat-row:last-child {
-            margin-bottom: 0;
-        }
-
-        /* Shared Logs Panel */
-        .logs-panel {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 100vh;
-            background: var(--bg-primary);
-            border-top: 1px solid var(--border);
-            z-index: 100;
-            padding: 12px;
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .logs-panel.hidden {
-            transform: translateY(110%);
-        }
-
-        .panel-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--space-sm);
-        }
-
-        .activity-logs-title {
-            margin-bottom: 0;
-            border-bottom: none;
-            padding-bottom: 0;
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        .log-tabs-container {
-            display: flex;
-            gap: var(--space-xs);
-            margin-bottom: var(--space-sm);
-        }
-
-        .log-tab {
-            flex: 1;
-            padding: 5px 8px;
-            font-size: 11px;
-            font-weight: 700;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            transition: all 0.2s;
-        }
-
-        .log-tab-active {
-            border-color: rgba(96, 165, 250, 0.4);
-            background: rgba(96, 165, 250, 0.15);
-            color: var(--accent-blue);
-        }
-
-        .btn-header {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-header:hover {
-            color: var(--text-primary);
-            border-color: var(--accent-blue);
-        }
-
-        .btn-primary-small {
-            background: var(--accent-blue);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 12px;
-            font-size: 11px;
-            margin-top: 6px;
-            cursor: pointer;
-        }
-
-        .log-container-tab {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            font-size: 13px;
-            background: rgba(22, 23, 38, 0.7);
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            line-height: 1.4;
-        }
-
-        .btn-scroll-bottom {
-            position: absolute;
-            bottom: 20px;
-            right: 30px;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: var(--accent-blue);
-            color: white;
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            transition: all 0.2s ease;
-            z-index: 101;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .btn-scroll-bottom.visible {
-            opacity: 0.4;
-            pointer-events: auto;
-        }
-
-        .btn-scroll-bottom.visible:hover {
-            opacity: 0.9;
-            transform: translateY(-2px);
-        }
-
-        /* Checkbox Custom Style */
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            user-select: none;
-            font-size: 11px;
-            color: var(--text-secondary);
-            padding: 0 8px;
-            /* Added left/right padding */
-        }
-
-        .checkbox-container input {
-            cursor: pointer;
-            margin: 0;
-            width: 13px;
-            height: 13px;
-            accent-color: var(--accent-blue);
-        }
-
-        .checkbox-container:hover {
-            color: var(--text-primary);
-        }
- 
-        /* Layout utility classes */
-        .mt-xs { margin-top: var(--space-xs); }
-        .mt-sm { margin-top: var(--space-sm); }
- 
-        .row-between {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin: var(--space-xs) 0;
-        }
- 
-        .row-between label {
-            margin: 0;
-            cursor: pointer;
-        }
- 
-        .row-between input[type="checkbox"] {
-            width: auto;
-            margin: 0;
-            flex-shrink: 0;
-        }
-
-        .btn-grow {
-            flex: none !important;
-            width: 32px !important;
-            margin-top: 0 !important;
-        }
-
-        /* Logs Panel Resize Handle */
-        .logs-resize-handle {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 6px;
-            cursor: ns-resize;
-            background: transparent;
-            border-radius: 3px 3px 0 0;
-            transition: background 0.2s;
-            z-index: 10;
-        }
-
-        .logs-resize-handle:hover,
-        .logs-resize-handle.dragging {
-            background: rgba(96, 165, 250, 0.35);
-        }
-
-        /* Compact Mode adjustments for Split View */
-        /* body.compact-mode .profile-column {} */
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+      :root {
+        --bg-primary: #05060b;
+        --bg-secondary: rgba(13, 14, 24, 0.8);
+        --bg-tertiary: rgba(22, 23, 38, 0.7);
+        --bg-glass: rgba(255, 255, 255, 0.02);
+        --text-primary: #e2e8f0;
+        --text-secondary: #64748b;
+        --accent-blue: #60a5fa;
+        --accent-green: #34d399;
+        --accent-red: #f87171;
+        --accent-yellow: #fbbf24;
+        --accent-purple: #a78bfa;
+        --border: rgba(255, 255, 255, 0.05);
+        --glow-blue: rgba(96, 165, 250, 0.3);
+        --glass-blur: blur(16px);
+        --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        --btn-sq: 30px;
+        --btn-gap: 6px;
+        --space-xs: 4px;
+        --space-sm: 8px;
+        --space-md: 12px;
+        --space-lg: 16px;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1b3e 100%);
+        color: var(--text-primary);
+        padding: 12px;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* Header */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .logo {
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, var(--accent-blue), #6366f1);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 18px;
+        box-shadow: 0 0 15px var(--glow-blue);
+      }
+
+      h1 {
+        font-size: 20px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--accent-blue), #6366f1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.5px;
+      }
+
+      .status-badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        user-select: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .status-badge::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+      }
+
+      .status-badge:hover {
+        filter: brightness(1.2);
+      }
+
+      .status-Stopped {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--accent-red);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+      }
+
+      .status-Running {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--accent-green);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+        animation: pulse-glow 2s infinite;
+      }
+
+      .status-Paused {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+        animation: pulse-glow-paused 2s infinite;
+      }
+
+      @keyframes pulse-glow-paused {
+        0%,
+        100% {
+          box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+        }
+        50% {
+          box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+        }
+      }
+
+      @keyframes pulse-glow {
+        0%,
+        100% {
+          box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+        }
+
+        50% {
+          box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+        }
+      }
+
+      .container {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 12px;
+        height: calc(100vh - 80px);
+      }
+
+      .panel {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: var(--space-md);
+        box-shadow: var(--card-shadow);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        overflow-y: auto;
+        overflow-x: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .panel:hover {
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(13, 14, 24, 0.9);
+      }
+
+      .panel h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .form-group {
+        margin-bottom: var(--space-md);
+        padding: 0;
+      }
+
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        transition: all 0.2s ease;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      button {
+        width: 100%;
+        padding: 6px 8px;
+        border: none;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-top: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      button:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-launch {
+        background: linear-gradient(
+          135deg,
+          rgba(96, 165, 250, 0.1),
+          rgba(96, 165, 250, 0.05)
+        );
+        border: 1px solid rgba(96, 165, 250, 0.3);
+        color: var(--text-primary);
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        border-radius: 6px;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .btn-launch:hover:not(:disabled) {
+        background: rgba(96, 165, 250, 0.2);
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 20px rgba(96, 165, 250, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .btn-group {
+        display: flex;
+        gap: var(--btn-gap);
+        margin-top: 6px;
+        align-items: center;
+      }
+
+      /* All buttons in btn-group inherit uniform size */
+      .btn-group .btn-square,
+      .btn-group .btn-start,
+      .btn-group .btn-stop,
+      .btn-group .btn-launch {
+        width: var(--btn-sq);
+        height: var(--btn-sq);
+        min-height: var(--btn-sq);
+        max-height: var(--btn-sq);
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        border-radius: 6px;
+        margin: 0;
+        flex-shrink: 0;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .btn-start {
+        background: linear-gradient(135deg, #065f46, #064e3b) !important;
+        color: #d1fae5;
+        box-shadow: 0 4px 12px rgba(6, 95, 70, 0.3);
+      }
+
+      .btn-start:hover:not(:disabled) {
+        box-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
+      }
+
+      .btn-stop {
+        background: linear-gradient(135deg, #991b1b, #7f1d1d) !important;
+        color: #fee2e2;
+        box-shadow: 0 4px 12px rgba(153, 27, 27, 0.3);
+      }
+
+      .btn-stop:hover:not(:disabled) {
+        box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
+      }
+
+      .btn-stop.btn-resume {
+        background: linear-gradient(135deg, #b45309, #92400e) !important;
+        color: #fef3c7;
+        box-shadow: 0 4px 12px rgba(180, 83, 9, 0.3);
+      }
+
+      .btn-stop.btn-resume:hover:not(:disabled) {
+        box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+      }
+
+      .btn-stop.btn-resume::before {
+        content: "▶";
+        background: transparent;
+        font-size: 15px;
+        transform: translateX(1px);
+        position: static;
+      }
+
+      /* Fix Stop Icon Centering (Square emoji often has built-in offset) */
+      .btn-stop::before {
+        content: "";
+        width: 12px;
+        height: 12px;
+        background: currentColor;
+        border-radius: 1px;
+        display: block;
+      }
+
+      .btn-reset {
+        background: #2e3b5c !important;
+        color: #e0e7ff;
+      }
+
+      #log-container {
+        height: 300px;
+        /* Adjusted for better history visibility */
+        overflow-y: auto;
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 13px;
+        background: var(--bg-tertiary);
+        padding: 10px;
+        border-radius: 8px;
+        line-height: 1.4;
+        border: 1px solid var(--border);
+      }
+
+      .log-entry {
+        margin-bottom: 2px;
+        padding: 3px 6px;
+        border-radius: 4px;
+        border-left: 2px solid transparent;
+        transition: all 0.15s ease;
+        font-size: 12px;
+      }
+
+      .log-entry:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .log-time {
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 500;
+        margin-right: 8px;
+      }
+
+      .log-tag {
+        font-weight: 700;
+        margin-right: 2px;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+      }
+
+      .log-tag-system {
+        color: #94a3b8;
+      }
+
+      /* Slate */
+      .log-tag-battle {
+        color: #60a5fa;
+      }
+
+      /* Blue */
+      .log-tag-quest {
+        color: #a78bfa;
+      }
+
+      /* Purple */
+      .log-tag-raid {
+        color: #f472b6;
+      }
+
+      /* Pink */
+      .log-tag-safety {
+        color: #fb7185;
+      }
+
+      /* Rose */
+      /* P1 Profile uses inline var(--accent-blue) */
+      /* P2 Profile uses inline var(--accent-red) */
+
+      .log-tag-browser {
+        color: var(--accent-blue);
+      }
+
+      /* Blue */
+      .log-tag-wait {
+        color: #fbbf24;
+      }
+
+      /* Amber */
+      .log-tag-error {
+        color: #ef4444;
+      }
+
+      /* Red */
+      .log-tag-fa {
+        color: #818cf8;
+      }
+
+      /* Indigo */
+      .log-tag-sa {
+        color: #818cf8;
+      }
+
+      /* Indigo */
+      .log-tag-summon {
+        color: #c084fc;
+      }
+
+      /* Fuchsia */
+      .log-tag-core {
+        color: #2dd4bf;
+      }
+
+      /* Teal */
+      .log-tag-performance {
+        color: #a3e635;
+      }
+
+      /* Lime */
+      .log-tag-target {
+        color: #facc15;
+      }
+
+      /* Yellow */
+      .log-tag-cleared {
+        color: #4ade80;
+      }
+
+      .log-tag-turn {
+        color: var(--accent-red);
+        font-weight: 800;
+      }
+
+      .log-tag-honor {
+        color: var(--accent-yellow);
+      }
+
+      .log-tag-full {
+        color: #fb923c;
+        /* Orange */
+      }
+
+      /* Bronze */
+
+      .log-level-info,
+      .log-level-warn,
+      .log-level-error,
+      .log-level-success {
+        font-weight: 400 !important;
+      }
+
+      .log-level-info {
+        border-left-color: var(--accent-blue) !important;
+      }
+
+      .log-level-success {
+        border-left-color: var(--accent-green) !important;
+      }
+
+      .log-level-warn {
+        border-left-color: var(--accent-yellow) !important;
+      }
+
+      .log-level-error {
+        border-left-color: var(--accent-red) !important;
+      }
+
+      .button-section {
+        margin-bottom: 12px;
+        padding: var(--space-sm) 0;
+        background: transparent;
+        border-radius: 8px;
+        border: none;
+      }
+
+      .button-section h4 {
+        margin: 0 0 6px 0;
+        padding: 0;
+        border: none;
+      }
+
+      .button-section button {
+        margin-top: 0;
+      }
+
+      .button-section button + button {
+        margin-top: 8px;
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 12px 0;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-blue);
+      }
+
+      /* Toast Notifications */
+      .toast-container {
+        position: fixed;
+        top: 60px;
+        right: 20px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .toast {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        transform: translateX(400px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        min-width: 260px;
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .toast.show {
+        transform: translateX(0);
+        opacity: 1;
+      }
+
+      .toast-success {
+        border-left: 3px solid var(--accent-green);
+      }
+
+      .toast-warning {
+        border-left: 3px solid var(--accent-yellow);
+      }
+
+      .toast-error {
+        border-left: 3px solid var(--accent-red);
+      }
+
+      .toast-info {
+        border-left: 3px solid var(--accent-blue);
+      }
+
+      .toast-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+
+      .toast-message {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      /* Stats Cards */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .stat-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 4px;
+        text-align: center;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .stat-card:hover {
+        transform: translateY(-1px);
+        border-color: var(--accent-blue);
+      }
+
+      .stat-value {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 1px;
+      }
+
+      .stat-label {
+        font-size: 9px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        font-weight: 500;
+      }
+
+      /* Progress Bar */
+      .progress-section {
+        margin-bottom: 20px;
+      }
+
+      .progress-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .progress-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .progress-percent {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent-blue);
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: var(--bg-tertiary);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent-blue), #6366f1);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .progress-shine {
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.3),
+          transparent
+        );
+        animation: shine 2s infinite;
+      }
+
+      @keyframes shine {
+        to {
+          left: 100%;
+        }
+      }
+
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+
+      /* Loading Spinner */
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      button.loading {
+        pointer-events: none;
+        opacity: 0.8;
+      }
+
+      /* Input Validation */
+      .input-error {
+        border-color: var(--accent-red) !important;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+      }
+
+      .error-message {
+        color: var(--accent-red);
+        font-size: 11px;
+        margin-top: 4px;
+        display: none;
+        font-weight: 500;
+      }
+
+      .error-message.show {
+        display: block;
+      }
+
+      .input-success {
+        border-color: var(--accent-green) !important;
+      }
+
+      /* Collapsible Sections */
+      .collapsible-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        padding: 10px 0;
+        margin: 16px 0 8px 0;
+        border-top: 1px solid var(--border);
+        user-select: none;
+      }
+
+      .collapsible-header:hover {
+        color: var(--accent-blue);
+      }
+
+      .collapsible-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .collapsible-chevron {
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .collapsible-header:hover .collapsible-chevron {
+        color: var(--accent-blue);
+      }
+
+      .collapsible-content {
+        display: none;
+      }
+
+      .collapsible-content.open {
+        display: block;
+      }
+
+      /* Keyboard Shortcut Hint */
+      .kbd {
+        display: inline-block;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        margin-left: 8px;
+        font-family: monospace;
+      }
+
+      /* Compact Mode */
+      body.compact-mode .controls-panel {
+        display: none;
+      }
+
+      body.compact-mode .container {
+        grid-template-columns: 1fr;
+        height: calc(100vh - 80px);
+        /* Fill space */
+      }
+
+      /* Log Highlights */
+      .log-highlight-battle {
+        color: var(--accent-red);
+        font-weight: bold;
+      }
+
+      .log-highlight-loot {
+        color: var(--accent-yellow);
+        font-weight: bold;
+      }
+
+      .log-highlight-success {
+        color: var(--accent-green);
+        font-weight: bold;
+      }
+
+      /* Header Actions */
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .btn-icon {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        margin-top: 0;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-icon:hover {
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+      }
+
+      /* Log Filter Buttons */
+      .log-filters {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+
+      .btn-filter {
+        width: auto;
+        min-width: 45px;
+        padding: 3px 6px;
+        font-size: 9px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        margin: 0;
+        opacity: 0.8;
+      }
+
+      .btn-filter.active {
+        background: var(--accent-blue);
+        color: white;
+        border-color: var(--accent-blue);
+        opacity: 1;
+      }
+
+      .btn-filter:hover {
+        opacity: 1;
+        border-color: var(--accent-blue);
+      }
+
+      /* Profile Tabs */
+      .profile-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+        padding: 0 4px;
+      }
+
+      .tab-button {
+        padding: 8px 16px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        flex: 1;
+        text-align: center;
+      }
+
+      .tab-button:hover {
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+        height: 24px;
+      }
+
+      label {
+        font-size: 10px;
+        margin-bottom: 1px;
+      }
+
+      h3 {
+        font-size: 12px;
+        margin-bottom: 4px;
+        padding-bottom: 2px;
+      }
+
+      .profile-header h2 {
+        font-size: 13px;
+        margin: 0;
+      }
+
+      .profile-header {
+        margin-bottom: 4px;
+        padding: 0 4px;
+      }
+
+      .profile-name-input {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-primary);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 2px 4px;
+        flex: 1;
+        min-width: 0;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .profile-name-input:hover,
+      .profile-name-input:focus {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        outline: none;
+      }
+
+      .log-controls {
+        display: flex;
+        gap: 6px;
+      }
+
+      /* Collapsible Compact */
+      .collapsible-header {
+        padding: 4px 8px;
+        margin: 4px 0 2px 0;
+      }
+
+      .collapsible-title {
+        font-size: 11px;
+      }
+
+      .tab-button.active {
+        background: var(--accent-blue);
+        color: white;
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+      }
+
+      /* Split View Layout */
+      .app-container {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 24px);
+      }
+
+      .split-view {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .profile-column {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 12px;
+        padding: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        overflow-y: auto;
+      }
+
+      .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+      }
+
+      .stats-summary {
+        background: rgba(0, 0, 0, 0.15);
+        padding: var(--space-sm) var(--space-md);
+        margin: var(--space-sm) 0;
+        border-radius: 6px;
+        font-size: 11px;
+      }
+
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        color: var(--text-secondary);
+      }
+
+      .stat-val {
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+
+      .stat-row:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Shared Logs Panel */
+      .logs-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100vh;
+        background: var(--bg-primary);
+        border-top: 1px solid var(--border);
+        z-index: 100;
+        padding: 12px;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .logs-panel.hidden {
+        transform: translateY(110%);
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-sm);
+      }
+
+      .activity-logs-title {
+        margin-bottom: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .log-tabs-container {
+        display: flex;
+        gap: var(--space-xs);
+        margin-bottom: var(--space-sm);
+      }
+
+      .log-tab {
+        flex: 1;
+        padding: 5px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.2s;
+      }
+
+      .log-tab-active {
+        border-color: rgba(96, 165, 250, 0.4);
+        background: rgba(96, 165, 250, 0.15);
+        color: var(--accent-blue);
+      }
+
+      .btn-header {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-header:hover {
+        color: var(--text-primary);
+        border-color: var(--accent-blue);
+      }
+
+      .btn-primary-small {
+        background: var(--accent-blue);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 12px;
+        font-size: 11px;
+        margin-top: 6px;
+        cursor: pointer;
+      }
+
+      .log-container-tab {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        font-size: 13px;
+        background: rgba(22, 23, 38, 0.7);
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        line-height: 1.4;
+      }
+
+      .btn-scroll-bottom {
+        position: absolute;
+        bottom: 20px;
+        right: 30px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent-blue);
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        transition: all 0.2s ease;
+        z-index: 101;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .btn-scroll-bottom.visible {
+        opacity: 0.4;
+        pointer-events: auto;
+      }
+
+      .btn-scroll-bottom.visible:hover {
+        opacity: 0.9;
+        transform: translateY(-2px);
+      }
+
+      /* Checkbox Custom Style */
+      .checkbox-container {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+        font-size: 11px;
+        color: var(--text-secondary);
+        padding: 0 8px;
+        /* Added left/right padding */
+      }
+
+      .checkbox-container input {
+        cursor: pointer;
+        margin: 0;
+        width: 13px;
+        height: 13px;
+        accent-color: var(--accent-blue);
+      }
+
+      .checkbox-container:hover {
+        color: var(--text-primary);
+      }
+
+      /* Layout utility classes */
+      .mt-xs {
+        margin-top: var(--space-xs);
+      }
+      .mt-sm {
+        margin-top: var(--space-sm);
+      }
+
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: var(--space-xs) 0;
+      }
+
+      .row-between label {
+        margin: 0;
+        cursor: pointer;
+      }
+
+      .row-between input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        flex-shrink: 0;
+      }
+
+      .btn-grow {
+        flex: none !important;
+        width: var(--btn-sq) !important;
+        margin-top: 0 !important;
+      }
+
+      /* Logs Panel Resize Handle */
+      .logs-resize-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 6px;
+        cursor: ns-resize;
+        background: transparent;
+        border-radius: 3px 3px 0 0;
+        transition: background 0.2s;
+        z-index: 10;
+      }
+
+      .logs-resize-handle:hover,
+      .logs-resize-handle.dragging {
+        background: rgba(96, 165, 250, 0.35);
+      }
+
+      /* Compact Mode adjustments for Split View */
+      /* body.compact-mode .profile-column {} */
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toast-container"></div>
 
     <!-- Main App Container -->
     <div class="app-container">
-        <!-- Header -->
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <div class="logo">GB</div>
-                <h1>Ganenblue</h1>
+      <!-- Header -->
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left">
+          <div class="logo">GB</div>
+          <h1>Ganenblue</h1>
+        </div>
+        <div class="header-right">
+          <button id="btn-test-sound" class="btn-icon" title="Test Alert Sound">
+            🔔
+          </button>
+          <button id="btn-show-logs" class="btn-icon" title="Show Logs">
+            📜
+          </button>
+          <button id="btn-toggle-p2" class="btn-icon" title="Hide Profile 2">
+            👁️
+          </button>
+        </div>
+      </div>
+
+      <!-- Split View Container -->
+      <div class="split-view">
+        <!-- Profile 1 Column -->
+        <div class="profile-column" id="col-p1">
+          <div class="profile-header">
+            <input
+              type="text"
+              id="profile-name-p1"
+              class="profile-name-input"
+              value="Profile 1"
+            />
+            <div id="status-badge-p1" class="status-badge status-Stopped">
+              Stopped
             </div>
-            <div class="header-right">
-                <button id="btn-test-sound" class="btn-icon" title="Test Alert Sound">🔔</button>
-                <button id="btn-show-logs" class="btn-icon" title="Show Logs">📜</button>
-                <button id="btn-toggle-p2" class="btn-icon" title="Hide Profile 2">👁️</button>
+          </div>
+
+          <div class="panel controls-panel">
+            <div class="button-section">
+              <div class="btn-group">
+                <button
+                  id="btn-start-p1"
+                  class="btn-square btn-start"
+                  title="Start Farming"
+                  disabled
+                >
+                  ▶
+                </button>
+                <button
+                  id="btn-stop-p1"
+                  class="btn-square btn-stop"
+                  title="Stop Bot"
+                  disabled
+                ></button>
+                <button
+                  id="btn-launch-p1"
+                  class="btn-square btn-launch btn-grow"
+                  title="Open Browser"
+                >
+                  🌐
+                </button>
+              </div>
             </div>
+
+            <h3>Farming Setup</h3>
+
+            <div class="form-group">
+              <label for="bot-mode-p1">Bot Mode</label>
+              <select id="bot-mode-p1">
+                <option value="quest">Quest / Event</option>
+                <option value="raid">Raid / Multi</option>
+                <option value="replicard">Replicard (Sandbox)</option>
+                <option value="xeno_replicard">Xeno Replicard</option>
+                <option value="skip">Skip Nightmare</option>
+              </select>
+            </div>
+
+            <!-- Zone Selection (Xeno Only) -->
+            <div class="form-group" id="zone-group-p1" style="display: none">
+              <label>Zone</label>
+              <select id="zone-p1">
+                <option value="6">Invidia (ID: 6)</option>
+                <option value="7">Joculator (ID: 7)</option>
+                <option value="8">Kalendae (ID: 8)</option>
+                <option value="9">Liber (ID: 9)</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="quest-url-group-p1">
+              <label for="quest-url-p1">Quest / Raid URL</label>
+              <input
+                type="text"
+                id="quest-url-p1"
+                placeholder="http://game.granbluefantasy.jp/#quest/supporter/..."
+                autocomplete="off"
+              />
+              <div class="error-message" id="quest-url-error-p1">
+                Invalid URL format
+              </div>
+            </div>
+
+            <div
+              class="form-group"
+              id="honor-target-group-p1"
+              style="display: none"
+            >
+              <label for="honor-target-p1">Honor Target (0 = Full Raid)</label>
+              <input
+                type="text"
+                id="honor-target-p1"
+                value="0"
+                placeholder="e.g. 1.000.000"
+              />
+            </div>
+
+            <div
+              class="form-group"
+              id="raid-target-group-p1"
+              style="display: none"
+            >
+              <label for="raid-target-p1">Target User (Optional)</label>
+              <input
+                type="text"
+                id="raid-target-p1"
+                placeholder="Search for name..."
+              />
+            </div>
+
+            <div class="form-group" id="max-runs-group-p1">
+              <label for="max-runs-p1"
+                ><span id="max-runs-label-p1">Max Quests</span> (0 =
+                Unlimited)</label
+              >
+              <input type="number" id="max-runs-p1" value="0" min="0" />
+            </div>
+
+            <div class="form-group">
+              <label for="battle-mode-p1">Battle Mode</label>
+              <select id="battle-mode-p1">
+                <option value="full_auto">Full Auto</option>
+                <option value="semi_auto">Semi Auto</option>
+              </select>
+            </div>
+
+            <hr />
+
+            <!-- Options Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('options-p1')"
+            >
+              <span class="collapsible-title">⚡ Options</span>
+              <span class="collapsible-chevron" id="options-p1-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="options-p1-content">
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="block-resources-p1" />
+                <span>Block Images</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="fast-refresh-p1" />
+                <span>Fast Refresh</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="refresh-on-start-p1" checked />
+                <span>Refresh on Battle Start</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="summon-refresh-p1" checked />
+                <span>Refresh on Summon</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="skill-refresh-p1" />
+                <span>Refresh on Skill</span>
+              </label>
+            </div>
+
+            <!-- Stats Summary (Mini) -->
+            <div class="stats-summary">
+              <div class="stat-row">
+                <span>Time:</span>
+                <span id="run-timer-p1" class="stat-val">00:00:00</span>
+              </div>
+              <div class="stat-row">
+                <span>Completed:</span>
+                <span id="completed-runs-p1" class="stat-val">0</span>
+              </div>
+              <div class="stat-row">
+                <span>Avg Battle:</span>
+                <span id="avg-battle-p1" class="stat-val">--:--</span>
+              </div>
+              <div class="stat-row">
+                <span>Avg Turns:</span>
+                <span id="avg-turns-p1" class="stat-val">-.-</span>
+              </div>
+              <div class="stat-row">
+                <span>Last Battle:</span>
+                <span id="stat-last-battle-p1" class="stat-val">--:--</span>
+              </div>
+              <div class="stat-row">
+                <span>Rate:</span>
+                <span id="run-rate-p1" class="stat-val">0.0/h</span>
+              </div>
+            </div>
+
+            <hr />
+
+            <!-- Browser/Device Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('device-p1')"
+            >
+              <span class="collapsible-title">🌐 Browser</span>
+              <span class="collapsible-chevron" id="device-p1-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="device-p1-content">
+              <div class="form-group">
+                <label for="browser-type-p1">Type</label>
+                <select id="browser-type-p1">
+                  <option value="chrome">Chrome</option>
+                  <option value="chromium">Chromium</option>
+                  <option value="edge">Edge</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="brave">Brave</option>
+                </select>
+              </div>
+              <div class="row-between">
+                <label for="disable-sandbox-p1">No Sandbox</label>
+                <input type="checkbox" id="disable-sandbox-p1" />
+              </div>
+            </div>
+            <hr />
+            <!-- Credentials Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('credentials-p1')"
+            >
+              <span class="collapsible-title">🔐 Credentials</span>
+              <span class="collapsible-chevron" id="credentials-p1-chevron"
+                >▼</span
+              >
+            </div>
+            <div class="collapsible-content" id="credentials-p1-content">
+              <div class="form-group">
+                <label for="mobage-email-p1">Email</label>
+                <input
+                  type="email"
+                  id="mobage-email-p1"
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div class="form-group">
+                <label for="mobage-password-p1">Password</label>
+                <input
+                  type="password"
+                  id="mobage-password-p1"
+                  placeholder="Password"
+                />
+              </div>
+              <div class="form-group">
+                <button
+                  id="btn-save-credentials-p1"
+                  class="btn-primary-small"
+                  style="width: 100%"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Split View Container -->
-        <div class="split-view">
-            <!-- Profile 1 Column -->
-            <div class="profile-column" id="col-p1">
-                <div class="profile-header">
-                    <input type="text" id="profile-name-p1" class="profile-name-input" value="Profile 1" />
-                    <div id="status-badge-p1" class="status-badge status-Stopped">Stopped</div>
-                </div>
+        <!-- Profile 2 Column -->
+        <div class="profile-column" id="col-p2">
+          <div class="profile-header">
+            <input
+              type="text"
+              id="profile-name-p2"
+              class="profile-name-input"
+              value="Profile 2"
+            />
+            <div id="status-badge-p2" class="status-badge status-Stopped">
+              Stopped
+            </div>
+          </div>
 
-                <div class="panel controls-panel">
-                    <div class="button-section">
-                        <div class="btn-group">
-                            <button id="btn-start-p1" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶</button>
-                            <button id="btn-stop-p1" class="btn-square btn-stop" title="Stop Bot" disabled></button>
-                            <button id="btn-launch-p1" class="btn-square btn-launch btn-grow"
-                                title="Open Browser">🌐</button>
-                        </div>
-                    </div>
-
-
-                    <h3>Farming Setup</h3>
-
-                    <div class="form-group">
-                        <label for="bot-mode-p1">Bot Mode</label>
-                        <select id="bot-mode-p1">
-                            <option value="quest">Quest / Event</option>
-                            <option value="raid">Raid / Multi</option>
-                            <option value="replicard">Replicard (Sandbox)</option>
-                            <option value="xeno_replicard">Xeno Replicard</option>
-                            <option value="skip">Skip Nightmare</option>
-                        </select>
-                    </div>
-
-                    <!-- Zone Selection (Xeno Only) -->
-                    <div class="form-group" id="zone-group-p1" style="display: none;">
-                        <label>Zone</label>
-                        <select id="zone-p1">
-                            <option value="6">Invidia (ID: 6)</option>
-                            <option value="7">Joculator (ID: 7)</option>
-                            <option value="8">Kalendae (ID: 8)</option>
-                            <option value="9">Liber (ID: 9)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group" id="quest-url-group-p1">
-                        <label for="quest-url-p1">Quest / Raid URL</label>
-                        <input type="text" id="quest-url-p1"
-                            placeholder="http://game.granbluefantasy.jp/#quest/supporter/..." autocomplete="off">
-                        <div class="error-message" id="quest-url-error-p1">Invalid URL format</div>
-                    </div>
-
-                    <div class="form-group" id="honor-target-group-p1" style="display: none;">
-                        <label for="honor-target-p1">Honor Target (0 = Full Raid)</label>
-                        <input type="text" id="honor-target-p1" value="0" placeholder="e.g. 1.000.000">
-                    </div>
-
-                    <div class="form-group" id="raid-target-group-p1" style="display: none;">
-                        <label for="raid-target-p1">Target User (Optional)</label>
-                        <input type="text" id="raid-target-p1" placeholder="Search for name...">
-                    </div>
-
-                    <div class="form-group" id="max-runs-group-p1">
-                        <label for="max-runs-p1"><span id="max-runs-label-p1">Max Quests</span> (0 = Unlimited)</label>
-                        <input type="number" id="max-runs-p1" value="0" min="0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="battle-mode-p1">Battle Mode</label>
-                        <select id="battle-mode-p1">
-                            <option value="full_auto">Full Auto</option>
-                            <option value="semi_auto">Semi Auto</option>
-                        </select>
-                    </div>
-
-                    <hr>
-
-                    <!-- Options Section -->
-                    <div class="collapsible-header" onclick="toggleSection('options-p1')">
-                        <span class="collapsible-title">⚡ Options</span>
-                        <span class="collapsible-chevron" id="options-p1-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="options-p1-content">
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="block-resources-p1">
-                            <span>Block Images</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="fast-refresh-p1">
-                            <span>Fast Refresh</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="refresh-on-start-p1" checked>
-                            <span>Refresh on Battle Start</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="summon-refresh-p1" checked>
-                            <span>Refresh on Summon</span>
-                        </label>
-                    </div>
-
-                    <!-- Stats Summary (Mini) -->
-                    <div class="stats-summary">
-                        <div class="stat-row">
-                            <span>Time:</span>
-                            <span id="run-timer-p1" class="stat-val">00:00:00</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Completed:</span>
-                            <span id="completed-runs-p1" class="stat-val">0</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Avg Battle:</span>
-                            <span id="avg-battle-p1" class="stat-val">--:--</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Avg Turns:</span>
-                            <span id="avg-turns-p1" class="stat-val">-.-</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Last Battle:</span>
-                            <span id="stat-last-battle-p1" class="stat-val">--:--</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Rate:</span>
-                            <span id="run-rate-p1" class="stat-val">0.0/h</span>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <!-- Browser/Device Section -->
-                    <div class="collapsible-header" onclick="toggleSection('device-p1')">
-                        <span class="collapsible-title">🌐 Browser</span>
-                        <span class="collapsible-chevron" id="device-p1-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="device-p1-content">
-                        <div class="form-group">
-                            <label for="browser-type-p1">Type</label>
-                            <select id="browser-type-p1">
-                                <option value="chrome">Chrome</option>
-                                <option value="chromium">Chromium</option>
-                                <option value="edge">Edge</option>
-                                <option value="firefox">Firefox</option>
-                                <option value="brave">Brave</option>
-                            </select>
-                        </div>
-                        <div class="row-between">
-                            <label for="disable-sandbox-p1">No Sandbox</label>
-                            <input type="checkbox" id="disable-sandbox-p1">
-                        </div>
-                    </div>
-                    <hr>
-                    <!-- Credentials Section -->
-                    <div class="collapsible-header" onclick="toggleSection('credentials-p1')">
-                        <span class="collapsible-title">🔐 Credentials</span>
-                        <span class="collapsible-chevron" id="credentials-p1-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="credentials-p1-content">
-                        <div class="form-group">
-                            <label for="mobage-email-p1">Email</label>
-                            <input type="email" id="mobage-email-p1" placeholder="email@example.com">
-                        </div>
-                        <div class="form-group">
-                            <label for="mobage-password-p1">Password</label>
-                            <input type="password" id="mobage-password-p1" placeholder="Password">
-                        </div>
-                        <div class="form-group">
-                            <button id="btn-save-credentials-p1" class="btn-primary-small"
-                                style="width: 100%;">Save</button>
-                        </div>
-                    </div>
-                </div>
+          <div class="panel controls-panel">
+            <div class="button-section">
+              <div class="btn-group">
+                <button
+                  id="btn-start-p2"
+                  class="btn-square btn-start"
+                  title="Start Farming"
+                  disabled
+                >
+                  ▶
+                </button>
+                <button
+                  id="btn-stop-p2"
+                  class="btn-square btn-stop"
+                  title="Stop Bot"
+                  disabled
+                ></button>
+                <button
+                  id="btn-launch-p2"
+                  class="btn-square btn-launch btn-grow"
+                  title="Open Browser"
+                >
+                  🌐
+                </button>
+              </div>
             </div>
 
-            <!-- Profile 2 Column -->
-            <div class="profile-column" id="col-p2">
-                <div class="profile-header">
-                    <input type="text" id="profile-name-p2" class="profile-name-input" value="Profile 2" />
-                    <div id="status-badge-p2" class="status-badge status-Stopped">Stopped</div>
-                </div>
+            <h3>Farming Setup</h3>
 
-                <div class="panel controls-panel">
-                    <div class="button-section">
-                        <div class="btn-group">
-                            <button id="btn-start-p2" class="btn-square btn-start" title="Start Farming"
-                                disabled>▶</button>
-                            <button id="btn-stop-p2" class="btn-square btn-stop" title="Stop Bot" disabled></button>
-                            <button id="btn-launch-p2" class="btn-square btn-launch btn-grow"
-                                title="Open Browser">🌐</button>
-                        </div>
-                    </div>
-
-
-                    <h3>Farming Setup</h3>
-
-                    <div class="form-group">
-                        <label for="bot-mode-p2">Bot Mode</label>
-                        <select id="bot-mode-p2">
-                            <option value="quest">Quest / Event</option>
-                            <option value="raid">Raid / Multi</option>
-                            <option value="replicard">Replicard (Sandbox)</option>
-                            <option value="xeno_replicard">Xeno Replicard</option>
-                            <option value="skip">Skip Nightmare</option>
-                        </select>
-                    </div>
-
-                    <!-- Zone Selection (Xeno Only) -->
-                    <div class="form-group" id="zone-group-p2" style="display: none;">
-                        <label>Zone</label>
-                        <select id="zone-p2">
-                            <option value="6">Invidia (ID: 6)</option>
-                            <option value="7">Joculator (ID: 7)</option>
-                            <option value="8">Kalendae (ID: 8)</option>
-                            <option value="9">Liber (ID: 9)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group" id="quest-url-group-p2">
-                        <label for="quest-url-p2">Quest / Raid URL</label>
-                        <input type="text" id="quest-url-p2"
-                            placeholder="http://game.granbluefantasy.jp/#quest/supporter/..." value=""
-                            autocomplete="off">
-                        <div class="error-message" id="quest-url-error-p2">Invalid URL format</div>
-                    </div>
-
-                    <div class="form-group" id="honor-target-group-p2" style="display: none;">
-                        <label for="honor-target-p2">Honor Target (0 = Full Raid)</label>
-                        <input type="text" id="honor-target-p2" value="0" placeholder="e.g. 1.000.000">
-                    </div>
-
-                    <div class="form-group" id="raid-target-group-p2" style="display: none;">
-                        <label for="raid-target-p2">Target User (Optional)</label>
-                        <input type="text" id="raid-target-p2" placeholder="Search for name...">
-                    </div>
-
-                    <div class="form-group" id="max-runs-group-p2">
-                        <label for="max-runs-p2"><span id="max-runs-label-p2">Max Quests</span> (0 = Unlimited)</label>
-                        <input type="number" id="max-runs-p2" value="0" min="0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="battle-mode-p2">Battle Mode</label>
-                        <select id="battle-mode-p2">
-                            <option value="full_auto">Full Auto</option>
-                            <option value="semi_auto">Semi Auto</option>
-                        </select>
-                    </div>
-
-                    <hr>
-
-                    <!-- Options Section -->
-                    <div class="collapsible-header" onclick="toggleSection('options-p2')">
-                        <span class="collapsible-title">⚡ Options</span>
-                        <span class="collapsible-chevron" id="options-p2-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="options-p2-content">
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="block-resources-p2">
-                            <span>Block Images</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="fast-refresh-p2">
-                            <span>Fast Refresh</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="refresh-on-start-p2" checked>
-                            <span>Refresh on Battle Start</span>
-                        </label>
-                        <label class="checkbox-container mt-xs">
-                            <input type="checkbox" id="summon-refresh-p2" checked>
-                            <span>Refresh on Summon</span>
-                        </label>
-                    </div>
-
-                    <!-- Stats Summary (Mini) -->
-                    <div class="stats-summary">
-                        <div class="stat-row">
-                            <span>Time:</span>
-                            <span id="run-timer-p2" class="stat-val">00:00:00</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Completed:</span>
-                            <span id="completed-runs-p2" class="stat-val">0</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Avg Battle:</span>
-                            <span id="avg-battle-p2" class="stat-val">--:--</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Avg Turns:</span>
-                            <span id="avg-turns-p2" class="stat-val">-.-</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Last Battle:</span>
-                            <span id="stat-last-battle-p2" class="stat-val">--:--</span>
-                        </div>
-                        <div class="stat-row">
-                            <span>Rate:</span>
-                            <span id="run-rate-p2" class="stat-val">0.0/h</span>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <!-- Browser/Device Section -->
-                    <div class="collapsible-header" onclick="toggleSection('device-p2')">
-                        <span class="collapsible-title">🌐 Browser</span>
-                        <span class="collapsible-chevron" id="device-p2-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="device-p2-content">
-                        <div class="form-group">
-                            <label for="browser-type-p2">Type</label>
-                            <select id="browser-type-p2">
-                                <option value="chrome">Chrome</option>
-                                <option value="chromium">Chromium</option>
-                                <option value="edge">Edge</option>
-                                <option value="firefox">Firefox</option>
-                                <option value="brave">Brave</option>
-                            </select>
-                        </div>
-                        <div class="row-between">
-                            <label for="disable-sandbox-p2">No Sandbox</label>
-                            <input type="checkbox" id="disable-sandbox-p2">
-                        </div>
-                    </div>
-                    <hr>
-                    <!-- Credentials Section -->
-                    <div class="collapsible-header" onclick="toggleSection('credentials-p2')">
-                        <span class="collapsible-title">🔐 Credentials</span>
-                        <span class="collapsible-chevron" id="credentials-p2-chevron">▼</span>
-                    </div>
-                    <div class="collapsible-content" id="credentials-p2-content">
-                        <div class="form-group">
-                            <label for="mobage-email-p2">Email</label>
-                            <input type="email" id="mobage-email-p2" placeholder="email@example.com">
-                        </div>
-                        <div class="form-group">
-                            <label for="mobage-password-p2">Password</label>
-                            <input type="password" id="mobage-password-p2" placeholder="Password">
-                        </div>
-                        <div class="form-group">
-                            <button id="btn-save-credentials-p2" class="btn-primary-small"
-                                style="width: 100%;">Save</button>
-                        </div>
-                    </div>
-                </div>
+            <div class="form-group">
+              <label for="bot-mode-p2">Bot Mode</label>
+              <select id="bot-mode-p2">
+                <option value="quest">Quest / Event</option>
+                <option value="raid">Raid / Multi</option>
+                <option value="replicard">Replicard (Sandbox)</option>
+                <option value="xeno_replicard">Xeno Replicard</option>
+                <option value="skip">Skip Nightmare</option>
+              </select>
             </div>
+
+            <!-- Zone Selection (Xeno Only) -->
+            <div class="form-group" id="zone-group-p2" style="display: none">
+              <label>Zone</label>
+              <select id="zone-p2">
+                <option value="6">Invidia (ID: 6)</option>
+                <option value="7">Joculator (ID: 7)</option>
+                <option value="8">Kalendae (ID: 8)</option>
+                <option value="9">Liber (ID: 9)</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="quest-url-group-p2">
+              <label for="quest-url-p2">Quest / Raid URL</label>
+              <input
+                type="text"
+                id="quest-url-p2"
+                placeholder="http://game.granbluefantasy.jp/#quest/supporter/..."
+                value=""
+                autocomplete="off"
+              />
+              <div class="error-message" id="quest-url-error-p2">
+                Invalid URL format
+              </div>
+            </div>
+
+            <div
+              class="form-group"
+              id="honor-target-group-p2"
+              style="display: none"
+            >
+              <label for="honor-target-p2">Honor Target (0 = Full Raid)</label>
+              <input
+                type="text"
+                id="honor-target-p2"
+                value="0"
+                placeholder="e.g. 1.000.000"
+              />
+            </div>
+
+            <div
+              class="form-group"
+              id="raid-target-group-p2"
+              style="display: none"
+            >
+              <label for="raid-target-p2">Target User (Optional)</label>
+              <input
+                type="text"
+                id="raid-target-p2"
+                placeholder="Search for name..."
+              />
+            </div>
+
+            <div class="form-group" id="max-runs-group-p2">
+              <label for="max-runs-p2"
+                ><span id="max-runs-label-p2">Max Quests</span> (0 =
+                Unlimited)</label
+              >
+              <input type="number" id="max-runs-p2" value="0" min="0" />
+            </div>
+
+            <div class="form-group">
+              <label for="battle-mode-p2">Battle Mode</label>
+              <select id="battle-mode-p2">
+                <option value="full_auto">Full Auto</option>
+                <option value="semi_auto">Semi Auto</option>
+              </select>
+            </div>
+
+            <hr />
+
+            <!-- Options Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('options-p2')"
+            >
+              <span class="collapsible-title">⚡ Options</span>
+              <span class="collapsible-chevron" id="options-p2-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="options-p2-content">
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="block-resources-p2" />
+                <span>Block Images</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="fast-refresh-p2" />
+                <span>Fast Refresh</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="refresh-on-start-p2" checked />
+                <span>Refresh on Battle Start</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="summon-refresh-p2" checked />
+                <span>Refresh on Summon</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="skill-refresh-p2" />
+                <span>Refresh on Skill</span>
+              </label>
+            </div>
+
+            <!-- Stats Summary (Mini) -->
+            <div class="stats-summary">
+              <div class="stat-row">
+                <span>Time:</span>
+                <span id="run-timer-p2" class="stat-val">00:00:00</span>
+              </div>
+              <div class="stat-row">
+                <span>Completed:</span>
+                <span id="completed-runs-p2" class="stat-val">0</span>
+              </div>
+              <div class="stat-row">
+                <span>Avg Battle:</span>
+                <span id="avg-battle-p2" class="stat-val">--:--</span>
+              </div>
+              <div class="stat-row">
+                <span>Avg Turns:</span>
+                <span id="avg-turns-p2" class="stat-val">-.-</span>
+              </div>
+              <div class="stat-row">
+                <span>Last Battle:</span>
+                <span id="stat-last-battle-p2" class="stat-val">--:--</span>
+              </div>
+              <div class="stat-row">
+                <span>Rate:</span>
+                <span id="run-rate-p2" class="stat-val">0.0/h</span>
+              </div>
+            </div>
+
+            <hr />
+
+            <!-- Browser/Device Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('device-p2')"
+            >
+              <span class="collapsible-title">🌐 Browser</span>
+              <span class="collapsible-chevron" id="device-p2-chevron">▼</span>
+            </div>
+            <div class="collapsible-content" id="device-p2-content">
+              <div class="form-group">
+                <label for="browser-type-p2">Type</label>
+                <select id="browser-type-p2">
+                  <option value="chrome">Chrome</option>
+                  <option value="chromium">Chromium</option>
+                  <option value="edge">Edge</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="brave">Brave</option>
+                </select>
+              </div>
+              <div class="row-between">
+                <label for="disable-sandbox-p2">No Sandbox</label>
+                <input type="checkbox" id="disable-sandbox-p2" />
+              </div>
+            </div>
+            <hr />
+            <!-- Credentials Section -->
+            <div
+              class="collapsible-header"
+              onclick="toggleSection('credentials-p2')"
+            >
+              <span class="collapsible-title">🔐 Credentials</span>
+              <span class="collapsible-chevron" id="credentials-p2-chevron"
+                >▼</span
+              >
+            </div>
+            <div class="collapsible-content" id="credentials-p2-content">
+              <div class="form-group">
+                <label for="mobage-email-p2">Email</label>
+                <input
+                  type="email"
+                  id="mobage-email-p2"
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div class="form-group">
+                <label for="mobage-password-p2">Password</label>
+                <input
+                  type="password"
+                  id="mobage-password-p2"
+                  placeholder="Password"
+                />
+              </div>
+              <div class="form-group">
+                <button
+                  id="btn-save-credentials-p2"
+                  class="btn-primary-small"
+                  style="width: 100%"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <!-- Shared Logs Section (Collapsible/Modal) -->
-        <div id="logs-panel" class="panel logs-panel hidden">
-            <div id="logs-resize-handle" class="logs-resize-handle"></div>
-            <div class="panel-header">
-                <h3 class="activity-logs-title">Activity Logs</h3>
-                <div class="log-controls">
-                    <button id="btn-clear-logs" class="btn-header" title="Clear Logs">🗑️</button>
-                    <button id="btn-close-logs" class="btn-header">Close</button>
-                </div>
-            </div>
-            <!-- Profile Log Tabs -->
-            <div id="log-tabs" class="log-tabs-container">
-                <button id="log-tab-p1" class="log-tab log-tab-active" onclick="switchLogTab('p1')">Profile 1</button>
-                <button id="log-tab-p2" class="log-tab" onclick="switchLogTab('p2')">Profile 2</button>
-                <button id="log-tab-all" class="log-tab" onclick="switchLogTab('all')">All</button>
-            </div>
-            <!-- Per-profile log containers -->
-            <div id="log-container-p1" class="log-container-tab">
-            </div>
-            <div id="log-container-p2" class="log-container-tab" style="display:none;">
-            </div>
-            <div id="log-container-all" class="log-container-tab" style="display:none;">
-            </div>
-            <button id="btn-scroll-bottom" class="btn-scroll-bottom" title="Scroll to Bottom">↓</button>
+      <!-- Shared Logs Section (Collapsible/Modal) -->
+      <div id="logs-panel" class="panel logs-panel hidden">
+        <div id="logs-resize-handle" class="logs-resize-handle"></div>
+        <div class="panel-header">
+          <h3 class="activity-logs-title">Activity Logs</h3>
+          <div class="log-controls">
+            <button id="btn-clear-logs" class="btn-header" title="Clear Logs">
+              🗑️
+            </button>
+            <button id="btn-close-logs" class="btn-header">Close</button>
+          </div>
         </div>
-        <!-- Keep legacy #log-container for backward compat (hidden, unused) -->
-        <div id="log-container" style="display:none;"></div>
-        <script>
-            // Tab switching — inline so it works before renderer.js loads
-            let activeLogTab = 'p1';
-            function switchLogTab(tab) {
-                activeLogTab = tab;
-                window.activeLogTab = tab; // For renderer.js visibility
-                ['p1', 'p2', 'all'].forEach(t => {
-                    const btn = document.getElementById('log-tab-' + t);
-                    const cont = document.getElementById('log-container-' + t);
-                    const isActive = t === tab;
-                    if (btn) {
-                        btn.style.background = isActive ? (t === 'p1' ? 'rgba(96,165,250,0.15)' : t === 'p2' ? 'rgba(248,113,113,0.15)' : 'rgba(167,139,250,0.15)') : 'transparent';
-                        btn.style.color = isActive ? (t === 'p1' ? '#60a5fa' : t === 'p2' ? '#f87171' : '#a78bfa') : '#64748b';
-                        btn.style.borderColor = isActive ? (t === 'p1' ? 'rgba(96,165,250,0.4)' : t === 'p2' ? 'rgba(248,113,113,0.4)' : 'rgba(167,139,250,0.4)') : 'rgba(255,255,255,0.05)';
-                    }
-                    if (cont) {
-                        cont.style.display = isActive ? 'block' : 'none';
-                        // Attach scroll listener once
-                        if (!cont.dataset.scrollInit) {
-                            cont.onscroll = updateScrollButton;
-                            cont.dataset.scrollInit = "true";
-                        }
-                    }
-                });
-                // Auto-scroll active tab
-                const activeContainer = document.getElementById('log-container-' + tab);
-                if (activeContainer) {
-                    activeContainer.scrollTop = activeContainer.scrollHeight;
-                }
-                updateScrollButton();
+        <!-- Profile Log Tabs -->
+        <div id="log-tabs" class="log-tabs-container">
+          <button
+            id="log-tab-p1"
+            class="log-tab log-tab-active"
+            onclick="switchLogTab('p1')"
+          >
+            Profile 1
+          </button>
+          <button id="log-tab-p2" class="log-tab" onclick="switchLogTab('p2')">
+            Profile 2
+          </button>
+          <button
+            id="log-tab-all"
+            class="log-tab"
+            onclick="switchLogTab('all')"
+          >
+            All
+          </button>
+        </div>
+        <!-- Per-profile log containers -->
+        <div id="log-container-p1" class="log-container-tab"></div>
+        <div
+          id="log-container-p2"
+          class="log-container-tab"
+          style="display: none"
+        ></div>
+        <div
+          id="log-container-all"
+          class="log-container-tab"
+          style="display: none"
+        ></div>
+        <button
+          id="btn-scroll-bottom"
+          class="btn-scroll-bottom"
+          title="Scroll to Bottom"
+        >
+          ↓
+        </button>
+      </div>
+      <!-- Keep legacy #log-container for backward compat (hidden, unused) -->
+      <div id="log-container" style="display: none"></div>
+      <script>
+        // Tab switching — inline so it works before renderer.js loads
+        let activeLogTab = "p1";
+        function switchLogTab(tab) {
+          activeLogTab = tab;
+          window.activeLogTab = tab; // For renderer.js visibility
+          ["p1", "p2", "all"].forEach((t) => {
+            const btn = document.getElementById("log-tab-" + t);
+            const cont = document.getElementById("log-container-" + t);
+            const isActive = t === tab;
+            if (btn) {
+              btn.style.background = isActive
+                ? t === "p1"
+                  ? "rgba(96,165,250,0.15)"
+                  : t === "p2"
+                    ? "rgba(248,113,113,0.15)"
+                    : "rgba(167,139,250,0.15)"
+                : "transparent";
+              btn.style.color = isActive
+                ? t === "p1"
+                  ? "#60a5fa"
+                  : t === "p2"
+                    ? "#f87171"
+                    : "#a78bfa"
+                : "#64748b";
+              btn.style.borderColor = isActive
+                ? t === "p1"
+                  ? "rgba(96,165,250,0.4)"
+                  : t === "p2"
+                    ? "rgba(248,113,113,0.4)"
+                    : "rgba(167,139,250,0.4)"
+                : "rgba(255,255,255,0.05)";
             }
-
-            let scrollBtnTicking = false;
-            window.updateScrollButton = function () {
-                if (scrollBtnTicking) return;
-                scrollBtnTicking = true;
-                requestAnimationFrame(() => {
-                    const cont = document.getElementById('log-container-' + activeLogTab);
-                    const btn = document.getElementById('btn-scroll-bottom');
-                    if (cont && btn) {
-                        const isNearBottom = cont.scrollHeight - cont.scrollTop - cont.clientHeight < 50;
-                        if (isNearBottom) {
-                            btn.classList.remove('visible');
-                        } else {
-                            btn.classList.add('visible');
-                        }
-                    }
-                    scrollBtnTicking = false;
-                });
+            if (cont) {
+              cont.style.display = isActive ? "block" : "none";
+              // Attach scroll listener once
+              if (!cont.dataset.scrollInit) {
+                cont.onscroll = updateScrollButton;
+                cont.dataset.scrollInit = "true";
+              }
             }
+          });
+          // Auto-scroll active tab
+          const activeContainer = document.getElementById(
+            "log-container-" + tab,
+          );
+          if (activeContainer) {
+            activeContainer.scrollTop = activeContainer.scrollHeight;
+          }
+          updateScrollButton();
+        }
 
-            document.getElementById('btn-scroll-bottom').onclick = () => {
-                const cont = document.getElementById('log-container-' + activeLogTab);
-                if (cont) {
-                    cont.scrollTo({ top: cont.scrollHeight, behavior: 'smooth' });
-                }
-            };
+        let scrollBtnTicking = false;
+        window.updateScrollButton = function () {
+          if (scrollBtnTicking) return;
+          scrollBtnTicking = true;
+          requestAnimationFrame(() => {
+            const cont = document.getElementById(
+              "log-container-" + activeLogTab,
+            );
+            const btn = document.getElementById("btn-scroll-bottom");
+            if (cont && btn) {
+              const isNearBottom =
+                cont.scrollHeight - cont.scrollTop - cont.clientHeight < 50;
+              if (isNearBottom) {
+                btn.classList.remove("visible");
+              } else {
+                btn.classList.add("visible");
+              }
+            }
+            scrollBtnTicking = false;
+          });
+        };
 
-            // Init for the first tab
-            setTimeout(updateScrollButton, 100);
-        </script>
-        <script>
-            // Logs panel resize (drag top handle upward)
-            (function () {
-                const panel = document.getElementById('logs-panel');
-                const handle = document.getElementById('logs-resize-handle');
-                if (!panel || !handle) return;
+        document.getElementById("btn-scroll-bottom").onclick = () => {
+          const cont = document.getElementById("log-container-" + activeLogTab);
+          if (cont) {
+            cont.scrollTo({ top: cont.scrollHeight, behavior: "smooth" });
+          }
+        };
 
-                let dragging = false, startY = 0, startH = 0;
+        // Init for the first tab
+        setTimeout(updateScrollButton, 100);
+      </script>
+      <script>
+        // Logs panel resize (drag top handle upward)
+        (function () {
+          const panel = document.getElementById("logs-panel");
+          const handle = document.getElementById("logs-resize-handle");
+          if (!panel || !handle) return;
 
-                handle.addEventListener('mousedown', (e) => {
-                    dragging = true;
-                    startY = e.clientY;
-                    startH = panel.offsetHeight;
-                    handle.classList.add('dragging');
-                    e.preventDefault();
-                });
+          let dragging = false,
+            startY = 0,
+            startH = 0;
 
-                document.addEventListener('mousemove', (e) => {
-                    if (!dragging) return;
-                    const delta = startY - e.clientY; // up = positive = bigger
-                    const newH = Math.max(150, Math.min(window.innerHeight, startH + delta));
-                    panel.style.height = newH + 'px';
-                });
+          handle.addEventListener("mousedown", (e) => {
+            dragging = true;
+            startY = e.clientY;
+            startH = panel.offsetHeight;
+            handle.classList.add("dragging");
+            e.preventDefault();
+          });
 
-                document.addEventListener('mouseup', () => {
-                    if (!dragging) return;
-                    dragging = false;
-                    handle.classList.remove('dragging');
-                });
-            })();
-        </script>
+          document.addEventListener("mousemove", (e) => {
+            if (!dragging) return;
+            const delta = startY - e.clientY; // up = positive = bigger
+            const newH = Math.max(
+              150,
+              Math.min(window.innerHeight, startH + delta),
+            );
+            panel.style.height = newH + "px";
+          });
+
+          document.addEventListener("mouseup", () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove("dragging");
+          });
+        })();
+      </script>
     </div>
 
     <script src="renderer.js"></script>
-</body>
-
+  </body>
 </html>
