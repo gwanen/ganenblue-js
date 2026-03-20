@@ -45,7 +45,7 @@ class PageController {
     };
 
     this.page.on("request", this.requestHandler);
-    this.logger.info("[Browser] Resource blocking enabled (Images/Media)");
+    this.logger.info("[Core] State: Resource blocking active (Images/Media)");
   }
 
   async disableBackgroundThrottling() {
@@ -61,9 +61,9 @@ class PageController {
       // Memory Optimization: Cleanly close the CDP session
       await client.detach();
 
-      this.logger.debug("[Core] Background throttling disabled via CDP");
+      this.logger.debug("[Core] State: Background throttling disabled");
     } catch (error) {
-      this.logger.debug("[Core] CDP Throttling override failed");
+      this.logger.debug("[Core] State: CDP throttling override failure");
     }
   }
 
@@ -79,7 +79,7 @@ class PageController {
       // Only attempt to disable if the page is still open
       if (!this.page.isClosed()) {
         await this.page.setRequestInterception(false);
-        this.logger.info("[Browser] Resource blocking disabled");
+        this.logger.info("[Core] State: Resource blocking inactive");
       }
     } catch (e) {
       // Ignore if context lost or already disabled
@@ -179,7 +179,7 @@ class PageController {
       await this.page.waitForFunction(fn, { timeout });
       return true;
     } catch (error) {
-      this.logger.debug(`[Debug] waitForFunction timed out: ${error.message}`);
+      this.logger.debug(`[Debug] Core: waitForFunction timeout (Fault: ${error.message})`);
       return false;
     }
   }
@@ -198,11 +198,17 @@ class PageController {
 
     let box = this._clickCache.get(selector);
     if (!box) {
-      const el = await this.page.$(selector);
-      if (el) {
-        box = await el.boundingBox();
-        await el.dispose();
-        if (box) this._clickCache.set(selector, box);
+      try {
+        const el = await this.page.$(selector);
+        if (el) {
+          box = await el.boundingBox();
+          await el.dispose();
+          if (box) this._clickCache.set(selector, box);
+        }
+      } catch (e) {
+        this.logger.debug(
+          `[Debug] Core: cachedClick element lookup failed (${e.message})`,
+        );
       }
     }
 
@@ -379,7 +385,12 @@ class PageController {
    * Get element text
    */
   async getText(selector) {
-    return await this.page.$eval(selector, (el) => el.textContent);
+    try {
+      return await this.page.$eval(selector, (el) => el.textContent);
+    } catch (e) {
+      this.logger.debug(`[Debug] Core: getText failed (${e.message})`);
+      return "";
+    }
   }
 
   /**
@@ -391,7 +402,7 @@ class PageController {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        this.logger.info(`[Core] Navigating to: ${url}`);
+        this.logger.info(`[Core] Navigation target: ${url}`);
         return await this.page.goto(url, {
           waitUntil: "domcontentloaded",
           timeout: 60000,
@@ -462,7 +473,7 @@ class PageController {
       return this.goto(url, options);
     }
 
-    this.logger.info(`[Core] SPA navigate to: ${targetHash}`);
+    this.logger.info(`[Core] Navigation (SPA): ${targetHash}`);
 
     try {
       await this.page.evaluate((target) => {
@@ -544,7 +555,7 @@ class PageController {
     }
 
     // Extra short yield so any remaining microtasks on the SPA router settle.
-    await sleep(50);
+    await sleep(10);
 
     // Frame stability check: ensure frame is reattached after SPA navigation
     await this.waitForFrameStable(2000);
@@ -555,13 +566,13 @@ class PageController {
    * falling back to a full browser reload if not available.
    */
   async reloadPage() {
-    this.logger.info("[Core] Reloading page...");
+    this.logger.info("[Core] Page reload sequence initiated");
     this.clearClickCache();
     const reloadBtn = ".btn-treasure-footer-reload";
     if (await this.elementExists(reloadBtn, 200)) {
       try {
         await this.page.click(reloadBtn);
-        await sleep(200);
+        await sleep(50);
         return;
       } catch (e) {
         this.logger.debug(
@@ -582,8 +593,10 @@ class PageController {
   async isFrameAttached() {
     try {
       // Quick evaluation to test frame health
-      await this.page.evaluate(() => document.readyState, { timeout: 500 });
-      return true;
+      return await this.page
+        .evaluate(() => document.readyState, { timeout: 500 })
+        .then(() => true)
+        .catch(() => false);
     } catch (e) {
       return false;
     }
@@ -599,12 +612,12 @@ class PageController {
     while (Date.now() - startTime < timeout) {
       if (await this.isFrameAttached()) {
         // Frame is attached, give it a brief moment to settle
-        await sleep(150);
+        await sleep(20);
         return true;
       }
       await sleep(100);
     }
-    this.logger.warn("[Core] Frame stability wait timed out");
+    this.logger.warn("[Warn] Core: Frame stability timeout");
     return false;
   }
 

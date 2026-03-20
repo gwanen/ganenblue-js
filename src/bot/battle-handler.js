@@ -56,7 +56,7 @@ class BattleHandler {
     this.lastReloadTurn = 0;
     this.lastHonors = 0; // Reset per-raid so previousHonors starts at 0 for each new raid
     this.controller.clearClickCache(); // Flush cache on new battle engagement
-    this.logger.info(`[Battle] Engaging (${mode})`);
+    this.logger.info(`[Battle] Mode: ${mode} engagement initiated`);
 
     // Create ref objects for lastActionTime and threshold so handleFullAuto can update them
     const lastActionTimeRef = { value: Date.now() };
@@ -76,9 +76,9 @@ class BattleHandler {
       }
 
       if (options.refreshOnStart) {
-        this.logger.info("[Battle] Refreshing to skip animations");
+        this.logger.info("[Battle] Action: Page reload (Animation skip)");
         await this.controller.reloadPage();
-        await sleep(this.fastRefresh ? 100 : 200);
+        await sleep(this.fastRefresh ? 20 : 50);
 
         const earlyStateAfterRefresh = await this.checkEarlyBattleEndPopup();
         if (earlyStateAfterRefresh) {
@@ -151,7 +151,7 @@ class BattleHandler {
               );
               return { skipRaid: true, duration: 0, turns: 0 };
             }
-            this.logger.info("[Battle] Salute popup dismissed. Re-checking");
+            this.logger.info("[Battle] Action: Salute popup dismissed");
             await sleep(300);
             battleLoaded = await this.controller.waitForElement(
               loadSelector,
@@ -160,7 +160,7 @@ class BattleHandler {
           }
 
           if (!battleLoaded) {
-            this.logger.warn("[Battle] Auto button missing. Refreshing page");
+            this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
             await this.controller.reloadPage();
             // Wait another 10s after refresh
             battleLoaded = await this.controller.waitForElement(
@@ -198,7 +198,7 @@ class BattleHandler {
       // Proactive Turn Fetch — skip DOM evaluation if start.json already gave us the turn
       const initialTurns =
         networkTurnOnLoad > 0 ? networkTurnOnLoad : await this.getTurnNumber();
-      this.logger.info("[Battle] Ready");
+      this.logger.info("[Battle] State: Combat ready");
 
       // Pre-register battle events BEFORE handleFullAuto so that an instant quick-summon
       // (fired the moment FA activates) isn't missed due to the listener gap between
@@ -260,7 +260,7 @@ class BattleHandler {
       // Calculate battle duration
       this.lastBattleDuration = Date.now() - this.battleStartTime;
       const formattedTime = this.formatTime(this.lastBattleDuration);
-      this.logger.info(`[Summary] ${formattedTime} (${result.turns} turns)`);
+      this.logger.info(`[Status] Report: ${formattedTime} (Turns: ${result.turns})`);
 
       // Attach current honors to result for tracking
       this.lastHonors = result.honors; // Update lastHonors to current total
@@ -279,9 +279,9 @@ class BattleHandler {
       if (isNavError) {
         this.logger.debug("[Battle] Interrupted by browser navigation or stop");
       } else {
-        this.logger.error(`[Battle] Execution failed: ${error.message}`);
+        this.logger.error(`[Error] Battle: Execution failure (Fault: ${error.message})`);
         if (error.message.includes("Battle failed to load")) {
-          this.logger.warn("[Safety] Battle failed to load. Halting bot");
+          this.logger.warn("[Warn] Battle: Combat load failure (Halt triggered)");
           this.stop();
         }
       }
@@ -300,7 +300,7 @@ class BattleHandler {
       url.includes("/result_multi/content/index/");
     if (isResultUrl || url.includes("#quest/index")) return;
 
-    this.logger.info("[Battle] Activating Full Auto");
+    this.logger.info("[Battle] Mode: Full Auto activation initiated");
     this.faActive = false; // Reset — will be set true after successful click
 
     let attempts = 0;
@@ -345,7 +345,7 @@ class BattleHandler {
             continue; // Try again in this while loop
           }
 
-          this.logger.warn("[Battle] Auto button not found. Refreshing page");
+          this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
           await this.controller.reloadPage();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
@@ -451,31 +451,36 @@ class BattleHandler {
   }
 
   async handleSemiAuto() {
-    const selAttack = ".btn-attack-start.display-on";
-    const selCancel = this.selectors.attackCancel;
+    const activeSelector = ".btn-attack-start.display-on";
+    const startTime = Date.now();
 
-    // Step 1: Wait for attack button (DOM class check)
-    this.logger.debug("[Battle] Waiting for attack button (.display-on)");
-    const attackReady = await this.controller.page
-      .waitForSelector(selAttack, { timeout: 10000 })
-      .then(() => true)
-      .catch(() => false);
+    // Step 1: Reactive Attack Activation (Ultra-fast polling)
+    // Replaces waitForSelector with sub-10ms resolution to fire the instant UI is ready.
+    this.logger.debug("[Battle] Awaiting reactive attack activation...");
+    let attackReady = false;
+    while (Date.now() - startTime < 10000) {
+      if (await this.controller.elementExists(activeSelector, 0, true)) {
+        attackReady = true;
+        break;
+      }
+      await sleep(5); // Ultra-snappy cadence
+    }
 
     if (!attackReady) {
-      this.logger.warn("[Semi Auto] Timeout (display-on missing). Refreshing");
+      this.logger.warn("[Warn] Battle: Exception (Attack button timeout)");
       await this.controller.reloadPage();
       return false;
     }
 
-    // Step 2: Click attack button
+    // Step 2: Instant Click via cached coordinates (lookup occurs once on first appearance)
     try {
-      await this.controller.cachedClick(selAttack, 0);
+      await this.controller.cachedClick(activeSelector, 0);
     } catch (e) {
-      this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
+      this.logger.warn(`[Warn] Battle: Attack failure (Fault: ${e.message})`);
       await this.controller.reloadPage();
       return false;
     }
-    this.logger.info("[Battle] Attack");
+    this.logger.info("[Battle] Attack execution initiated");
 
     // Step 3: Wait for normal_attack network listener (attack confirmation)
     this.logger.debug("[Battle] Waiting for attack confirmation...");
@@ -518,23 +523,22 @@ class BattleHandler {
         })
         .catch(() => false);
       if (ended) {
-        this.logger.info("[Battle] Battle ended, skipping attack");
+        this.logger.info("[Battle] State: Combat concluded (Skipping attack)");
         await sleep(100);
         return false;
       }
       this.logger.warn("[Semi Auto] Refreshing anyway");
     }
 
-    // Step 4: No pause for network response parsing - proceed immediately to refresh
+    // Step 5: No pause for network response parsing - proceed immediately to refresh
     if (this.stopped) return false;
 
-    // Step 5: Refresh to skip animations
+    // Step 6: Refresh to skip animations
     // Following Full Auto pattern: return immediately after starting reload.
-    // The main waitForBattleEnd loop handles turn signals and battle end.
-    this.logger.info("[Battle] Refreshing page");
+    this.logger.info("[Battle] Page reload triggered (Animation skip)");
     await this.controller.reloadPage();
-    await sleep(20); // Minimal settle
-    return attackConfirmed; // Tell caller whether attack was network-confirmed
+    await sleep(5); // Minimal settle (reduced from 20ms)
+    return attackConfirmed;
   }
 
   async waitForBattleEnd(mode, initialTurns = null) {
@@ -1005,7 +1009,7 @@ class BattleHandler {
             }
 
             await this.controller.reloadPage();
-            await sleep(this.fastRefresh ? 100 : 200);
+            await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
               await this.handleFullAuto();
@@ -1108,8 +1112,7 @@ class BattleHandler {
           // Reset iteration counter to avoid immediate GC after reload
           iterationCount = 0;
         }
-
-        await sleep(100);
+        await sleep(30);
       }
 
       throw new Error("Battle timeout");
@@ -1148,18 +1151,20 @@ class BattleHandler {
     const url = this.controller.page.url();
 
     // 1. Check URL and Login Button (Most reliable)
-    const isLoggedOut = await this.controller.page.evaluate(() => {
-      const url = window.location.href;
-      const hasLogin = !!document.querySelector("#login-auth");
-      const isHome =
-        url === "https://game.granbluefantasy.jp/" ||
-        url === "https://game.granbluefantasy.jp/#" ||
-        url.includes("#mypage") ||
-        url.includes("#top") ||
-        url.includes("mobage.jp") ||
-        url.includes("registration");
-      return hasLogin || isHome;
-    });
+    const isLoggedOut = await this.controller.page
+      .evaluate(() => {
+        const url = window.location.href;
+        const hasLogin = !!document.querySelector("#login-auth");
+        const isHome =
+          url === "https://game.granbluefantasy.jp/" ||
+          url === "https://game.granbluefantasy.jp/#" ||
+          url.includes("#mypage") ||
+          url.includes("#top") ||
+          url.includes("mobage.jp") ||
+          url.includes("registration");
+        return hasLogin || isHome;
+      })
+      .catch(() => false);
 
     if (isLoggedOut) {
       this.logger.error(

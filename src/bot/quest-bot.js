@@ -139,9 +139,7 @@ class QuestBot {
   }
 
   async runSingleQuest() {
-    this.logger.info(
-      `[Quest] Initiating quest cycle (${this.questsCompleted + 1})`,
-    );
+    this.logger.info(`[Quest] Quest cycle ${this.questsCompleted + 1} initiated`);
 
     let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
@@ -157,7 +155,7 @@ class QuestBot {
 
     if (isResultUrl) {
       this.logger.info(
-        "[Quest] Result page detected. Navigating to quest URL...",
+        "[Quest] State: Result page detected (Navigating to quest target)",
       );
       await this.controller.gotoSPA(this.questUrl);
       hasNavigated = true;
@@ -212,7 +210,7 @@ class QuestBot {
 
       if (isResultPage) {
         this.logger.info(
-          "[Quest] Result page detected in battle URL. Navigating away...",
+          "[Quest] State: Result page detected (Exiting battle URL)",
         );
         await this.controller.gotoSPA(this.questUrl);
         hasNavigated = true;
@@ -233,10 +231,9 @@ class QuestBot {
       }
     } else {
       // Standard quest navigation
-      this.networkSupporterScreen = false; // Reset for new quest
+      this.networkSupporterScreen = false;
       if (!hasNavigated) {
         await this.controller.gotoSPA(this.questUrl);
-        await sleep(50);
       }
 
       const summonStatus = await this.selectSummon();
@@ -289,7 +286,7 @@ class QuestBot {
     // Wait for battle:result network event first — result.json loads async
     // after boss death reload. Navigating too early causes SPA redirect loop.
     await this.waitForBattleResult();
-    this.logger.info("[Quest] Cycle complete, next cycle will handle navigation");
+      this.logger.info("[Quest] State: Quest cycle complete");
 
     return true;
   }
@@ -319,63 +316,74 @@ class QuestBot {
   }
 
   async selectSummon() {
-    this.logger.info("[Summon] Awaiting supporter selection");
+    this.logger.info("[Quest] Supporter selection pending");
 
     // Wait for supporter screen via network (BGM request) or DOM fallback.
-    // Timeout: 7 seconds. Re-navigate up to 2x if GBF's SPA intercepts the
+    // Timeout: 10 seconds. Re-navigate up to 2x if GBF's SPA intercepts the
     // late result.json and redirects us back to #result mid-navigation.
     const startTime = Date.now();
     const timeout = 10000;
     let renavCount = 0;
 
-    while (Date.now() - startTime < timeout) {
-      // Check network flag first (fastest)
-      if (this.networkSupporterScreen) {
-        this.logger.debug(
-          "[Network] Supporter screen confirmed via BGM request",
-        );
-        break;
-      }
+    // Frame stability check after potential navigation is already handled by gotoSPA
 
-      // URL-only check: supporter screen, battle active, or result-page intercept
-      // We do NOT check DOM (.prt-result) here — stale result page elements linger
-      // during SPA transitions even after the URL has moved to #quest/supporter.
-      const state = await this.controller.page
-        .evaluate(() => {
-          const hash = window.location.hash;
-          const href = window.location.href;
-          return {
-            listFound: !!document.querySelector(".prt-supporter-list"),
-            okFound: !!document.querySelector(".btn-usual-ok"),
-            isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
-            isResult:
-              hash.includes("#result") ||
-              href.includes("/result/content/index/") ||
-              href.includes("/result_multi/content/index/"),
-          };
-        })
-        .catch(() => ({}));
+    const raceResult = await Promise.race([
+      // 1. Reactive Network Signal (BGM/Start request)
+      new Promise((resolve) => {
+        if (this.networkSupporterScreen) return resolve({ type: "network" });
+        const onSupporter = () => {
+          if (this.controller.network) {
+            this.controller.network.off("raid:supporter_screen", onSupporter);
+          }
+          resolve({ type: "network" });
+        };
+        if (this.controller.network) {
+          this.controller.network.once("raid:supporter_screen", onSupporter);
+        }
+      }),
+      // 2. Reactive DOM Signal (List or OK button)
+      this.controller.waitForElement(
+        ".prt-supporter-list, .btn-usual-ok",
+        timeout,
+      ).then((found) => (found ? { type: "dom" } : { type: "timeout" })),
+      // 3. State Polling (isRaid, isResult, isParty) - Slowest fallback
+      (async () => {
+        while (Date.now() - startTime < timeout) {
+          const state = await this.controller.page
+            .evaluate(() => {
+              const hash = window.location.hash;
+              const href = window.location.href;
+              const ok = document.querySelector(".btn-usual-ok");
+              return {
+                listFound: !!document.querySelector(".prt-supporter-list"),
+                okFound: !!ok && ok.offsetHeight > 0,
+                isRaid: !!hash.match(/#(?:raid|raid_multi)(?:\/|$)/),
+                isResult:
+                  hash.includes("#result") ||
+                  href.includes("/result/content/index/") ||
+                  href.includes("/result_multi/content/index/"),
+              };
+            })
+            .catch(() => ({}));
 
-      if (state.listFound || state.okFound) break;
+          if (state.isRaid) return { type: "raid" };
+          if (state.isResult && renavCount < 2) {
+            renavCount++;
+            this.logger.warn(
+              `[Summon] Result page intercept detected. Re-navigating (${renavCount}/2)...`,
+            );
+            this.networkSupporterScreen = false;
+            await this.controller.gotoSPA(this.questUrl);
+          }
+          await sleep(250); // Slower polling for state changes since network/DOM are reactive
+        }
+        return { type: "timeout" };
+      })(),
+    ]);
 
-      if (state.isRaid) {
-        this.logger.info("[Summon] Battle state detected. Skipping selection");
-        return "success";
-      }
-
-      // GBF's SPA intercepted result.json and redirected us back to #result.
-      // Re-navigate to the quest URL immediately instead of waiting the full 7s.
-      if (state.isResult && renavCount < 2) {
-        renavCount++;
-        this.logger.warn(
-          `[Summon] Result page intercept detected. Re-navigating (${renavCount}/2)...`,
-        );
-        this.networkSupporterScreen = false;
-        await this.controller.gotoSPA(this.questUrl);
-        continue;
-      }
-
-      await sleep(50);
+    if (raceResult.type === "raid") {
+      this.logger.info("[Summon] Battle state detected. Skipping selection");
+      return "success";
     }
 
     // Check for error popups only (skip result page check for quests - stale elements from previous battle)
@@ -397,7 +405,7 @@ class QuestBot {
         return "ended";
       }
 
-      this.logger.info("[Summon] Confirming selection");
+      this.logger.info("[Quest] Supporter selection confirmed");
       await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => {});
       await sleep(50);
       return await this.validatePostClick();
@@ -429,6 +437,9 @@ class QuestBot {
   }
 
   async validatePostClick() {
+    // Frame stability check after confirmation click (reduced from 1500ms for speed)
+    await this.controller.waitForFrameStable(500);
+
     if (await this.checkCaptcha()) return "captcha";
 
     // Consolidate popup checks into single evaluate
@@ -445,7 +456,7 @@ class QuestBot {
       .catch(() => ({}));
 
     if (popupState.deck) {
-      this.logger.warn("[Summon] Deck selection popup detected. Dismissing...");
+      this.logger.warn("[Warn] Quest: Deck selection popup detected");
       await this.controller.clickSafe(".pop-deck.pop-show .btn-usual-ok", {
         silent: true,
       });
@@ -470,8 +481,8 @@ class QuestBot {
       await sleep(800);
     }
 
-    // Wait for URL transition - Reduced iterations and delay for faster completion
-    for (let i = 0; i < 10; i++) {
+    // Wait for URL transition - Patient polling (2s total)
+    for (let i = 0; i < 40; i++) {
       if (this.raidErrorType !== null) {
         const type = this.raidErrorType;
         this.raidErrorType = null;
@@ -541,7 +552,7 @@ class QuestBot {
       }
 
       if (state.isParty && state.startBtn) {
-        this.logger.info("[Summon] Party selection confirmed. Finalizing...");
+        this.logger.info("[Quest] Party configuration confirmed");
         await this.controller.cachedClick(".btn-usual-ok.se-quest-start", 0);
       }
 
@@ -549,13 +560,15 @@ class QuestBot {
     }
 
     // Final logout check
-    const isLoggedOut = await this.controller.page.evaluate(() => {
-      const hasLogin = !!document.querySelector("#login-auth");
-      const isHome =
-        window.location.href.includes("#mypage") ||
-        window.location.href.includes("#top");
-      return hasLogin || isHome;
-    });
+    const isLoggedOut = await this.controller.page
+      .evaluate(() => {
+        const hasLogin = !!document.querySelector("#login-auth");
+        const isHome =
+          window.location.href.includes("#mypage") ||
+          window.location.href.includes("#top");
+        return hasLogin || isHome;
+      })
+      .catch(() => false);
 
     if (isLoggedOut) {
       this.logger.error("[Safety] Session expired. Stopping bot");
@@ -658,11 +671,14 @@ class QuestBot {
         }
       }, 5000);
 
-      const onResult = () => {
+      const onResult = async () => {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
           this.logger.debug("[Network] Battle result received");
+          // User Request: Add 50ms sleep after battle result in quest mode
+          // ensures SPA router is ready for subsequent navigation.
+          await sleep(50);
           resolve();
         }
       };

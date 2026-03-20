@@ -15,10 +15,10 @@ class NetworkListener extends EventEmitter {
         this.on('newListener', (eventName) => {
             const count = this.listenerCount(eventName);
             if (count > 20) {
-                this.logger.warn(`[System] High listener count for '${eventName}': ${count}`);
+                this.logger.warn(`[Warn] Core: High listener count for '${eventName}' (Count: ${count})`);
             }
             if (this.listenerCount('battle:result') > 50) {
-                this.logger.warn('[System] Potential listener leak detected on battle:result');
+                this.logger.warn('[Warn] Core: Potential listener leak detected (combat:result)');
             }
         });
 
@@ -30,19 +30,19 @@ class NetworkListener extends EventEmitter {
         if (this.isListening) return;
         this.page.on('response', this._handleResponse);
         this.isListening = true;
-        this.logger.info('[Network] Listener started');
+        this.logger.info('[Core] Listener state: Active');
     }
 
     stop() {
         if (!this.isListening) return;
         this.page.off('response', this._handleResponse);
         this.isListening = false;
-        this.logger.info('[Network] Listener stopped');
+        this.logger.info('[Core] Listener state: Inactive');
     }
 
     clearAllListeners() {
         this.removeAllListeners();
-        this.logger.debug('[Network] All internal listeners cleared');
+        this.logger.debug('[Core] Signal: Internal listeners cleared');
     }
 
     /**
@@ -90,7 +90,7 @@ class NetworkListener extends EventEmitter {
                     if (!contentType || !contentType.includes('application/json')) return;
                 }
 
-                this.logger.info(`[Network] Detected Battle Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'})`);
+                this.logger.info(`[Status] Signal: Combat Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'}) detected`);
                 this.emit('battle:result', { url, time: Date.now() });
                 return;
             }
@@ -99,13 +99,13 @@ class NetworkListener extends EventEmitter {
             if (this._isRaidUrl(url) && url.includes('/start.json')) {
                 const json = await response.json().catch(() => null);
                 if (json?.popup) {
-                    this.logger.info('[Network] Join error detected (popup in start.json)');
+                    this.logger.info('[Status] Signal: Join error detected (popup in start.json)');
                     this.emit('raid:error', { type: 'start_popup' });
                     return;
                 }
                 const turn = json?.turn ?? null;
                 if (turn !== null) {
-                    this.logger.debug(`[Network] Battle start received (turn: ${turn})`);
+                    this.logger.debug(`[Status] Signal: Combat synchronization received (Turn: ${turn})`);
                     this.emit('battle:start', { turn });
                 }
                 return;
@@ -125,7 +125,7 @@ class NetworkListener extends EventEmitter {
                     }
 
                     const logText = json.popup.body ? json.popup.body : type;
-                    this.logger.info(`[Network] Join error detected: ${logText}`);
+                    this.logger.info(`[Status] Signal: Join error detected (Message: ${logText})`);
                     this.emit('raid:error', { type, body: json.popup.body });
                 }
                 return;
@@ -134,7 +134,7 @@ class NetworkListener extends EventEmitter {
             if (url.includes('/quest/raid_deck_data_create')) {
                 const json = await response.json().catch(() => null);
                 if (json && (json.error === true || json.error_type !== undefined)) {
-                    this.logger.info(`[Network] Deck creation error detected (type: ${json.error_type || 'unknown'})`);
+                    this.logger.info(`[Status] Signal: Deck configuration error (Type: ${json.error_type || 'unknown'})`);
                     this.emit('raid:error', { type: 'deck_error' });
                 }
                 return;
@@ -189,7 +189,7 @@ class NetworkListener extends EventEmitter {
 
             // --- Supporter screen detection ---
             if (url.includes('/rest/sound/quest_supporter_bgm')) {
-                this.logger.debug('[Network] Supporter BGM detected -> On supporter selection page');
+                this.logger.debug('[Status] Signal: Supporter BGM detected (Location: Supporter Selection)');
                 this.emit('raid:supporter_screen');
                 return;
             }
