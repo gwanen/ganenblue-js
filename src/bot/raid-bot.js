@@ -121,15 +121,11 @@ class RaidBot {
       this.logger.warn(
         `[Raid] Join failed (${errorType || "UI"}). Performing fast refresh...`,
       );
-      // Security-04: Variable Jitter
-      await sleep(50 + Math.random() * 50);
       await this.controller.reloadPage();
     } else {
       this.logger.warn(
         `[Raid] Join failed (${errorType}). Returning to assist page...`,
       );
-      // Security-04: Variable Jitter
-      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.raidBackupUrl);
     }
     await sleep(200);
@@ -236,7 +232,7 @@ class RaidBot {
       this.logger.info(
         "[Raid] Result page detected. Waiting for network to settle...",
       );
-      await sleep(randomDelay(500, 800));
+      await sleep(100);
       // Re-check after waiting
       const recheckUrl = this.controller.page.url();
       const stillResult =
@@ -247,7 +243,7 @@ class RaidBot {
           "[Raid] Still on result page. Navigating to backup...",
         );
         await this.controller.gotoSPA(this.raidBackupUrl);
-        await sleep(300);
+        await sleep(50);
         return false; // Restart cycle
       }
     } else {
@@ -308,10 +304,10 @@ class RaidBot {
     });
 
     // Navigate to backup page after battle ends (don't stay on result page)
-    await sleep(randomDelay(200, 400)); // Brief wait for network
+    await sleep(50); // Brief wait for network
     this.logger.info("[Raid] Navigating to backup page...");
     await this.controller.gotoSPA(this.raidBackupUrl);
-    await sleep(randomDelay(300, 500));
+    await sleep(50);
 
     // Note: skipRaid/raidFull/raidEnded are handled during battle, not after
     // This point is reached only for successful battle completion
@@ -394,7 +390,7 @@ class RaidBot {
           );
           await this.waitForActiveBackupsCooldown();
           await this.controller.gotoSPA(this.raidBackupUrl);
-          await sleep(randomDelay(100, 300));
+          await sleep(10);
           this.raidErrorType = null;
           continue;
         }
@@ -408,7 +404,7 @@ class RaidBot {
             await this.waitForActiveBackupsCooldown();
           }
           await this.controller.gotoSPA(this.raidBackupUrl);
-          await sleep(randomDelay(100, 300));
+          await sleep(10);
           this.raidErrorType = null;
           continue;
         }
@@ -438,7 +434,7 @@ class RaidBot {
         if (errorResult.raidFull || errorResult.raidEnded) {
           this.logger.info("[Raid] Raid full or ended. Escaping popup state");
           await this.controller.reloadPage();
-          await sleep(randomDelay(1500, 2500));
+          await sleep(200);
           continue;
         }
 
@@ -450,7 +446,7 @@ class RaidBot {
           await this.controller.gotoSPA(this.raidBackupUrl, {
             waitUntil: "domcontentloaded",
           });
-          await sleep(randomDelay(100, 300));
+          await sleep(50);
           continue;
         }
 
@@ -465,12 +461,12 @@ class RaidBot {
           await this.controller.gotoSPA(this.raidBackupUrl, {
             waitUntil: "domcontentloaded",
           });
-          await sleep(randomDelay(100, 300));
+          await sleep(50);
           continue;
         }
         this.logger.info("[Raid] Error popup detected. Escaping popup state");
         await this.controller.reloadPage();
-        await sleep(randomDelay(1500, 2500));
+        await sleep(200);
         continue;
       }
 
@@ -572,7 +568,7 @@ class RaidBot {
                   );
                   await this.clearPendingBattles();
                   await this.controller.gotoSPA(this.raidBackupUrl);
-                  await sleep(randomDelay(100, 300));
+                  await sleep(10);
                   continue;
                 }
               }
@@ -640,7 +636,7 @@ class RaidBot {
                 );
                 await this.clearPendingBattles();
                 await this.controller.gotoSPA(this.raidBackupUrl);
-                await sleep(randomDelay(100, 300));
+                await sleep(10);
                 continue;
               }
               // Fast Recovery: Target-aware reload/navigation
@@ -686,7 +682,7 @@ class RaidBot {
         }
 
         await this.refreshRaidSearch();
-        await sleep(randomDelay(800, 1200));
+        await sleep(200);
       }
     }
 
