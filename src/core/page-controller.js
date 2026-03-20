@@ -544,7 +544,7 @@ class PageController {
     }
 
     // Extra short yield so any remaining microtasks on the SPA router settle.
-    await sleep(100);
+    await sleep(50);
 
     // Frame stability check: ensure frame is reattached after SPA navigation
     await this.waitForFrameStable(2000);

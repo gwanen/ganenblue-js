@@ -234,9 +234,6 @@ class QuestBot {
       // Standard quest navigation
       this.networkSupporterScreen = false; // Reset for new quest
       await this.controller.gotoSPA(this.questUrl);
-      // Delay to allow previous battle's result page detection to settle
-      // This prevents race condition where old battle result is detected as error
-      await sleep(randomDelay(200, 400));
 
       const summonStatus = await this.selectSummon();
 
@@ -306,7 +303,7 @@ class QuestBot {
 
       // Check for AP/Confirmation popup
       if (await this.controller.elementExists(okButton, 1000, true)) {
-        await this.controller.cachedClick(okButton, 15);
+        await this.controller.cachedClick(okButton, 0);
         await sleep(50);
       }
 
@@ -326,7 +323,7 @@ class QuestBot {
     // Timeout: 7 seconds. Re-navigate up to 2x if GBF's SPA intercepts the
     // late result.json and redirects us back to #result mid-navigation.
     const startTime = Date.now();
-    const timeout = 7000;
+    const timeout = 10000;
     let renavCount = 0;
 
     while (Date.now() - startTime < timeout) {
@@ -373,11 +370,10 @@ class QuestBot {
         );
         this.networkSupporterScreen = false;
         await this.controller.gotoSPA(this.questUrl);
-        await sleep(randomDelay(200, 350));
         continue;
       }
 
-      await sleep(100);
+      await sleep(50);
     }
 
     // Check for error popups only (skip result page check for quests - stale elements from previous battle)
@@ -400,7 +396,7 @@ class QuestBot {
       }
 
       this.logger.info("[Summon] Confirming selection");
-      await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {});
+      await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => {});
       await sleep(50);
       return await this.validatePostClick();
     }
@@ -410,10 +406,7 @@ class QuestBot {
       this.logger.info("[Summon] Supporter selected");
 
       try {
-        await this.controller.clickSafe(summonSelector, {
-          timeout: 2000,
-          maxRetries: 1,
-        });
+        await this.controller.cachedClick(summonSelector, 0);
       } catch (error) {
         const url = this.controller.page.url();
         if (url.match(/#(?:raid|raid_multi)(?:\/|$)/)) return "success";
@@ -422,7 +415,7 @@ class QuestBot {
 
       if (await this.controller.elementExists(".btn-usual-ok", 1500, true)) {
         this.logger.info("[Summon] Confirming selection...");
-        await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {});
+        await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => {});
         await sleep(50);
       }
 
@@ -547,13 +540,10 @@ class QuestBot {
 
       if (state.isParty && state.startBtn) {
         this.logger.info("[Summon] Party selection confirmed. Finalizing...");
-        await this.controller.clickSafe(".btn-usual-ok.se-quest-start", {
-          fast: true,
-        });
-        await sleep(300);
+        await this.controller.cachedClick(".btn-usual-ok.se-quest-start", 0);
       }
 
-      await sleep(200);
+      await sleep(50);
     }
 
     // Final logout check

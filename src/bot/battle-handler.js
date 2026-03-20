@@ -352,7 +352,7 @@ class BattleHandler {
           return;
         }
 
-        await this.controller.cachedClick(this.selectors.fullAutoButton);
+        await this.controller.cachedClick(this.selectors.fullAutoButton, 0);
         this.logger.debug("[Battle] Fast-clicked Full Auto");
         this.faActive = true;
 
@@ -457,7 +457,7 @@ class BattleHandler {
     // Step 1: Wait for attack button (DOM class check)
     this.logger.debug("[Battle] Waiting for attack button (.display-on)");
     const attackReady = await this.controller.page
-      .waitForSelector(selAttack, { timeout: 5000 })
+      .waitForSelector(selAttack, { timeout: 10000 })
       .then(() => true)
       .catch(() => false);
 
@@ -469,7 +469,7 @@ class BattleHandler {
 
     // Step 2: Click attack button
     try {
-      await this.controller.cachedClick(selAttack, 15);
+      await this.controller.cachedClick(selAttack, 0);
     } catch (e) {
       this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
       await this.controller.reloadPage();
@@ -525,8 +525,7 @@ class BattleHandler {
       this.logger.warn("[Semi Auto] Refreshing anyway");
     }
 
-    // Step 4: Brief pause for network response parsing
-    await sleep(20);
+    // Step 4: No pause for network response parsing - proceed immediately to refresh
     if (this.stopped) return false;
 
     // Step 5: Refresh to skip animations
@@ -916,7 +915,12 @@ class BattleHandler {
                 await sleep(this.fastRefresh ? 100 : 200);
                 this.controller.clearClickCache();
                 try {
-                  await this.handleFullAuto();
+                  if (isSemiAuto) {
+                    this.logger.info("[Battle] Re-engaging Semi Auto");
+                    networkTurnReady = true;
+                  } else {
+                    await this.handleFullAuto();
+                  }
                 } catch (e) {
                   this.logger.warn(
                     `[Battle] Re-engagement failed: ${e.message}`,
