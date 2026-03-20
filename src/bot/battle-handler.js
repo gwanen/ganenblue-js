@@ -450,22 +450,21 @@ class BattleHandler {
       .catch(() => true); // If evaluate fails, assume active (don't reload on frame issues)
   }
 
-  async handleSemiAuto(buttonAlreadyVisible = false) {
+  async handleSemiAuto() {
     const selAttack = ".btn-attack-start.display-on";
     const selCancel = this.selectors.attackCancel;
 
-    // Step 1: Wait for attack button if not already known visible
-    if (!buttonAlreadyVisible) {
-      this.logger.debug("[Battle] Waiting for attack button");
-      const attackReady = await this.controller.page
-        .waitForSelector(selAttack, { timeout: 10000 })
-        .then(() => true)
-        .catch(() => false);
-      if (!attackReady) {
-        this.logger.warn("[Semi Auto] Timeout. Refreshing page");
-        await this.controller.reloadPage();
-        return false;
-      }
+    // Step 1: Wait for attack button (DOM class check)
+    this.logger.debug("[Battle] Waiting for attack button (.display-on)");
+    const attackReady = await this.controller.page
+      .waitForSelector(selAttack, { timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!attackReady) {
+      this.logger.warn("[Semi Auto] Timeout (display-on missing). Refreshing");
+      await this.controller.reloadPage();
+      return false;
     }
 
     // Step 2: Click attack button
@@ -774,7 +773,7 @@ class BattleHandler {
           );
           networkTurnReady = false;
           const attackedTurnAttempt = networkTurn;
-          const confirmed = await this.handleSemiAuto(true); // Button already confirmed visible by network event
+          const confirmed = await this.handleSemiAuto(); // DOM check for .display-on
           // Only lock lastAttackedTurn when attack was network-confirmed.
           // If click silently failed (button not ready yet), keep lastAttackedTurn as-is
           // so the same-turn reload re-arms networkTurnReady correctly.
