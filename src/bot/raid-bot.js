@@ -800,7 +800,7 @@ class RaidBot {
       }
 
       retryCount++;
-      await sleep(200);
+      await sleep(50);
     }
 
     const okFound = await this.controller.elementExists(
@@ -816,16 +816,10 @@ class RaidBot {
       }
 
       this.logger.info("[Summon] Clicking start confirmation");
-      await this.controller
-        .clickSafe(".btn-usual-ok", {
-          timeout: 1000,
-          maxRetries: 1,
-          fast: true,
-        })
-        .catch(() => {
-          this.logger.debug("[Wait] Confirmation popup vanished before click");
-        });
-      await sleep(200);
+      await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {
+        this.logger.debug("[Wait] Confirmation popup vanished before click");
+      });
+      await sleep(50);
 
       return await this.validatePostClick();
     }
@@ -856,11 +850,7 @@ class RaidBot {
         let clickSuccess = false;
         for (let i = 0; i < 3; i++) {
           try {
-            await this.controller.clickSafe(".btn-usual-ok", {
-              timeout: 1000,
-              maxRetries: 1,
-              fast: true,
-            });
+            await this.controller.cachedClick(".btn-usual-ok", 15);
             clickSuccess = true;
           } catch (e) {}
 
@@ -870,14 +860,14 @@ class RaidBot {
             clickSuccess = true;
             break;
           }
-          await sleep(300);
+          await sleep(50);
         }
 
         if (!clickSuccess)
           this.logger.warn(
             "[Wait] Failed to click start confirmation properly",
           );
-        await sleep(300);
+        await sleep(50);
       } else {
         // Fallback: If cancel never appeared but OK is there (e.g. an error popup instead)
         if (await this.controller.elementExists(".btn-usual-ok", 200, true)) {
@@ -885,9 +875,9 @@ class RaidBot {
             "[Wait] Only OK button found (no cancel). Clicking anyway",
           );
           await this.controller
-            .clickSafe(".btn-usual-ok", { timeout: 1000, maxRetries: 1 })
+            .cachedClick(".btn-usual-ok", 15)
             .catch(() => {});
-          await sleep(300);
+          await sleep(50);
         }
       }
 
@@ -908,14 +898,12 @@ class RaidBot {
         await sleep(200);
 
         if (await this.controller.elementExists(".btn-usual-ok", 500, true)) {
-          await this.controller
-            .clickSafe(".btn-usual-ok", { timeout: 2000, maxRetries: 1 })
-            .catch(() => {
-              this.logger.debug(
-                "[Summon] Fallback confirmation vanished before click",
-              );
-            });
-          await sleep(300);
+          await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {
+            this.logger.debug(
+              "[Summon] Fallback confirmation vanished before click",
+            );
+          });
+          await sleep(50);
 
           return await this.validatePostClick();
         }

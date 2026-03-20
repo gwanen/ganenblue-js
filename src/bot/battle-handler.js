@@ -469,7 +469,7 @@ class BattleHandler {
 
     // Step 2: Click attack button
     try {
-      await this.controller.cachedClick(selAttack);
+      await this.controller.cachedClick(selAttack, 15);
     } catch (e) {
       this.logger.warn(`[Semi Auto] Click failed: ${e.message}. Refreshing`);
       await this.controller.reloadPage();
@@ -486,7 +486,7 @@ class BattleHandler {
           resolved = true;
           resolve(false);
         }
-      }, 7000);
+      }, 3000);
 
       const onAttack = () => {
         if (!resolved) {
@@ -526,7 +526,7 @@ class BattleHandler {
     }
 
     // Step 4: Brief pause for network response parsing
-    await sleep(50);
+    await sleep(20);
     if (this.stopped) return false;
 
     // Step 5: Refresh to skip animations
@@ -534,7 +534,7 @@ class BattleHandler {
     // The main waitForBattleEnd loop handles turn signals and battle end.
     this.logger.info("[Battle] Refreshing page");
     await this.controller.reloadPage();
-    await sleep(50); // Minimal settle
+    await sleep(20); // Minimal settle
     return attackConfirmed; // Tell caller whether attack was network-confirmed
   }
 

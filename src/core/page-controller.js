@@ -193,7 +193,7 @@ class PageController {
    * Uses fast Bezier mouse movement for stealth (no teleports).
    * Adds a small 10-50ms stability delay after DOM detection for reliability.
    */
-  async cachedClick(selector, stabilityDelay = 30) {
+  async cachedClick(selector, stabilityDelay = 15) {
     if (!this._clickCache) this._clickCache = new Map();
 
     let box = this._clickCache.get(selector);

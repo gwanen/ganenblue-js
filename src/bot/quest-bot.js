@@ -306,8 +306,8 @@ class QuestBot {
 
       // Check for AP/Confirmation popup
       if (await this.controller.elementExists(okButton, 1000, true)) {
-        await this.controller.clickSafe(okButton);
-        await sleep(300);
+        await this.controller.cachedClick(okButton, 15);
+        await sleep(50);
       }
 
       // Select summon
@@ -400,13 +400,7 @@ class QuestBot {
       }
 
       this.logger.info("[Summon] Confirming selection");
-      await this.controller
-        .clickSafe(".btn-usual-ok", {
-          timeout: 1000,
-          maxRetries: 1,
-          fast: true,
-        })
-        .catch(() => {});
+      await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {});
       await sleep(50);
       return await this.validatePostClick();
     }
@@ -428,13 +422,7 @@ class QuestBot {
 
       if (await this.controller.elementExists(".btn-usual-ok", 1500, true)) {
         this.logger.info("[Summon] Confirming selection...");
-        await this.controller
-          .clickSafe(".btn-usual-ok", {
-            timeout: 1000,
-            maxRetries: 1,
-            fast: true,
-          })
-          .catch(() => {});
+        await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {});
         await sleep(50);
       }
 
