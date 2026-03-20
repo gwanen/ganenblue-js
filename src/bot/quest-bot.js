@@ -143,6 +143,7 @@ class QuestBot {
       `[Quest] Initiating quest cycle (${this.questsCompleted + 1})`,
     );
 
+    let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
     const currentUrl = this.controller.page.url();
     const isInBattleUrl =
@@ -159,7 +160,8 @@ class QuestBot {
         "[Quest] Result page detected. Navigating to quest URL...",
       );
       await this.controller.gotoSPA(this.questUrl);
-      await sleep(randomDelay(300, 500));
+      hasNavigated = true;
+      await sleep(50);
     }
 
     if (isInBattleUrl) {
@@ -195,9 +197,7 @@ class QuestBot {
         // Wait for battle:result network event before navigating
         // (result.json loads async after boss death reload)
         await this.waitForBattleResult();
-        this.logger.info("[Quest] Navigating to next quest...");
-        await this.controller.gotoSPA(this.questUrl);
-        await sleep(randomDelay(300, 500));
+        this.logger.info("[Quest] Concluding battle, next cycle will handle navigation");
         return true;
       }
 
@@ -215,7 +215,8 @@ class QuestBot {
           "[Quest] Result page detected in battle URL. Navigating away...",
         );
         await this.controller.gotoSPA(this.questUrl);
-        await sleep(randomDelay(300, 500));
+        hasNavigated = true;
+        await sleep(50);
       }
     }
 
@@ -233,7 +234,10 @@ class QuestBot {
     } else {
       // Standard quest navigation
       this.networkSupporterScreen = false; // Reset for new quest
-      await this.controller.gotoSPA(this.questUrl);
+      if (!hasNavigated) {
+        await this.controller.gotoSPA(this.questUrl);
+        await sleep(50);
+      }
 
       const summonStatus = await this.selectSummon();
 
@@ -285,9 +289,7 @@ class QuestBot {
     // Wait for battle:result network event first — result.json loads async
     // after boss death reload. Navigating too early causes SPA redirect loop.
     await this.waitForBattleResult();
-    this.logger.info("[Quest] Navigating to next quest...");
-    await this.controller.gotoSPA(this.questUrl);
-    await sleep(randomDelay(300, 500));
+    this.logger.info("[Quest] Cycle complete, next cycle will handle navigation");
 
     return true;
   }

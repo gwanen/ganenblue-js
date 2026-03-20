@@ -764,24 +764,6 @@ class BattleHandler {
           };
         }
 
-        // --- PRIORITY 1: Semi-Auto Detection (network-driven) ---
-        // battle:start fires via start.json when a new turn begins — attack button is ready
-        if (isSemiAuto && networkTurnReady) {
-          this.logger.debug(
-            "[Semi Auto] networkTurnReady detected, attacking...",
-          );
-          networkTurnReady = false;
-          const attackedTurnAttempt = networkTurn;
-          const confirmed = await this.handleSemiAuto(); // DOM check for .display-on
-          // Only lock lastAttackedTurn when attack was network-confirmed.
-          // If click silently failed (button not ready yet), keep lastAttackedTurn as-is
-          // so the same-turn reload re-arms networkTurnReady correctly.
-          if (confirmed) {
-            lastAttackedTurn = attackedTurnAttempt;
-          }
-          continue;
-        }
-
         // --- PRIORITY 0: Network end-state signals (fastest) ---
         if (bossDied || partyWiped) {
           await this.controller.page.reload({ waitUntil: "domcontentloaded" });
@@ -820,6 +802,24 @@ class BattleHandler {
             honors: previousHonors,
             honorReached: honorTargetReached,
           };
+        }
+
+        // --- PRIORITY 1: Semi-Auto Detection (network-driven) ---
+        // battle:start fires via start.json when a new turn begins — attack button is ready
+        if (isSemiAuto && networkTurnReady && !networkFinished) {
+          this.logger.debug(
+            "[Semi Auto] networkTurnReady detected, attacking...",
+          );
+          networkTurnReady = false;
+          const attackedTurnAttempt = networkTurn;
+          const confirmed = await this.handleSemiAuto(); // DOM check for .display-on
+          // Only lock lastAttackedTurn when attack was network-confirmed.
+          // If click silently failed (button not ready yet), keep lastAttackedTurn as-is
+          // so the same-turn reload re-arms networkTurnReady correctly.
+          if (confirmed) {
+            lastAttackedTurn = attackedTurnAttempt;
+          }
+          continue;
         }
 
         // Exit early if honor target reached
