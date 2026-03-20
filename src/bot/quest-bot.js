@@ -114,6 +114,14 @@ class QuestBot {
         await sleep(50);
       }
     } catch (error) {
+      if (error.message === "DETACHED_FRAME") {
+        this.logger.error("[Safety] Critical Failure: Browser frame detached.");
+        this.logger.warn("[Safety] Halting operations to prevent detection.");
+        notifier.notifyError(this.profileId, "Bot stopped: Browser frame detached. Please check your browser state.");
+        this.stop();
+        return;
+      }
+
       // Graceful exit on browser close/disconnect
       if (
         this.controller.isNetworkError(error) ||
@@ -382,10 +390,10 @@ class QuestBot {
           if (state.isResult && renavCount < 2) {
             renavCount++;
             this.logger.warn(
-              `[Summon] Result page intercept detected. Re-navigating (${renavCount}/2)...`,
+              `[Summon] Result page intercept detected. Recovering (${renavCount}/2)...`,
             );
             this.networkSupporterScreen = false;
-            await this.controller.gotoSPA(this.questUrl);
+            await this.controller.reloadHard();
           }
           await sleep(50); // Faster polling for state changes
         }
@@ -552,11 +560,11 @@ class QuestBot {
         }
 
         if (recheckState.isResult) {
-          // Still on result page — re-navigate and let runSingleQuest retry from scratch
+          // Still on result page — perform a Hard Reload to clear state
           this.logger.warn(
-            "[Summon] Still on result page after wait. Re-navigating...",
+            "[Summon] Still on result page after wait. Performing Hard Reload...",
           );
-          await this.controller.gotoSPA(this.questUrl);
+          await this.controller.reloadHard();
           await sleep(randomDelay(200, 350));
           return "ended";
         }

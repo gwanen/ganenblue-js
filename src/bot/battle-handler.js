@@ -160,8 +160,8 @@ class BattleHandler {
           }
 
           if (!battleLoaded) {
-            this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
-            await this.controller.reloadPage();
+            this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found). Performing Hard Reload...");
+            await this.controller.reloadHard();
             // Wait another 10s after refresh
             battleLoaded = await this.controller.waitForElement(
               loadSelector,
@@ -345,8 +345,8 @@ class BattleHandler {
             continue; // Try again in this while loop
           }
 
-          this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
-          await this.controller.reloadPage();
+          this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found). Performing Hard Reload...");
+          await this.controller.reloadHard();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
@@ -380,7 +380,7 @@ class BattleHandler {
             ".pop-usual.common-pop-error.pop-show .txt-popup-body",
           );
           if (errorText.includes("Waiting for last turn")) {
-            await this.controller.reloadPage();
+            await this.controller.reloadHard();
             await sleep(200);
             await this.checkStateAndResume("full_auto");
             return;
@@ -391,7 +391,7 @@ class BattleHandler {
         if (
           await this.controller.elementExists(".pop-rematch-fail.pop-show", 100)
         ) {
-          await this.controller.reloadPage();
+          await this.controller.reloadHard();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
@@ -400,7 +400,7 @@ class BattleHandler {
         return; // Success, exit method
       } catch (e) {
         this.logger.warn(`[Full Auto] Click failed: ${e.message}`);
-        await this.controller.reloadPage();
+        await this.controller.reloadHard();
         await sleep(200);
         await this.checkStateAndResume("full_auto");
         return;
@@ -408,9 +408,9 @@ class BattleHandler {
     }
 
     this.logger.warn(
-      `[Full Auto] Failed after ${maxAttempts} attempts. Refreshing`,
+      `[Full Auto] Failed after ${maxAttempts} attempts. Performing Hard Reload`,
     );
-    await this.controller.reloadPage();
+    await this.controller.reloadHard();
     await sleep(200);
     await this.checkStateAndResume("full_auto");
   }
@@ -1027,11 +1027,11 @@ class BattleHandler {
             !this.stopped &&
             Date.now() - lastFACheckTime > 25000
           ) {
-            this.logger.info("[Full Auto] Inactive 25s. Refreshing");
+            this.logger.info("[Full Auto] Inactive 25s. Performing Hard Reload");
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
-            await this.controller.reloadPage();
+            await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
@@ -1048,10 +1048,10 @@ class BattleHandler {
             mode === "full_auto" &&
             Date.now() - lastActionTime > faInactivityThreshold
           ) {
-            this.logger.warn("[Full Auto] Inactive. Refreshing page");
+            this.logger.warn("[Full Auto] Inactive. Performing Hard Reload");
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
-            await this.controller.reloadPage();
+            await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
@@ -1104,9 +1104,9 @@ class BattleHandler {
         // This clears accumulated DOM nodes, JS heap, and cached responses from GBF SPA
         if (Date.now() - lastHardReloadTime > hardReloadInterval) {
           this.logger.info(
-            "[Memory] Periodic hard reload to clear page context",
+            "[Memory] Periodic Hard Reload to clear page context",
           );
-          await this.controller.page.reload({ waitUntil: "domcontentloaded" });
+          await this.controller.reloadHard();
           await sleep(500);
           lastHardReloadTime = Date.now();
           // Reset iteration counter to avoid immediate GC after reload
