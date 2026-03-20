@@ -192,8 +192,9 @@ class QuestBot {
           this.updateDetailStats(result);
         }
         this.logger.info("[Battle] Combat concluded");
-        // Navigate to quest URL after battle ends (don't stay on result page)
-        await sleep(randomDelay(300, 500)); // Brief wait for network
+        // Wait for battle:result network event before navigating
+        // (result.json loads async after boss death reload)
+        await this.waitForBattleResult();
         this.logger.info("[Quest] Navigating to next quest...");
         await this.controller.gotoSPA(this.questUrl);
         await sleep(randomDelay(300, 500));
@@ -284,6 +285,9 @@ class QuestBot {
 
     // Navigate back to quest URL so the next cycle starts on the supporter page,
     // not on the stale #raid URL with lingering result page UI.
+    // Wait for battle:result network event first — result.json loads async
+    // after boss death reload. Navigating too early causes SPA redirect loop.
+    await this.waitForBattleResult();
     this.logger.info("[Quest] Navigating to next quest...");
     await this.controller.gotoSPA(this.questUrl);
     await sleep(randomDelay(300, 500));
@@ -649,6 +653,42 @@ class QuestBot {
     }
 
     this.logger.info(`[System] Cleared ${clearedCount} pending battles`);
+  }
+
+  /**
+   * Wait for battle:result network event before navigating away.
+   * In quest mode, the result.json loads asynchronously after page reload
+   * (triggered by boss death). If we navigate before it fires, GBF's SPA
+   * router intercepts the late response and redirects back to #result,
+   * causing a navigation loop.
+   */
+  async waitForBattleResult() {
+    if (!this.controller.network) return;
+
+    await new Promise((resolve) => {
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.controller.network.off("battle:result", onResult);
+          this.logger.debug(
+            "[Network] Battle result timeout, proceeding anyway",
+          );
+          resolve();
+        }
+      }, 5000);
+
+      const onResult = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          this.logger.debug("[Network] Battle result received");
+          resolve();
+        }
+      };
+
+      this.controller.network.once("battle:result", onResult);
+    });
   }
 
   async checkEarlyBattleEndPopup() {
