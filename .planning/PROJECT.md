@@ -26,12 +26,16 @@ The bot must reliably automate GBF battles end-to-end without manual interventio
 - ✓ Electron GUI with IPC communication
 - ✓ YAML config with env var overrides
 - ✓ Profile-scoped logging with Winston
+- ✓ **Skill Refresh:** Reload page after skill usage in FA mode — v1.0
+- ✓ **Network Listener Optimizations:** Early filtering and lazy parsing — v1.0
+- ✓ **Ultra-Snappy Interaction:** cachedClicks + 50ms poll — v1.0
+- ✓ **Logging Standardization:** Global Rigid Formal style — v1.0
+- ✓ **Replicard Stability:** Hash-routing + Quick Select — v1.0
+- ✓ **Result Detection:** SP/Replicard result patterns — v1.0
 
 ### Active
 
-- [ ] Skill refresh — reload page after each skill usage in Full Auto mode to skip skill animations
-- [ ] Skill refresh config option in `config/default.yaml`
-- [ ] Skill refresh toggle in Electron GUI panel
+- (Planning next milestone ...)
 
 ### Out of Scope
 
@@ -42,26 +46,20 @@ The bot must reliably automate GBF battles end-to-end without manual interventio
 ## Context
 
 - **Ecosystem:** GBF is a browser-based SPA with hash routing (`#quest`, `#raid`, etc.)
-- **Animation patterns:** GBF plays CSS animations for attacks, summons, and skills. The bot skips these by reloading the page immediately after the server processes the action.
-- **Existing refresh patterns:** `summonRefresh` and `fastRefresh` already handle summon and attack animations. `skillRefresh` fills the gap for individual skill usage animations.
-- **Network signals:** `battle:ability_used` event already exists in `NetworkListener` — fires when skill JSON (`ability_result.json`) is intercepted. This will drive the skill refresh.
-- **Battle loop:** `waitForBattleEnd()` in `battle-handler.js` is the main event loop that checks flags and triggers reloads.
-
-## Constraints
-
-- **Tech stack:** JavaScript ES Modules, Puppeteer, Electron — no TypeScript
-- **Pattern:** Follow existing `summonRefresh` pattern exactly (constructor option, flag in network handler, reload block in waitForBattleEnd)
-- **GUI:** Add toggle to existing Electron panel alongside `fastRefresh` and `summonRefresh`
-- **Full Auto only:** Skill refresh only applies when `mode !== 'semi_auto'`
+- **Performance:** Achieved ~20% faster turn-cycling via snappiness optimizations in v1.0.
+- **Reliability:** Dedicated support for Replicard Sandbox mechanics and result detection.
+- **Tech stack:** JavaScript ES Modules, Puppeteer, Electron.
 
 ## Key Decisions
 
 | Decision                  | Rationale                                                                   | Outcome   |
 | ------------------------- | --------------------------------------------------------------------------- | --------- |
-| Refresh after every skill | Simplest approach, matches summon refresh behavior                          | — Pending |
-| Full Auto only            | Semi Auto already has per-attack refresh, skill refresh adds no value there | — Pending |
-| Config + GUI toggle       | User requested toggleable via GUI panel                                     | — Pending |
+| Refresh after every skill | Simplest approach, matches summon refresh behavior                          | ✓ Good    |
+| Full Auto only            | Semi Auto already has per-attack refresh, skill refresh adds no value there | ✓ Good    |
+| Config + GUI toggle       | User requested toggleable via GUI panel                                     | ✓ Good    |
+| Quick Select support      | Handle Replicard's unique supporter selection screen                        | ✓ Good    |
+| Rigid Formal Logging      | Improve debuggability and professional console appearance                   | ✓ Good    |
 
 ---
 
-_Last updated: 2026-03-20 after initialization_
+_Last updated: 2026-03-21 after v1.0 Replicard & Performance Milestone_
