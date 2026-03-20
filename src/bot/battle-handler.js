@@ -160,8 +160,8 @@ class BattleHandler {
           }
 
           if (!battleLoaded) {
-            this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
-            await this.controller.reloadPage();
+            this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found). Performing Hard Reload...");
+            await this.controller.reloadHard();
             // Wait another 10s after refresh
             battleLoaded = await this.controller.waitForElement(
               loadSelector,
@@ -345,8 +345,8 @@ class BattleHandler {
             continue; // Try again in this while loop
           }
 
-          this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found)");
-          await this.controller.reloadPage();
+          this.logger.warn("[Warn] Battle: UI interface missing (Auto button not found). Performing Hard Reload...");
+          await this.controller.reloadHard();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
@@ -380,7 +380,7 @@ class BattleHandler {
             ".pop-usual.common-pop-error.pop-show .txt-popup-body",
           );
           if (errorText.includes("Waiting for last turn")) {
-            await this.controller.reloadPage();
+            await this.controller.reloadHard();
             await sleep(200);
             await this.checkStateAndResume("full_auto");
             return;
@@ -391,7 +391,7 @@ class BattleHandler {
         if (
           await this.controller.elementExists(".pop-rematch-fail.pop-show", 100)
         ) {
-          await this.controller.reloadPage();
+          await this.controller.reloadHard();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
           return;
@@ -400,7 +400,7 @@ class BattleHandler {
         return; // Success, exit method
       } catch (e) {
         this.logger.warn(`[Full Auto] Click failed: ${e.message}`);
-        await this.controller.reloadPage();
+        await this.controller.reloadHard();
         await sleep(200);
         await this.checkStateAndResume("full_auto");
         return;
@@ -408,9 +408,9 @@ class BattleHandler {
     }
 
     this.logger.warn(
-      `[Full Auto] Failed after ${maxAttempts} attempts. Refreshing`,
+      `[Full Auto] Failed after ${maxAttempts} attempts. Performing Hard Reload`,
     );
-    await this.controller.reloadPage();
+    await this.controller.reloadHard();
     await sleep(200);
     await this.checkStateAndResume("full_auto");
   }
@@ -489,6 +489,9 @@ class BattleHandler {
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          if (this.controller.network) {
+            this.controller.network.off("battle:attack_used", onAttack);
+          }
           resolve(false);
         }
       }, 3000);
@@ -750,9 +753,9 @@ class BattleHandler {
         lastActionTime = this.options.lastActionTimeRef.value;
         faInactivityThreshold = this.options.faThresholdRef.value;
 
-        // Cache the URL once per tick — page.url() is an IPC call; calling it
-        // multiple times in the same 50ms loop iteration wastes CPU.
-        const currentUrl = this.controller.page.url();
+        // SPD-02: Batched UI State Snapshot (Replaces multiple individual IPC calls)
+        const snapshot = await this.getBattleStateSnapshot();
+        const currentUrl = snapshot.url;
 
         // Turn-Change Priority: network turn incremented — bypass throttles for immediate check
         if (turnCount > lastCheckTurn) {
@@ -836,13 +839,8 @@ class BattleHandler {
           };
         }
 
-        // 3. Result Page Detection (URL-based, network-confirmed)
-        // Check both hash-based (#result) and path-based (/result/content/index/) URLs
-        const isResultUrl =
-          currentUrl.includes("#result") ||
-          currentUrl.includes("/result/content/index/") ||
-          currentUrl.includes("/result_multi/content/index/");
-        if (isResultUrl) {
+        // 3. Result Page Detection (Snapshot-based)
+        if (snapshot.isResultPage || snapshot.hash.includes("#result")) {
           // Wait for network confirmation to avoid race condition with quest navigation
           // The network event may fire after URL change, so we poll networkFinished flag
           if (!networkFinished) {
@@ -888,27 +886,13 @@ class BattleHandler {
         if (Date.now() - lastEndStateCheckTime > 3000) {
           lastEndStateCheckTime = Date.now();
 
-          // Watchdog: Check if attack is processing (for stuck detection)
-          const attackState = await this.controller.page
-            .evaluate((sel) => {
-              const attBtn = document.querySelector(sel.attackButton);
-              const isAttacking = !!(
-                attBtn && attBtn.classList.contains("display-off")
-              );
+          // Watchdog: Check if attack is processing (via snapshot)
+          const isAttacking = !!snapshot.isAttackOn; // If display-on, we are potentially attacking or ready
+          const uiVisible = !!snapshot.isAttackOn || snapshot.isAutoOn || snapshot.isPopShow;
 
-              // Check if any battle UI is visible (to detect stuck state)
-              const ui = document.querySelector(
-                ".btn-attack-start.display-on, .btn-usual-cancel, .btn-auto",
-              );
-              const uiVisible = !!(ui && ui.offsetWidth > 0);
-
-              return { isAttacking, uiVisible };
-            }, this.selectors)
-            .catch(() => ({}));
-
-          // Watchdog Logic: Detect stuck battles (no network activity + no UI)
-          if (!attackState.isAttacking) {
-            if (attackState.uiVisible) {
+          // Watchdog Logic: Detect stuck battles
+          if (!isAttacking) {
+            if (uiVisible) {
               missingUiCount = 0;
             } else {
               missingUiCount++;
@@ -948,6 +932,8 @@ class BattleHandler {
             summonUsed = false;
             if (this.summonRefresh) {
               this.logger.info("[Summon] Refreshing page after summon");
+              // Security-04: Variable Refresh Jitter
+              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -966,6 +952,8 @@ class BattleHandler {
             abilityUsed = false;
             if (this.skillRefresh) {
               this.logger.info("[Ability] Refreshing page after skill usage");
+              // Security-04: Variable Refresh Jitter
+              await sleep(50 + Math.random() * 50);
               await this.controller.reloadPage();
               await sleep(this.fastRefresh ? 100 : 200);
               this.controller.clearClickCache();
@@ -1008,6 +996,8 @@ class BattleHandler {
               };
             }
 
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
             await this.controller.reloadPage();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1027,11 +1017,13 @@ class BattleHandler {
             !this.stopped &&
             Date.now() - lastFACheckTime > 25000
           ) {
-            this.logger.info("[Full Auto] Inactive 25s. Refreshing");
+            this.logger.info("[Full Auto] Inactive 25s. Performing Hard Reload");
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000;
-            await this.controller.reloadPage();
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
+            await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
@@ -1048,10 +1040,12 @@ class BattleHandler {
             mode === "full_auto" &&
             Date.now() - lastActionTime > faInactivityThreshold
           ) {
-            this.logger.warn("[Full Auto] Inactive. Refreshing page");
+            this.logger.warn("[Full Auto] Inactive. Performing Hard Reload");
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
-            await this.controller.reloadPage();
+            // Security-04: Variable Refresh Jitter
+            await sleep(50 + Math.random() * 50);
+            await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
@@ -1095,8 +1089,8 @@ class BattleHandler {
 
         // Memory Management: Periodic GC every 100 iterations (~10s)
         // This prevents heap bloat from accumulated battle objects and closures
-        if (iterationCount % 100 === 0 && global.gc) {
-          global.gc();
+        if (iterationCount % 100 === 0) {
+          this.controller.triggerGC();
         }
         iterationCount++;
 
@@ -1104,9 +1098,11 @@ class BattleHandler {
         // This clears accumulated DOM nodes, JS heap, and cached responses from GBF SPA
         if (Date.now() - lastHardReloadTime > hardReloadInterval) {
           this.logger.info(
-            "[Memory] Periodic hard reload to clear page context",
+            "[Memory] Periodic Hard Reload to clear page context",
           );
-          await this.controller.page.reload({ waitUntil: "domcontentloaded" });
+          // Security-04: Variable Refresh Jitter
+          await sleep(50 + Math.random() * 50);
+          await this.controller.reloadHard();
           await sleep(500);
           lastHardReloadTime = Date.now();
           // Reset iteration counter to avoid immediate GC after reload
@@ -1459,6 +1455,73 @@ class BattleHandler {
         return false;
       })
       .catch(() => false);
+  }
+
+  /**
+   * SPD-02: Batched UI State Snapshot.
+   * Fetches turn, honor, and terminal states (boss death, wipe, results) in a single CDP roundtrip.
+   */
+  async getBattleStateSnapshot() {
+    return await this.controller.page
+      .evaluate((selectors) => {
+        const res = {
+          turn: 0,
+          honors: 0,
+          isBossDead: false,
+          isPartyWiped: false,
+          isResultPage: false,
+          isAttackOn: false,
+          isAutoOn: false,
+          isPopShow: false,
+          url: window.location.href,
+          hash: window.location.hash,
+        };
+
+        // 1. Turn Number
+        const turnElem = document.querySelector(selectors.turnCounter);
+        if (turnElem) {
+          res.turn = parseInt(turnElem.textContent, 10) || 0;
+        }
+
+        // 2. Honors
+        const honorElem = document.querySelector(".prt-total-honor");
+        if (honorElem) {
+          res.honors =
+            parseInt(honorElem.textContent.replace(/[,/]/g, ""), 10) || 0;
+        }
+
+        // 3. Terminal States
+        const result = document.querySelector(
+          ".prt-result, #js-result, .cnt-result, .prt-result-head",
+        );
+        if (result && result.offsetWidth > 0) res.isResultPage = true;
+
+        // 4. UI Controls
+        const att = document.querySelector(selectors.attackButton);
+        if (att && att.classList.contains("display-on")) res.isAttackOn = true;
+
+        const auto = document.querySelector(".btn-auto, .btn-full-auto");
+        if (auto && auto.classList.contains("pushed")) res.isAutoOn = true;
+
+        // 5. Popups
+        const pop = document.querySelector(".pop-show, .pop-usual");
+        if (pop && pop.offsetWidth > 0) res.isPopShow = true;
+
+        // 6. Boss Death / Wipe DOM Falbacks
+        const bossDeath = document.querySelector(".prt-battle-boss.die");
+        if (bossDeath) res.isBossDead = true;
+
+        return res;
+      }, this.selectors)
+      .catch(() => ({}));
+  }
+
+  async getBattleState() {
+    const snapshot = await this.getBattleStateSnapshot();
+    return {
+      turn: snapshot.turn || 0,
+      honors: snapshot.honors || 0,
+    };
   }
 }
 

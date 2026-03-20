@@ -149,7 +149,10 @@ function getProfileElements(pid) {
         // Credentials
         email: document.getElementById(`mobage-email-${pid}`),
         password: document.getElementById(`mobage-password-${pid}`),
-        btnSaveCreds: document.getElementById(`btn-save-credentials-${pid}`)
+        btnSaveCreds: document.getElementById(`btn-save-credentials-${pid}`),
+        // Phase 11: Performance
+        turboMode: document.getElementById(`turbo-mode-${pid}`),
+        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)
     };
 }
 
@@ -252,7 +255,9 @@ function setupProfileListeners(pid) {
             fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
             refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
             summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
-            skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false
+            skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
+            turboMode: els.turboMode ? els.turboMode.checked : false,
+            memoryWatchdog: els.memoryWatchdog ? els.memoryWatchdog.checked : false
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -311,7 +316,9 @@ function setupProfileListeners(pid) {
         document.getElementById(`fast-refresh-${pid}`),
         document.getElementById(`refresh-on-start-${pid}`),
         document.getElementById(`summon-refresh-${pid}`),
-        document.getElementById(`skill-refresh-${pid}`)
+        document.getElementById(`skill-refresh-${pid}`),
+        document.getElementById(`turbo-mode-${pid}`),
+        document.getElementById(`memory-watchdog-${pid}`)
     ];
     inputs.forEach(input => {
         if (input) {
@@ -604,6 +611,19 @@ if (window.electronAPI) {
     window.electronAPI.onPlaySound && window.electronAPI.onPlaySound(() => {
         playAlertSound();
     });
+
+    // Phase 11: Memory Stats Update
+    window.electronAPI.onMemoryUpdate && window.electronAPI.onMemoryUpdate((stats) => {
+        const memEl = document.getElementById('memory-stats');
+        if (memEl) {
+            memEl.textContent = `Memory: Heap ${stats.heapUsed}/${stats.heapTotal} | RSS ${stats.rss} | Ext ${stats.external}`;
+            if (parseFloat(stats.heapUsed) > 400) {
+                memEl.style.color = 'var(--accent-red)';
+            } else {
+                memEl.style.color = 'var(--text-secondary)';
+            }
+        }
+    });
 }
 
 let _lastSoundTime = 0;
@@ -683,6 +703,8 @@ async function loadProfileSettings(pid) {
             const brEl = document.getElementById(`block-resources-${pid}`);
             if (brEl) brEl.checked = s.blockResources;
         }
+        if (s.turboMode !== undefined && els.turboMode) els.turboMode.checked = s.turboMode;
+        if (s.memoryWatchdog !== undefined && els.memoryWatchdog) els.memoryWatchdog.checked = s.memoryWatchdog;
     }
 }
 
@@ -704,7 +726,9 @@ function saveProfileSettings(pid) {
         fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
         refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
         summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
-        skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false
+        skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
+        turboMode: document.getElementById(`turbo-mode-${pid}`)?.checked || false,
+        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)?.checked || false
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }

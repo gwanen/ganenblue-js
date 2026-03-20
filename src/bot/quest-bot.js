@@ -39,6 +39,12 @@ class QuestBot {
       this.logger.info("[System] Image blocking disabled");
     }
 
+    if (options.turboMode) {
+      this.controller
+        .enableTurboCSS()
+        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
+    }
+
     this.questsCompleted = 0;
     this.isRunning = false;
     this.isPaused = false;
@@ -114,6 +120,14 @@ class QuestBot {
         await sleep(50);
       }
     } catch (error) {
+      if (error.message === "DETACHED_FRAME") {
+        this.logger.error("[Safety] Critical Failure: Browser frame detached.");
+        this.logger.warn("[Safety] Halting operations to prevent detection.");
+        notifier.notifyError(this.profileId, "Bot stopped: Browser frame detached. Please check your browser state.");
+        this.stop();
+        return;
+      }
+
       // Graceful exit on browser close/disconnect
       if (
         this.controller.isNetworkError(error) ||
@@ -157,6 +171,8 @@ class QuestBot {
       this.logger.info(
         "[Quest] State: Result page detected (Navigating to quest target)",
       );
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.questUrl);
       hasNavigated = true;
       await sleep(50);
@@ -212,6 +228,8 @@ class QuestBot {
         this.logger.info(
           "[Quest] State: Result page detected (Exiting battle URL)",
         );
+        // Security-04: Variable Jitter
+        await sleep(50 + Math.random() * 50);
         await this.controller.gotoSPA(this.questUrl);
         hasNavigated = true;
         await sleep(50);
@@ -222,6 +240,8 @@ class QuestBot {
     const isReplicard = this.questUrl.includes("replicard");
 
     if (isReplicard) {
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.questUrl);
       await sleep(randomDelay(100, 200));
       const battleStarted = await this.startReplicardBattle();
@@ -233,6 +253,8 @@ class QuestBot {
       // Standard quest navigation
       this.networkSupporterScreen = false;
       if (!hasNavigated) {
+        // Security-04: Variable Jitter
+        await sleep(50 + Math.random() * 50);
         await this.controller.gotoSPA(this.questUrl);
       }
 
@@ -349,6 +371,14 @@ class QuestBot {
           }
           resolve({ type: "network" });
         };
+        // Safety cleanup for timeout path
+        const timeout = setTimeout(() => {
+          if (this.controller.network) {
+            this.controller.network.off("raid:supporter_screen", onSupporter);
+          }
+          // The Promise.race timeout or DOM fallback will resolve the outer promise
+        }, 11000);
+
         if (this.controller.network) {
           this.controller.network.once("raid:supporter_screen", onSupporter);
         }
@@ -382,10 +412,10 @@ class QuestBot {
           if (state.isResult && renavCount < 2) {
             renavCount++;
             this.logger.warn(
-              `[Summon] Result page intercept detected. Re-navigating (${renavCount}/2)...`,
+              `[Summon] Result page intercept detected. Recovering (${renavCount}/2)...`,
             );
             this.networkSupporterScreen = false;
-            await this.controller.gotoSPA(this.questUrl);
+            await this.controller.reloadHard();
           }
           await sleep(50); // Faster polling for state changes
         }
@@ -552,11 +582,11 @@ class QuestBot {
         }
 
         if (recheckState.isResult) {
-          // Still on result page — re-navigate and let runSingleQuest retry from scratch
+          // Still on result page — perform a Hard Reload to clear state
           this.logger.warn(
-            "[Summon] Still on result page after wait. Re-navigating...",
+            "[Summon] Still on result page after wait. Performing Hard Reload...",
           );
-          await this.controller.gotoSPA(this.questUrl);
+          await this.controller.reloadHard();
           await sleep(randomDelay(200, 350));
           return "ended";
         }
@@ -632,21 +662,26 @@ class QuestBot {
         // Wait for network result event
         await new Promise((resolve) => {
           let resolved = false;
-          const timeout = setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              this.controller.network?.off("battle:result", onResult);
-              resolve(null);
-            }
-          }, 3000);
-
           const onResult = () => {
             if (!resolved) {
               resolved = true;
               clearTimeout(timeout);
+              if (this.controller.network) {
+                this.controller.network.off("battle:result", onResult);
+              }
               resolve(null);
             }
           };
+
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              if (this.controller.network) {
+                this.controller.network.off("battle:result", onResult);
+              }
+              resolve(null);
+            }
+          }, 3000);
 
           this.controller.network?.once("battle:result", onResult);
         });
@@ -688,6 +723,9 @@ class QuestBot {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
+          if (this.controller.network) {
+            this.controller.network.off("battle:result", onResult);
+          }
           this.logger.debug("[Network] Battle result received");
           // User Request: Add 50ms sleep after battle result in quest mode
           // ensures SPA router is ready for subsequent navigation.

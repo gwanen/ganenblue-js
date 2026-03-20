@@ -53,3 +53,6 @@ login:
   passwordField: '#subject-password'
   submitButton: '#login'
   closeButton: '.btn-inner.w-btn-m'
+ 
+navigation:
+  footerReload: '.btn-treasure-footer-reload'

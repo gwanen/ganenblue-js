@@ -43,6 +43,12 @@ class RaidBot {
       this.logger.info("[System] Image blocking disabled");
     }
 
+    if (options.turboMode) {
+      this.controller
+        .enableTurboCSS()
+        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
+    }
+
     this.raidsCompleted = 0;
     this.isRunning = false;
     this.isPaused = false;
@@ -115,11 +121,15 @@ class RaidBot {
       this.logger.warn(
         `[Raid] Join failed (${errorType || "UI"}). Performing fast refresh...`,
       );
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.reloadPage();
     } else {
       this.logger.warn(
         `[Raid] Join failed (${errorType}). Returning to assist page...`,
       );
+      // Security-04: Variable Jitter
+      await sleep(50 + Math.random() * 50);
       await this.controller.gotoSPA(this.raidBackupUrl);
     }
     await sleep(200);

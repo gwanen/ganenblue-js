@@ -22,10 +22,11 @@ export function generateBezierCurve(start, end, steps = 0) {
 
   const points = [];
   // Randomized control points for natural "arc"
-  const cp1x = start.x + (end.x - start.x) * (0.1 + Math.random() * 0.4);
-  const cp1y = start.y + (end.y - start.y) * (0.1 + Math.random() * 0.4);
-  const cp2x = start.x + (end.x - start.x) * (0.5 + Math.random() * 0.4);
-  const cp2y = start.y + (end.y - start.y) * (0.5 + Math.random() * 0.4);
+  // Increased range and added variance to points for jitter
+  const cp1x = start.x + (end.x - start.x) * (0.05 + Math.random() * 0.5);
+  const cp1y = start.y + (end.y - start.y) * (0.05 + Math.random() * 0.5);
+  const cp2x = start.x + (end.x - start.x) * (0.4 + Math.random() * 0.5);
+  const cp2y = start.y + (end.y - start.y) * (0.4 + Math.random() * 0.5);
 
   for (let i = 0; i <= calculatedSteps; i++) {
     const t = i / calculatedSteps;

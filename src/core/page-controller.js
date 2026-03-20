@@ -6,6 +6,7 @@ import {
   generateBezierCurve,
 } from "../utils/random.js";
 import logger from "../utils/logger.js";
+import config from "../utils/config.js";
 import NetworkListener from "./network-listener.js";
 
 class PageController {
@@ -49,8 +50,9 @@ class PageController {
   }
 
   async disableBackgroundThrottling() {
+    let client = null;
     try {
-      const client = await this.page.target().createCDPSession();
+      client = await this.page.target().createCDPSession();
       // 1. Force focusless throttling to disabled (prevents background lag)
       await client.send("Emulation.setFocuslessThrottlingEnabled", {
         enabled: false,
@@ -58,12 +60,27 @@ class PageController {
       // 2. Force the page to stay in 'active' lifecycle state
       await client.send("Page.setWebLifecycleState", { state: "active" });
 
-      // Memory Optimization: Cleanly close the CDP session
-      await client.detach();
-
       this.logger.debug("[Core] State: Background throttling disabled");
     } catch (error) {
       this.logger.debug("[Core] State: CDP throttling override failure");
+    } finally {
+      if (client) {
+        await client.detach().catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Manually trigger Garbage Collection if available (--expose-gc)
+   */
+  triggerGC() {
+    if (global.gc) {
+      try {
+        global.gc();
+        this.logger.debug("[Memory] Manual GC triggered");
+      } catch (e) {
+        this.logger.debug("[Memory] Manual GC failed");
+      }
     }
   }
 
@@ -97,6 +114,44 @@ class PageController {
       this.network.clearAllListeners();
     }
     await this.disableResourceBlocking();
+    // turbo CSS doesn't strictly need persistent state, but we could add a flag if needed
+  }
+
+  /**
+   * Inject CSS to disable animations and transitions for maximum speed and lower CPU usage.
+   * This is the heart of "Turbo Mode".
+   */
+  async enableTurboCSS() {
+    try {
+      if (this.turboEnabled) return;
+      this.turboEnabled = true;
+
+      await this.page.addStyleTag({
+        content: `
+          /* Suppress all animations and transitions */
+          *, *::before, *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+            animation-delay: 0ms !important;
+            transition-delay: 0ms !important;
+          }
+          
+          /* Specific GBF performance overrides */
+          .prt-loading-container, #loading-mask {
+            background: #000 !important; /* Lighter weight rendering */
+          }
+          
+          /* Optional: Hide some purely decorative particles if they have specific classes */
+          [class*="effect-"], [class*="particle-"] {
+            display: none !important;
+          }
+        `,
+      });
+      this.logger.info("[Core] State: Turbo CSS active (Animations suppressed)");
+    } catch (e) {
+      this.logger.warn("[Core] Failed to inject Turbo CSS", e);
+    }
   }
 
   /**
@@ -132,20 +187,33 @@ class PageController {
   }
 
   /**
-   * Retry function with exponential backoff
+   * Retry function on network errors.
+   * If a detached frame is encountered, throws to trigger safety stop.
    */
   async retryOnNetworkError(fn, maxRetries = 3, operation = "operation") {
     for (let i = 0; i < maxRetries; i++) {
       try {
         return await fn();
       } catch (error) {
-        if (this.isNetworkError(error) && i < maxRetries - 1) {
-          const waitTime = 2000 * (i + 1); // Exponential backoff: 2s, 4s, 6s
-          this.logger.warn(
-            `[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
-          );
-          await sleep(waitTime);
-          continue;
+        if (this.isNetworkError(error)) {
+          const isDetached =
+            error.message.includes("detached Frame") ||
+            error.message.includes("context was destroyed") ||
+            error.message.includes("Session closed") ||
+            error.message.includes("Target closed");
+
+          if (isDetached) {
+            this.handleDetachedFrame(error);
+          }
+
+          if (i < maxRetries - 1) {
+            const waitTime = 2000 * (i + 1);
+            this.logger.warn(
+              `[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
+            );
+            await sleep(waitTime);
+            continue;
+          }
         }
         throw error;
       }
@@ -302,10 +370,10 @@ class PageController {
         // Move mouse to target
         await this.moveMouseHumanLike(randomX, randomY, fast);
 
-        // Tiny hesitation before click
-        if (!fast) {
-          await sleep(randomDelay(50, 150));
-        }
+        // Security-03: Variable "Hesitation" Jitter (50-100ms)
+        // This breaks the robotic pattern of immediate clicking after arrival
+        const hesitation = 50 + Math.random() * 50; 
+        await sleep(hesitation);
 
         // Perform randomized click
         await this.page.mouse.click(randomX, randomY);
@@ -353,8 +421,11 @@ class PageController {
 
       const points = generateBezierCurve(start, end);
 
-      for (const point of points) {
-        await this.page.mouse.move(point.x, point.y);
+      // SPD-03: Optimization - If fast, only use start, middle, and end points to reduce CDP calls
+      const activePoints = fast ? [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].filter(p => !!p) : points;
+
+      for (const point of activePoints) {
+        await this.page.mouse.move(point.x, point.y).catch(() => {});
         if (!fast) {
           // Tiny variable delay between points for human-like speed jitter
           await sleep(getRandomInRange(2, 8));
@@ -411,31 +482,111 @@ class PageController {
       } catch (error) {
         const isDetached =
           error.message.includes("detached Frame") ||
-          error.message.includes("context was destroyed");
+          error.message.includes("context was destroyed") ||
+          error.message.includes("Session closed") ||
+          error.message.includes("Target closed");
+
+        if (isDetached) {
+          this.handleDetachedFrame(error);
+        }
 
         if (this.isNetworkError(error) && i < maxRetries - 1) {
           const waitTime = 2000 * (i + 1);
           this.logger.warn(
-            `[Network] Error during navigation${isDetached ? " (Detached Frame)" : ""}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
+            `[Network] Error during navigation, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
           );
 
-          // If we hit a detached frame, the page state is corrupted.
-          // Force a hard reload before the next navigation attempt.
-          if (isDetached) {
-            this.logger.info(
-              "[Core] Detached frame detected. Performing hard reload to reset context...",
-            );
-            await this.page
-              .reload({ waitUntil: "domcontentloaded" })
-              .catch(() => {});
-            await sleep(1000);
-          }
-
+          // For timeouts/retries, perform a Hard Reload to reset state
+          this.logger.info(
+            "[Core] Navigation retry triggered. Performing Hard Reload...",
+          );
+          await this.reloadHard().catch(() => {});
           await sleep(waitTime);
           continue;
         }
         throw error;
       }
+    }
+  }
+
+  /**
+   * Performs a full browser-level reload with networkidle2.
+   * Used for Timeouts and Retry Exhaustion.
+   */
+  async reloadHard() {
+    this.logger.info("[Core] Action: Hard Reload (Full page reset)");
+    this.clearClickCache();
+    await this.page.reload({ waitUntil: "networkidle2", timeout: 60000 });
+    await this.waitForFrameStable(1000);
+  }
+
+  /**
+   * Attempts to click the in-game footer reload button.
+   * Used for Animation Skips and normal flow.
+   */
+  async reloadSoft() {
+    this.logger.info("[Core] Action: Soft Refresh (Footer button)");
+    this.clearClickCache();
+    const reloadBtn = config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
+    
+    // Check if button exists and is visible
+    const exists = await this.elementExists(reloadBtn, 500, true);
+    if (exists) {
+      try {
+        await this.page.click(reloadBtn);
+        await sleep(50);
+        // Wait for game loader to disappear if it appears
+        await this.waitForSPAUpdate();
+        return;
+      } catch (e) {
+        this.logger.debug(`[Core] Soft refresh click failed: ${e.message}`);
+      }
+    }
+
+    this.logger.debug("[Core] Soft refresh unavailable, falling back to page.reload");
+    await this.page.reload({ waitUntil: "domcontentloaded" });
+    await this.waitForFrameStable(500);
+  }
+
+  /**
+   * Handles detached frame errors by logging and signaling for safety stop.
+   */
+  handleDetachedFrame(error) {
+    this.logger.error("[Safety] Browser frame detached. High risk of detection.");
+    this.logger.warn("[Safety] Halting bot immediately as requested.");
+    
+    // Set a flag that the bot can check to stop
+    this.detachedState = true;
+    
+    // Re-throw to propagate to QuestBot
+    const safetyError = new Error("DETACHED_FRAME");
+    safetyError.original = error;
+    throw safetyError;
+  }
+
+  /**
+   * Helper to wait for the game's loading overlay to disappear.
+   */
+  async waitForSPAUpdate(timeout = 5000) {
+    try {
+      await this.page.waitForFunction(
+        () => {
+          const loader =
+            document.querySelector("#loading") ||
+            document.querySelector(".loading-wrapper") ||
+            document.querySelector(".prt-loading");
+          if (!loader) return true;
+          const style = window.getComputedStyle(loader);
+          return (
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            style.opacity === "0"
+          );
+        },
+        { timeout },
+      );
+    } catch (e) {
+      this.logger.debug("[Core] SPA update wait timed out");
     }
   }
 
@@ -460,42 +611,56 @@ class PageController {
    * @param {number} [options.timeout=15000] - Max ms to wait for DOM to settle.
    * @param {string|null} [options.waitForSelector=null] - Optional selector to
    *   wait for after navigation (faster than relying on spinner alone).
+   * @param {string|null} [options.clickSelector=null] - Optional selector to click
+   *   instead of setting location.hash (Page Click Refresh).
    */
   async gotoSPA(url, options = {}) {
-    const { timeout = 15000, waitForSelector = null } = options;
+    const { timeout = 15000, waitForSelector = null, clickSelector = null } = options;
 
     // Extract just the hash portion (e.g. '#quest/assist')
     const hashMatch = url.match(/#.+/);
     const targetHash = hashMatch ? hashMatch[0] : "";
 
-    if (!targetHash) {
-      // No hash — fall back to a regular full-page navigation
-      return this.goto(url, options);
+    if (clickSelector) {
+      this.logger.info(`[Core] Navigation (Click): ${clickSelector}`);
+      try {
+        await this.page.click(clickSelector);
+      } catch (e) {
+        this.logger.debug(`[Core] Page click refresh failed: ${e.message}. Falling back to hash.`);
+        clickSelector = null; // Continue with hash fallback
+      }
     }
 
-    this.logger.info(`[Core] Navigation (SPA): ${targetHash}`);
+    if (!clickSelector) {
+      if (!targetHash) {
+        // No hash — fall back to a regular full-page navigation
+        return this.goto(url, options);
+      }
 
-    try {
-      await this.page.evaluate((target) => {
-        const current = window.location.hash;
+      this.logger.info(`[Core] Navigation (SPA): ${targetHash}`);
 
-        // If already on this hash, nudge the router by clearing it first
-        // so a real hashchange event fires when we set it again.
-        if (current === target || current === target.replace("#", "")) {
-          // Temporarily set to a dummy hash — this fires hashchange #1
-          history.replaceState(null, "", "#");
-        }
+      try {
+        await this.page.evaluate((target) => {
+          const current = window.location.hash;
 
-        // Now set the real target — fires hashchange #2 (or #1 if we
-        // weren't on this hash before), triggering the SPA router.
-        window.location.hash = target.replace(/^#/, "");
-      }, targetHash);
-    } catch (e) {
-      // Page context may be mid-navigation; fall back to hard goto.
-      this.logger.debug(
-        `[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`,
-      );
-      return this.goto(url);
+          // If already on this hash, nudge the router by clearing it first
+          // so a real hashchange event fires when we set it again.
+          if (current === target || current === target.replace("#", "")) {
+            // Temporarily set to a dummy hash — this fires hashchange #1
+            history.replaceState(null, "", "#");
+          }
+
+          // Now set the real target — fires hashchange #2 (or #1 if we
+          // weren't on this hash before), triggering the SPA router.
+          window.location.hash = target.replace(/^#/, "");
+        }, targetHash);
+      } catch (e) {
+        // Page context may be mid-navigation; fall back to hard goto.
+        this.logger.debug(
+          `[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`,
+        );
+        return this.goto(url);
+      }
     }
 
     // Wait for the DOM to actually reflect the new page.
@@ -565,25 +730,11 @@ class PageController {
    * Reload the page using GBF's native footer reload button when possible,
    * falling back to a full browser reload if not available.
    */
+  /**
+   * Reload the page using the Soft Refresh strategy by default.
+   */
   async reloadPage() {
-    this.logger.info("[Core] Page reload sequence initiated");
-    this.clearClickCache();
-    const reloadBtn = ".btn-treasure-footer-reload";
-    if (await this.elementExists(reloadBtn, 200)) {
-      try {
-        await this.page.click(reloadBtn);
-        await sleep(50);
-        return;
-      } catch (e) {
-        this.logger.debug(
-          `[Core] Footer reload failed, falling back to page.reload: ${e.message}`,
-        );
-      }
-    }
-    await this.page.reload({ waitUntil: "domcontentloaded" });
-
-    // Frame stability check: ensure frame is reattached after reload
-    await this.waitForFrameStable(1000);
+    await this.reloadSoft();
   }
 
   /**
@@ -592,9 +743,12 @@ class PageController {
    */
   async isFrameAttached() {
     try {
-      // Quick evaluation to test frame health
+      // Priority 1: Check Puppeteer's own detached flag
+      if (this.page.mainFrame().isDetached()) return false;
+
+      // Priority 2: Quick evaluation to test frame health
       return await this.page
-        .evaluate(() => document.readyState, { timeout: 500 })
+        .evaluate(() => document.readyState, { timeout: 200 })
         .then(() => true)
         .catch(() => false);
     } catch (e) {
