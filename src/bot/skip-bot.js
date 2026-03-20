@@ -25,6 +25,10 @@ class SkipBot {
             this.logger.info('[System] Image blocking enabled');
             this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable image blocking', e));
         }
+
+        if (options.turboMode) {
+            this.controller.enableTurboCSS().catch(e => this.logger.warn('[System] Failed to enable turbo CSS', e));
+        }
     }
 
     async start() {

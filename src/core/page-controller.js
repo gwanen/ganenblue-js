@@ -50,8 +50,9 @@ class PageController {
   }
 
   async disableBackgroundThrottling() {
+    let client = null;
     try {
-      const client = await this.page.target().createCDPSession();
+      client = await this.page.target().createCDPSession();
       // 1. Force focusless throttling to disabled (prevents background lag)
       await client.send("Emulation.setFocuslessThrottlingEnabled", {
         enabled: false,
@@ -59,12 +60,27 @@ class PageController {
       // 2. Force the page to stay in 'active' lifecycle state
       await client.send("Page.setWebLifecycleState", { state: "active" });
 
-      // Memory Optimization: Cleanly close the CDP session
-      await client.detach();
-
       this.logger.debug("[Core] State: Background throttling disabled");
     } catch (error) {
       this.logger.debug("[Core] State: CDP throttling override failure");
+    } finally {
+      if (client) {
+        await client.detach().catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Manually trigger Garbage Collection if available (--expose-gc)
+   */
+  triggerGC() {
+    if (global.gc) {
+      try {
+        global.gc();
+        this.logger.debug("[Memory] Manual GC triggered");
+      } catch (e) {
+        this.logger.debug("[Memory] Manual GC failed");
+      }
     }
   }
 
@@ -98,6 +114,44 @@ class PageController {
       this.network.clearAllListeners();
     }
     await this.disableResourceBlocking();
+    // turbo CSS doesn't strictly need persistent state, but we could add a flag if needed
+  }
+
+  /**
+   * Inject CSS to disable animations and transitions for maximum speed and lower CPU usage.
+   * This is the heart of "Turbo Mode".
+   */
+  async enableTurboCSS() {
+    try {
+      if (this.turboEnabled) return;
+      this.turboEnabled = true;
+
+      await this.page.addStyleTag({
+        content: `
+          /* Suppress all animations and transitions */
+          *, *::before, *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+            animation-delay: 0ms !important;
+            transition-delay: 0ms !important;
+          }
+          
+          /* Specific GBF performance overrides */
+          .prt-loading-container, #loading-mask {
+            background: #000 !important; /* Lighter weight rendering */
+          }
+          
+          /* Optional: Hide some purely decorative particles if they have specific classes */
+          [class*="effect-"], [class*="particle-"] {
+            display: none !important;
+          }
+        `,
+      });
+      this.logger.info("[Core] State: Turbo CSS active (Animations suppressed)");
+    } catch (e) {
+      this.logger.warn("[Core] Failed to inject Turbo CSS", e);
+    }
   }
 
   /**
@@ -367,8 +421,11 @@ class PageController {
 
       const points = generateBezierCurve(start, end);
 
-      for (const point of points) {
-        await this.page.mouse.move(point.x, point.y);
+      // SPD-03: Optimization - If fast, only use start, middle, and end points to reduce CDP calls
+      const activePoints = fast ? [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].filter(p => !!p) : points;
+
+      for (const point of activePoints) {
+        await this.page.mouse.move(point.x, point.y).catch(() => {});
         if (!fast) {
           // Tiny variable delay between points for human-like speed jitter
           await sleep(getRandomInRange(2, 8));

@@ -489,6 +489,9 @@ class BattleHandler {
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          if (this.controller.network) {
+            this.controller.network.off("battle:attack_used", onAttack);
+          }
           resolve(false);
         }
       }, 3000);
@@ -750,9 +753,9 @@ class BattleHandler {
         lastActionTime = this.options.lastActionTimeRef.value;
         faInactivityThreshold = this.options.faThresholdRef.value;
 
-        // Cache the URL once per tick — page.url() is an IPC call; calling it
-        // multiple times in the same 50ms loop iteration wastes CPU.
-        const currentUrl = this.controller.page.url();
+        // SPD-02: Batched UI State Snapshot (Replaces multiple individual IPC calls)
+        const snapshot = await this.getBattleStateSnapshot();
+        const currentUrl = snapshot.url;
 
         // Turn-Change Priority: network turn incremented — bypass throttles for immediate check
         if (turnCount > lastCheckTurn) {
@@ -836,13 +839,8 @@ class BattleHandler {
           };
         }
 
-        // 3. Result Page Detection (URL-based, network-confirmed)
-        // Check both hash-based (#result) and path-based (/result/content/index/) URLs
-        const isResultUrl =
-          currentUrl.includes("#result") ||
-          currentUrl.includes("/result/content/index/") ||
-          currentUrl.includes("/result_multi/content/index/");
-        if (isResultUrl) {
+        // 3. Result Page Detection (Snapshot-based)
+        if (snapshot.isResultPage || snapshot.hash.includes("#result")) {
           // Wait for network confirmation to avoid race condition with quest navigation
           // The network event may fire after URL change, so we poll networkFinished flag
           if (!networkFinished) {
@@ -888,27 +886,13 @@ class BattleHandler {
         if (Date.now() - lastEndStateCheckTime > 3000) {
           lastEndStateCheckTime = Date.now();
 
-          // Watchdog: Check if attack is processing (for stuck detection)
-          const attackState = await this.controller.page
-            .evaluate((sel) => {
-              const attBtn = document.querySelector(sel.attackButton);
-              const isAttacking = !!(
-                attBtn && attBtn.classList.contains("display-off")
-              );
+          // Watchdog: Check if attack is processing (via snapshot)
+          const isAttacking = !!snapshot.isAttackOn; // If display-on, we are potentially attacking or ready
+          const uiVisible = !!snapshot.isAttackOn || snapshot.isAutoOn || snapshot.isPopShow;
 
-              // Check if any battle UI is visible (to detect stuck state)
-              const ui = document.querySelector(
-                ".btn-attack-start.display-on, .btn-usual-cancel, .btn-auto",
-              );
-              const uiVisible = !!(ui && ui.offsetWidth > 0);
-
-              return { isAttacking, uiVisible };
-            }, this.selectors)
-            .catch(() => ({}));
-
-          // Watchdog Logic: Detect stuck battles (no network activity + no UI)
-          if (!attackState.isAttacking) {
-            if (attackState.uiVisible) {
+          // Watchdog Logic: Detect stuck battles
+          if (!isAttacking) {
+            if (uiVisible) {
               missingUiCount = 0;
             } else {
               missingUiCount++;
@@ -1095,8 +1079,8 @@ class BattleHandler {
 
         // Memory Management: Periodic GC every 100 iterations (~10s)
         // This prevents heap bloat from accumulated battle objects and closures
-        if (iterationCount % 100 === 0 && global.gc) {
-          global.gc();
+        if (iterationCount % 100 === 0) {
+          this.controller.triggerGC();
         }
         iterationCount++;
 
@@ -1459,6 +1443,73 @@ class BattleHandler {
         return false;
       })
       .catch(() => false);
+  }
+
+  /**
+   * SPD-02: Batched UI State Snapshot.
+   * Fetches turn, honor, and terminal states (boss death, wipe, results) in a single CDP roundtrip.
+   */
+  async getBattleStateSnapshot() {
+    return await this.controller.page
+      .evaluate((selectors) => {
+        const res = {
+          turn: 0,
+          honors: 0,
+          isBossDead: false,
+          isPartyWiped: false,
+          isResultPage: false,
+          isAttackOn: false,
+          isAutoOn: false,
+          isPopShow: false,
+          url: window.location.href,
+          hash: window.location.hash,
+        };
+
+        // 1. Turn Number
+        const turnElem = document.querySelector(selectors.turnCounter);
+        if (turnElem) {
+          res.turn = parseInt(turnElem.textContent, 10) || 0;
+        }
+
+        // 2. Honors
+        const honorElem = document.querySelector(".prt-total-honor");
+        if (honorElem) {
+          res.honors =
+            parseInt(honorElem.textContent.replace(/[,/]/g, ""), 10) || 0;
+        }
+
+        // 3. Terminal States
+        const result = document.querySelector(
+          ".prt-result, #js-result, .cnt-result, .prt-result-head",
+        );
+        if (result && result.offsetWidth > 0) res.isResultPage = true;
+
+        // 4. UI Controls
+        const att = document.querySelector(selectors.attackButton);
+        if (att && att.classList.contains("display-on")) res.isAttackOn = true;
+
+        const auto = document.querySelector(".btn-auto, .btn-full-auto");
+        if (auto && auto.classList.contains("pushed")) res.isAutoOn = true;
+
+        // 5. Popups
+        const pop = document.querySelector(".pop-show, .pop-usual");
+        if (pop && pop.offsetWidth > 0) res.isPopShow = true;
+
+        // 6. Boss Death / Wipe DOM Falbacks
+        const bossDeath = document.querySelector(".prt-battle-boss.die");
+        if (bossDeath) res.isBossDead = true;
+
+        return res;
+      }, this.selectors)
+      .catch(() => ({}));
+  }
+
+  async getBattleState() {
+    const snapshot = await this.getBattleStateSnapshot();
+    return {
+      turn: snapshot.turn || 0,
+      honors: snapshot.honors || 0,
+    };
   }
 }
 

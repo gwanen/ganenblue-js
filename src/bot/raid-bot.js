@@ -43,6 +43,12 @@ class RaidBot {
       this.logger.info("[System] Image blocking disabled");
     }
 
+    if (options.turboMode) {
+      this.controller
+        .enableTurboCSS()
+        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
+    }
+
     this.raidsCompleted = 0;
     this.isRunning = false;
     this.isPaused = false;

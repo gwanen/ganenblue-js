@@ -9,6 +9,7 @@ import RaidBot from "../bot/raid-bot.js";
 import SkipBot from "../bot/skip-bot.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
+import MemoryWatchdog from "../utils/memory-watchdog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +138,20 @@ function startStatsUpdater() {
           };
         }
       }
+    }
+
+    // Memory Watchdog Update
+    let anyWatchdogEnabled = false;
+    for (const [pid, instance] of instances) {
+        if (instance.bot && instance.bot.isRunning && instance.settings && instance.settings.memoryWatchdog) {
+            anyWatchdogEnabled = true;
+            break;
+        }
+    }
+
+    if (anyWatchdogEnabled) {
+        const stats = MemoryWatchdog.getStats();
+        mainWindow.webContents.send("memory:update", stats);
     }
   }, 1000);
 }
@@ -303,6 +318,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
     );
     logger.debug(`[Bot] [${profileId}] Settings: ${JSON.stringify(settings)}`);
 
+    instance.settings = settings; // Store for watchdog check
+
     const botMode = settings.botMode || "quest";
 
     if (botMode === "quest") {
@@ -316,6 +333,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         fastRefresh: settings.fastRefresh,
         summonRefresh: settings.summonRefresh,
         skillRefresh: settings.skillRefresh,
+        turboMode: settings.turboMode,
+        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else if (botMode === "replicard") {
@@ -329,6 +348,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         fastRefresh: settings.fastRefresh,
         summonRefresh: settings.summonRefresh,
         skillRefresh: settings.skillRefresh,
+        turboMode: settings.turboMode,
+        memoryWatchdog: settings.memoryWatchdog,
         isReplicard: true,
         profileId: profileId,
       });
@@ -343,6 +364,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         fastRefresh: settings.fastRefresh,
         summonRefresh: settings.summonRefresh,
         skillRefresh: settings.skillRefresh,
+        turboMode: settings.turboMode,
+        memoryWatchdog: settings.memoryWatchdog,
         isReplicard: true,
         isXeno: true,
         zoneId: settings.zoneId,
@@ -362,6 +385,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         summonRefresh: settings.summonRefresh,
         skillRefresh: settings.skillRefresh,
         refreshOnStart: settings.refreshOnStart,
+        turboMode: settings.turboMode,
+        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else if (botMode === "skip") {
@@ -370,6 +395,8 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         maxRuns: parseInt(settings.maxRuns) || config.get("bot.max_quests"),
         blockResources: settings.blockResources,
         onBattleEnd: createStatsCallback(profileId, instance),
+        turboMode: settings.turboMode,
+        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else {

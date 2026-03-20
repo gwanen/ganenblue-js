@@ -39,6 +39,12 @@ class QuestBot {
       this.logger.info("[System] Image blocking disabled");
     }
 
+    if (options.turboMode) {
+      this.controller
+        .enableTurboCSS()
+        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
+    }
+
     this.questsCompleted = 0;
     this.isRunning = false;
     this.isPaused = false;
@@ -357,6 +363,14 @@ class QuestBot {
           }
           resolve({ type: "network" });
         };
+        // Safety cleanup for timeout path
+        const timeout = setTimeout(() => {
+          if (this.controller.network) {
+            this.controller.network.off("raid:supporter_screen", onSupporter);
+          }
+          // The Promise.race timeout or DOM fallback will resolve the outer promise
+        }, 11000);
+
         if (this.controller.network) {
           this.controller.network.once("raid:supporter_screen", onSupporter);
         }
@@ -640,21 +654,26 @@ class QuestBot {
         // Wait for network result event
         await new Promise((resolve) => {
           let resolved = false;
-          const timeout = setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              this.controller.network?.off("battle:result", onResult);
-              resolve(null);
-            }
-          }, 3000);
-
           const onResult = () => {
             if (!resolved) {
               resolved = true;
               clearTimeout(timeout);
+              if (this.controller.network) {
+                this.controller.network.off("battle:result", onResult);
+              }
               resolve(null);
             }
           };
+
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              if (this.controller.network) {
+                this.controller.network.off("battle:result", onResult);
+              }
+              resolve(null);
+            }
+          }, 3000);
 
           this.controller.network?.once("battle:result", onResult);
         });
@@ -696,6 +715,9 @@ class QuestBot {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
+          if (this.controller.network) {
+            this.controller.network.off("battle:result", onResult);
+          }
           this.logger.debug("[Network] Battle result received");
           // User Request: Add 50ms sleep after battle result in quest mode
           // ensures SPA router is ready for subsequent navigation.

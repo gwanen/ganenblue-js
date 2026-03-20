@@ -1470,9 +1470,17 @@
                 <input type="checkbox" id="summon-refresh-p1" checked />
                 <span>Refresh on Summon</span>
               </label>
-              <label class="checkbox-container mt-xs">
+               <label class="checkbox-container mt-xs">
                 <input type="checkbox" id="skill-refresh-p1" />
                 <span>Refresh on Skill</span>
+              </label>
+              <label class="checkbox-container mt-xs" title="Disable animations and transitions for max speed">
+                <input type="checkbox" id="turbo-mode-p1" />
+                <span style="color: var(--accent-yellow)">Turbo Mode (Beta)</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="memory-watchdog-p1" />
+                <span>Memory Watchdog</span>
               </label>
             </div>
 
@@ -1724,6 +1732,14 @@
                 <input type="checkbox" id="skill-refresh-p2" />
                 <span>Refresh on Skill</span>
               </label>
+              <label class="checkbox-container mt-xs" title="Disable animations and transitions for max speed">
+                <input type="checkbox" id="turbo-mode-p2" />
+                <span style="color: var(--accent-yellow)">Turbo Mode (Beta)</span>
+              </label>
+              <label class="checkbox-container mt-xs">
+                <input type="checkbox" id="memory-watchdog-p2" />
+                <span>Memory Watchdog</span>
+              </label>
             </div>
 
             <!-- Stats Summary (Mini) -->
@@ -1960,6 +1976,12 @@
         // Init for the first tab
         setTimeout(updateScrollButton, 100);
       </script>
+
+      <!-- Memory Stats Footer -->
+      <div id="memory-footer" style="position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-primary); border-top: 1px solid var(--border); padding: 4px 12px; font-size: 10px; color: var(--text-secondary); display: flex; justify-content: space-between; z-index: 50;">
+        <div id="memory-stats">Memory: Heap --/-- MB | RSS -- MB</div>
+        <div id="version-tag">GANENBLUE v1.2</div>
+      </div>
       <script>
         // Logs panel resize (drag top handle upward)
         (function () {
