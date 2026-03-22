@@ -249,6 +249,10 @@ class BrowserManager {
         const pages = await this.browser.pages();
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
+        // Apply generated User Agent (Fix: Was generated but never applied)
+        await this.page.setUserAgent(userAgent.toString());
+        this.logger.info(`[Core] User Agent applied: ${userAgent.toString()}`);
+
         return this.page;
     }
 
