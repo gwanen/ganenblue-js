@@ -92,44 +92,15 @@ class BattleHandler {
 
       const loadSelector =
         mode === "semi_auto" ? this.selectors.attackButton : ".btn-auto";
-      let networkTurnOnLoad = 0;
 
-      // Race start.json network signal vs DOM button.
-      // start.json fires early in the page load (before buttons render), giving
-      // sub-100ms resolution when starting while already in an active battle.
-      // Fast Memory Fix: Bind the handler to a variable so removeListener can find it.
-      // Using an anonymous arrow function inside once() creates a new reference,
-      // making removeListener fail to clean up if the DOM wins the race.
-      let resolveNetwork;
-      const onNetworkStart = (data) => {
-        if (data && data.turn) {
-          networkTurnOnLoad = data.turn;
-        }
-        if (resolveNetwork) resolveNetwork("network");
-      };
-
-      const networkReady = new Promise((resolve) => {
-        resolveNetwork = resolve;
-        if (this.controller.network) {
-          this.controller.network.once("battle:start", onNetworkStart);
-        }
-      });
-      const domReady = this.controller
-        .waitForElement(loadSelector, 10000)
-        .then((found) => (found ? "dom" : null));
-
-      const loadSource = await Promise.race([networkReady, domReady]);
-      let battleLoaded = loadSource === "network" || loadSource === "dom";
-
-      // If DOM won, remove the dangling network listener effectively
-      if (loadSource !== "network" && this.controller.network) {
-        this.controller.network.removeListener("battle:start", onNetworkStart);
-      }
-      if (loadSource === "network") {
-        this.logger.debug(
-          `[Battle] In-battle confirmed via start.json (turn ${networkTurnOnLoad})`,
-        );
-      }
+      // Root Cause Fix: We cannot reliably listen for start.json here because the page navigation
+      // (e.g. goto/reload) completes the network request BEFORE this executeBattle logic even runs.
+      // Previously, the domReady race masked this by winning instantly. When domReady was removed,
+      // it exposed the dead listener, resulting in consistent 10-second timeouts.
+      
+      // We wait for the battle UI to appear (max 10s) to validate we successfully entered the battle
+      // before proceeding to Mode activation. This is a highly optimized DOM mutation check.
+      let battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
 
       if (!battleLoaded) {
         if (!this.controller.isAlive()) {
@@ -195,9 +166,8 @@ class BattleHandler {
         }
       }
 
-      // Proactive Turn Fetch — skip DOM evaluation if start.json already gave us the turn
-      const initialTurns =
-        networkTurnOnLoad > 0 ? networkTurnOnLoad : await this.getTurnNumber();
+      // Proactive Turn Fetch
+      const initialTurns = await this.getTurnNumber();
       this.logger.info("[Battle] State: Combat ready");
 
       // Pre-register battle events BEFORE handleFullAuto so that an instant quick-summon
@@ -391,6 +361,18 @@ class BattleHandler {
         if (
           await this.controller.elementExists(".pop-rematch-fail.pop-show", 100)
         ) {
+          await this.controller.reloadHard();
+          await sleep(200);
+          await this.checkStateAndResume("full_auto");
+          return;
+        }
+
+        // 1.7 Handle "Battle Already Ended" / assist raid popup
+        // Fires when the raid ended between the page load and the FA click landing
+        if (
+          await this.controller.elementExists(".pop-result-assist-raid.pop-show", 100)
+        ) {
+          this.logger.info("[Battle] Already ended popup detected after FA click");
           await this.controller.reloadHard();
           await sleep(200);
           await this.checkStateAndResume("full_auto");
@@ -690,7 +672,8 @@ class BattleHandler {
     const onAttack = ({ honor } = {}) => {
       attackUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 5000; // 5s after attack (skills/summon processing)
+      // Do NOT touch faThresholdRef here — handleFullAuto sets it to 25s after every FA click,
+      // and reducing it to 5s races against the loop's attackUsed handler on fast (no-skill) turns.
       lastFACheckTime = Date.now();
       lastAttackEventTime = Date.now();
     };
@@ -727,7 +710,9 @@ class BattleHandler {
         networkTurn = turn;
         networkTurnReady = true; // Signal Semi Auto: new turn, attack button should be ready
         this.options.lastActionTimeRef.value = Date.now();
-        this.options.faThresholdRef.value = 5000; // 5s at turn start (skills/summon ready)
+        // FA: turn just started — attack + skills haven't resolved yet (can take 10-15s).
+        // SA: button is ready immediately — keep 5s so the watchdog re-arms fast.
+        this.options.faThresholdRef.value = isSemiAuto ? 5000 : 15000;
         lastFACheckTime = Date.now();
         lastAttackEventTime = 0;
         attackUsed = false; // Clear stale attack flag on turn change
@@ -969,9 +954,11 @@ class BattleHandler {
           if (mode !== "semi_auto" && attackUsed) {
             attackUsed = false;
 
-            // Cooldown: prevent multiple refreshes for same attack (min 2s between attack refreshes)
-            const timeSinceLastRefresh = Date.now() - lastAttackRefreshTime;
-            if (timeSinceLastRefresh < 2000) {
+            // Duplicate guard: skip if the attack event arrived before (or during) the last refresh.
+            // Using Date.now() vs lastAttackRefreshTime was broken — lastAttackRefreshTime is set
+            // AFTER handleFullAuto, so any attack that fires during handleFullAuto would always read
+            // near-zero delta and get silently swallowed with no refresh.
+            if (lastAttackEventTime <= lastAttackRefreshTime) {
               continue;
             }
 
@@ -1531,7 +1518,18 @@ class BattleHandler {
 
         return res;
       }, this.selectors)
-      .catch(() => ({}));
+      .catch(() => ({
+        turn: 0,
+        honors: 0,
+        isBossDead: false,
+        isPartyWiped: false,
+        isResultPage: false,
+        isAttackOn: false,
+        isAutoOn: false,
+        isPopShow: false,
+        url: "",
+        hash: "",
+      }));
   }
 
   async getBattleState() {
