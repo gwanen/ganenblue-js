@@ -19,7 +19,7 @@ class PageController {
     this.lastMousePos = { x: 0, y: 0 };
 
     // Disable background throttling via CDP immediately
-    this.disableBackgroundThrottling().catch(() => {});
+    this.disableBackgroundThrottling().catch(() => { });
   }
 
   async enableResourceBlocking() {
@@ -65,7 +65,7 @@ class PageController {
       this.logger.debug("[Core] State: CDP throttling override failure");
     } finally {
       if (client) {
-        await client.detach().catch(() => {});
+        await client.detach().catch(() => { });
       }
     }
   }
@@ -420,7 +420,7 @@ class PageController {
       const activePoints = fast ? [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].filter(p => !!p) : points;
 
       for (const point of activePoints) {
-        await this.page.mouse.move(point.x, point.y).catch(() => {});
+        await this.page.mouse.move(point.x, point.y).catch(() => { });
       }
 
       this.lastMousePos = end;
@@ -491,7 +491,7 @@ class PageController {
           this.logger.info(
             "[Core] Navigation retry triggered. Performing Hard Reload...",
           );
-          await this.reloadHard().catch(() => {});
+          await this.reloadHard().catch(() => { });
           await sleep(waitTime);
           continue;
         }
@@ -515,19 +515,21 @@ class PageController {
    * Attempts to click the in-game footer reload button.
    * Used for Animation Skips and normal flow.
    */
-  async reloadSoft() {
+  async reloadSoft(options = { fast: true }) {
     this.logger.info("[Core] Action: Soft Refresh (Footer button)");
     this.clearClickCache();
-    const reloadBtn = config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
-    
+    const reloadBtn =
+      config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
+
     // Check if button exists and is visible
     const exists = await this.elementExists(reloadBtn, 500, true);
     if (exists) {
       try {
         await this.page.click(reloadBtn);
-        await sleep(50);
+        await sleep(100); // Snappy yield
         // Wait for game loader to disappear if it appears
-        await this.waitForSPAUpdate();
+        // Using very short timeout if fast: true
+        await this.waitForSPAUpdate(options.fast ? 500 : 5000);
         return;
       } catch (e) {
         this.logger.debug(`[Core] Soft refresh click failed: ${e.message}`);
@@ -545,10 +547,10 @@ class PageController {
   handleDetachedFrame(error) {
     this.logger.error("[Safety] Browser frame detached. High risk of detection.");
     this.logger.warn("[Safety] Halting bot immediately as requested.");
-    
+
     // Set a flag that the bot can check to stop
     this.detachedState = true;
-    
+
     // Re-throw to propagate to QuestBot
     const safetyError = new Error("DETACHED_FRAME");
     safetyError.original = error;
@@ -558,7 +560,7 @@ class PageController {
   /**
    * Helper to wait for the game's loading overlay to disappear.
    */
-  async waitForSPAUpdate(timeout = 5000) {
+  async waitForSPAUpdate(timeout = 1500) {
     try {
       await this.page.waitForFunction(
         () => {
@@ -704,7 +706,7 @@ class PageController {
           "[Core] SPA transition seems stuck. Triggering footer reload...",
         );
         await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(
-          () => {},
+          () => { },
         );
         await sleep(500);
       }

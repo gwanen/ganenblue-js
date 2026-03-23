@@ -19,6 +19,7 @@ class BattleHandler {
       options.skillRefresh !== undefined ? options.skillRefresh : false;
     this.logger = options.logger || logger;
     this.faActive = false;
+    this.isResultConfirmed = false;
   }
 
   formatTime(milliseconds) {
@@ -55,6 +56,7 @@ class BattleHandler {
     this.lastAttackTurn = 0;
     this.lastReloadTurn = 0;
     this.lastHonors = 0; // Reset per-raid so previousHonors starts at 0 for each new raid
+    this.isResultConfirmed = false; // Reset for new battle
     this.controller.clearClickCache(); // Flush cache on new battle engagement
     this.logger.info(`[Battle] Mode: ${mode} engagement initiated`);
 
@@ -195,6 +197,7 @@ class BattleHandler {
       };
       const _onPreResult = () => {
         this._preNetworkFinished = true;
+        this.isResultConfirmed = true; // Mark as end-state confirmed
       };
 
       if (this.controller.network) {
@@ -515,8 +518,29 @@ class BattleHandler {
       this.logger.warn("[Semi Auto] Refreshing anyway");
     }
 
-    // Step 5: No pause for network response parsing - proceed immediately to refresh
+    // Step 5: Check if battle ended during attack confirmation to avoid unnecessary reload
     if (this.stopped) return false;
+
+    const isEnded = await this.controller.page
+      .evaluate(() => {
+        const href = window.location.href;
+        const resultVisible = !!document.querySelector(
+          ".prt-result, #js-result, .cnt-result",
+        );
+        return (
+          href.includes("#result") ||
+          href.includes("/result/content/index/") ||
+          resultVisible
+        );
+      })
+      .catch(() => false);
+
+    if (isEnded) {
+      this.logger.info(
+        "[Semi Auto] Combat ended (Skipping animation-skip reload)",
+      );
+      return attackConfirmed;
+    }
 
     // Step 6: Refresh to skip animations
     // Following Full Auto pattern: return immediately after starting reload.
@@ -660,15 +684,30 @@ class BattleHandler {
 
     const onBattleResult = () => {
       networkFinished = true;
+      if (!this.isResultConfirmed) {
+        this.isResultConfirmed = true;
+        this.logger.info("[Status] Signal: Combat Result (Rewards) detected");
+      }
     };
     const onBossDied = ({ honor } = {}) => {
       updateHonor(honor);
       bossDied = true;
+      if (!this.isResultConfirmed) {
+        this.isResultConfirmed = true;
+        this.logger.info("[Status] Signal: Combat Result (Boss Died) detected");
+      }
     };
     const onPartyWiped = ({ honor } = {}) => {
       updateHonor(honor);
       partyWiped = true;
+      if (!this.isResultConfirmed) {
+        this.isResultConfirmed = true;
+        this.logger.info("[Status] Signal: Combat Result (Wiped) detected");
+      }
     };
+    if (this._preNetworkFinished && !this.isResultConfirmed) {
+      onBattleResult();
+    }
     const onAttack = ({ honor } = {}) => {
       attackUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
@@ -826,6 +865,10 @@ class BattleHandler {
 
         // 3. Result Page Detection (Snapshot-based)
         if (snapshot.isResultPage || snapshot.hash.includes("#result")) {
+          if (!this.isResultConfirmed) {
+            this.isResultConfirmed = true;
+            this.logger.info("[Status] Signal: Combat Result (Page) detected");
+          }
           // Wait for network confirmation to avoid race condition with quest navigation
           // The network event may fire after URL change, so we poll networkFinished flag
           if (!networkFinished) {
@@ -833,7 +876,8 @@ class BattleHandler {
               "[Network] Result page detected, awaiting network confirmation...",
             );
             const waitStart = Date.now();
-            const waitTimeout = 1500;
+            // Optimization: If URL already contains #result, reduce wait to 300ms (fast skip)
+            const waitTimeout = snapshot.hash.includes("#result") ? 300 : 1500;
             while (!networkFinished && Date.now() - waitStart < waitTimeout) {
               await sleep(50);
             }

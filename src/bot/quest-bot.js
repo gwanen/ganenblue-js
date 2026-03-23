@@ -52,6 +52,7 @@ class QuestBot {
     this.battleTurns = []; // Array to store turn counts
     this.totalTurns = 0;
     this.battleCount = 0;
+    this.consecutiveFailures = 0;
 
     this.raidErrorType = null;
     this.networkSupporterScreen = false; // Flag for supporter screen detection via network
@@ -101,6 +102,9 @@ class QuestBot {
 
         let success = false;
         try {
+          this.logger.info(
+            `[Quest] Quest cycle ${this.questsCompleted + 1} initiated`,
+          );
           success = await this.runSingleQuest();
         } catch (cycleError) {
           if (this.controller.isNetworkError(cycleError)) {
@@ -114,6 +118,9 @@ class QuestBot {
         }
         if (success) {
           this.questsCompleted++;
+          this.consecutiveFailures = 0; // Reset counter on success
+        } else {
+          this.consecutiveFailures++; // Increment counter on failure
         }
 
         // Short delay between quests for browser stability
@@ -153,8 +160,6 @@ class QuestBot {
   }
 
   async runSingleQuest() {
-    this.logger.info(`[Quest] Quest cycle ${this.questsCompleted + 1} initiated`);
-
     let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
     const currentUrl = this.controller.page.url();
@@ -236,8 +241,11 @@ class QuestBot {
     const isReplicard = this.questUrl.includes("replicard");
 
     if (isReplicard) {
-      await this.controller.gotoSPA(this.questUrl);
-      await sleep(20);
+      const currentUrl = this.controller.page.url();
+      if (!currentUrl.includes(this.questUrl)) {
+        await this.controller.gotoSPA(this.questUrl);
+        await sleep(20);
+      }
       const battleStarted = await this.startReplicardBattle();
       if (!battleStarted) {
         this.logger.warn("[Quest] Failed to initiate replicard battle");
@@ -246,7 +254,8 @@ class QuestBot {
     } else {
       // Standard quest navigation
       this.networkSupporterScreen = false;
-      if (!hasNavigated) {
+      const currentUrl = this.controller.page.url();
+      if (!hasNavigated && !currentUrl.includes(this.questUrl)) {
         await this.controller.gotoSPA(this.questUrl);
       }
 
@@ -295,12 +304,14 @@ class QuestBot {
       await this.clearPendingBattles();
     }
 
-    // Navigate back to quest URL so the next cycle starts on the supporter page,
-    // not on the stale #raid URL with lingering result page UI.
-    // Wait for battle:result network event first — result.json loads async
-    // after boss death reload. Navigating too early causes SPA redirect loop.
+    // Navigate back to quest URL immediately after battle result is confirmed
+    // to avoid waiting for the next cycle loop turnaround.
     await this.waitForBattleResult();
-      this.logger.info("[Quest] State: Quest cycle complete");
+
+    this.logger.info("[Quest] State: Quest cycle complete");
+
+    this.logger.info("[Quest] Transitioning immediately to next quest...");
+    await this.controller.gotoSPA(this.questUrl);
 
     return true;
   }
@@ -359,7 +370,18 @@ class QuestBot {
       return false; // Return false to retry the cycle from the top
     }
 
-    this.logger.warn("[Replicard] Target not found on page");
+    this.logger.warn(
+      `[Replicard] Target not found on page (Sequence: ${this.consecutiveFailures + 1})`,
+    );
+
+    // Only attempt soft reload fallback after 5 consecutive failures to avoid excessive reloading
+    if (this.consecutiveFailures >= 4) {
+      this.logger.info(
+        "[Replicard] Threshold reached (5 failures). Attempting soft reload fallback...",
+      );
+      await this.controller.reloadSoft();
+      await sleep(randomDelay(500, 1000));
+    }
     return false;
   }
 
@@ -463,7 +485,7 @@ class QuestBot {
 
       this.logger.info("[Quest] Supporter selection confirmed");
       const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
-      await this.controller.cachedClick(okSelector, 0).catch(() => {});
+      await this.controller.cachedClick(okSelector, 0).catch(() => { });
       await sleep(50);
       return await this.validatePostClick();
     }
@@ -482,7 +504,7 @@ class QuestBot {
 
       if (await this.controller.elementExists(".btn-usual-ok", 1500, true)) {
         this.logger.info("[Summon] Confirming selection...");
-        await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => {});
+        await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => { });
         await sleep(50);
       }
 
@@ -574,7 +596,7 @@ class QuestBot {
         this.logger.warn(
           "[Summon] Result page intercept detected. Waiting for network to settle...",
         );
-        await sleep(randomDelay(500, 800));
+        await sleep(randomDelay(100, 200));
         // Re-check state after waiting — URL only
         const recheckState = await this.controller.page
           .evaluate(() => {
@@ -720,6 +742,15 @@ class QuestBot {
   async waitForBattleResult() {
     if (!this.controller.network) return;
 
+    // Optimization: If BattleHandler already confirmed the result network event, skip waiting.
+    if (this.battle.isResultConfirmed) {
+      this.logger.debug(
+        "[Network] Battle result already confirmed by handler. Skipping wait.",
+      );
+      await sleep(20);
+      return;
+    }
+
     await new Promise((resolve) => {
       let resolved = false;
       const timeout = setTimeout(() => {
@@ -766,7 +797,7 @@ class QuestBot {
         this.logger.error(
           "[Safety] CAPTCHA detected. Human intervention required",
         );
-        notifier.notifyCaptcha(this.profileId || "p1").catch(() => {});
+        notifier.notifyCaptcha(this.profileId || "p1").catch(() => { });
         this.pause();
         return true;
       }
@@ -796,7 +827,7 @@ class QuestBot {
     if (this.battle) {
       this.battle.stop();
     }
-    this.controller.stop().catch(() => {});
+    this.controller.stop().catch(() => { });
     this.logger.info("[System] Shutdown initiated");
   }
 
