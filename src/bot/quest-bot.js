@@ -337,6 +337,28 @@ class QuestBot {
       return summonStatus === "success";
     }
 
+    // Fallback Case: Detected generic page (mypage, quest home, etc) during combat initiation
+    const isGenericPage = await this.controller.page.evaluate(() => {
+      const hash = window.location.hash;
+      const href = window.location.href;
+      return (
+        hash.includes("#mypage") ||
+        hash.includes("#quest") ||
+        hash.includes("#top") ||
+        href.endsWith(".jp/") ||
+        href.endsWith(".jp")
+      );
+    }).catch(() => false);
+
+    if (isGenericPage) {
+      this.logger.info(
+        `[Replicard] Fallback: Generic page detected (${this.controller.page.url()}). Re-navigating to quest target...`,
+      );
+      await this.controller.gotoSPA(this.questUrl);
+      await sleep(100);
+      return false; // Return false to retry the cycle from the top
+    }
+
     this.logger.warn("[Replicard] Target not found on page");
     return false;
   }
