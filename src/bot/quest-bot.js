@@ -753,16 +753,6 @@ class QuestBot {
 
     await new Promise((resolve) => {
       let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          this.controller.network.off("battle:result", onResult);
-          this.logger.debug(
-            "[Network] Battle result timeout, proceeding anyway",
-          );
-          resolve();
-        }
-      }, 5000);
 
       const onResult = async () => {
         if (!resolved) {
@@ -772,14 +762,23 @@ class QuestBot {
             this.controller.network.off("battle:result", onResult);
           }
           this.logger.debug("[Network] Battle result received");
-          // User Request: Add 50ms sleep after battle result in quest mode
-          // ensures SPA router is ready for subsequent navigation.
           await sleep(50);
           resolve();
         }
       };
 
-      this.controller.network.once("battle:result", onResult);
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          if (this.controller.network) {
+            this.controller.network.off("battle:result", onResult);
+          }
+          this.logger.debug("[Network] Battle result timeout, proceeding anyway");
+          resolve();
+        }
+      }, 5000);
+
+      this.controller.network.on("battle:result", onResult);
     });
   }
 

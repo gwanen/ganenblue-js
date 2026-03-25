@@ -526,7 +526,7 @@ class PageController {
     if (exists) {
       try {
         await this.page.click(reloadBtn);
-        await sleep(100); // Snappy yield
+        await sleep(150); // Snappy yield
         // Wait for game loader to disappear if it appears
         // Using very short timeout if fast: true
         await this.waitForSPAUpdate(options.fast ? 500 : 5000);
@@ -559,27 +559,40 @@ class PageController {
 
   /**
    * Helper to wait for the game's loading overlay to disappear.
+   * Priority: Network idle (if possible) + DOM loader check.
    */
-  async waitForSPAUpdate(timeout = 1500) {
+  async waitForSPAUpdate(timeout = 3000) {
+    const start = Date.now();
     try {
-      await this.page.waitForFunction(
-        () => {
-          const loader =
-            document.querySelector("#loading") ||
-            document.querySelector(".loading-wrapper") ||
-            document.querySelector(".prt-loading");
-          if (!loader) return true;
-          const style = window.getComputedStyle(loader);
-          return (
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            style.opacity === "0"
-          );
-        },
-        { timeout },
-      );
+      // 1. Give the game a tiny moment (150ms) to even start showing the loader
+      await sleep(150);
+
+      // 2. Wait for either network idle OR the DOM loader to be hidden
+      await Promise.race([
+        this.page.waitForFunction(
+          () => {
+            const loader =
+              document.querySelector("#loading") ||
+              document.querySelector(".loading-wrapper") ||
+              document.querySelector(".prt-loading");
+            if (!loader) return true;
+            const style = window.getComputedStyle(loader);
+            return (
+              style.display === "none" ||
+              style.visibility === "hidden" ||
+              style.opacity === "0"
+            );
+          },
+          { timeout }
+        ),
+        this.page.waitForNetworkIdle({ idleTime: 400, timeout: timeout }).catch(() => { })
+      ]);
+
+      this.logger.debug(`[Core] SPA update finished (${Date.now() - start}ms)`);
+      return true;
     } catch (e) {
-      this.logger.debug("[Core] SPA update wait timed out");
+      this.logger.debug(`[Core] SPA update wait reached timeout/fallback (${Date.now() - start}ms)`);
+      return false;
     }
   }
 
@@ -673,31 +686,9 @@ class PageController {
 
     // Fallback: wait for the game's loading overlay to disappear, which
     // signals that the new page's DOM has been fully injected.
-    try {
-      await this.page.waitForFunction(
-        () => {
-          // GBF uses #loading or .loading-wrapper to signal transitions.
-          const loader =
-            document.querySelector("#loading") ||
-            document.querySelector(".loading-wrapper") ||
-            document.querySelector(".prt-loading");
-          // If no loader present, the page has settled (or never showed one).
-          if (!loader) return true;
-          const style = window.getComputedStyle(loader);
-          return (
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            style.opacity === "0"
-          );
-        },
-        { timeout: Math.max(0, deadline - Date.now()) },
-      );
-    } catch (e) {
-      // Timeout waiting for loader — the DOM may still be fine, log and continue.
-      this.logger.debug(
-        `[Core] gotoSPA: loading overlay wait timed out for ${targetHash}`,
-      );
+    const success = await this.waitForSPAUpdate(Math.max(0, deadline - Date.now()));
 
+    if (!success) {
       // If we timed out, the router might have ignored the SPA hash change.
       // Attempt an in-game footer reload to forcefully unstick it.
       const reloadBtn = ".btn-treasure-footer-reload";
@@ -719,10 +710,6 @@ class PageController {
     await this.waitForFrameStable(500);
   }
 
-  /**
-   * Reload the page using GBF's native footer reload button when possible,
-   * falling back to a full browser reload if not available.
-   */
   /**
    * Reload the page using the Soft Refresh strategy by default.
    */

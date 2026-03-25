@@ -44,6 +44,8 @@ class BattleHandler {
     this._preBossDied = false;
     this._prePartyWiped = false;
     this._preSummonUsed = false;
+    this._preAbilityUsed = false;
+    this._preAttackUsed = false;
     this._preNetworkTurn = 0;
     this._preNetworkTurnReady = false;
   }
@@ -176,6 +178,8 @@ class BattleHandler {
       // (fired the moment FA activates) isn't missed due to the listener gap between
       // handleFullAuto() returning and waitForBattleEnd() registering its own handlers.
       this._preSummonUsed = false;
+      this._preAbilityUsed = false;
+      this._preAttackUsed = false;
       this._preBossDied = false;
       this._prePartyWiped = false;
       this._preNetworkTurn = 0;
@@ -184,6 +188,12 @@ class BattleHandler {
 
       const _onPreSummon = () => {
         this._preSummonUsed = true;
+      };
+      const _onPreAbility = () => {
+        this._preAbilityUsed = true;
+      };
+      const _onPreAttack = () => {
+        this._preAttackUsed = true;
       };
       const _onPreBoss = () => {
         this._preBossDied = true;
@@ -200,27 +210,34 @@ class BattleHandler {
         this.isResultConfirmed = true; // Mark as end-state confirmed
       };
 
-      if (this.controller.network) {
-        this.controller.network.on("battle:summon_used", _onPreSummon);
-        this.controller.network.on("battle:boss_died", _onPreBoss);
-        this.controller.network.on("battle:party_wiped", _onPreWipe);
-        this.controller.network.on("battle:start", _onPreStart);
-        this.controller.network.once("battle:result", _onPreResult);
-      }
+      try {
+        if (this.controller.network) {
+          this.controller.network.on("battle:summon_used", _onPreSummon);
+          this.controller.network.on("battle:ability_used", _onPreAbility);
+          this.controller.network.on("battle:attack_used", _onPreAttack);
+          this.controller.network.on("battle:boss_died", _onPreBoss);
+          this.controller.network.on("battle:party_wiped", _onPreWipe);
+          this.controller.network.on("battle:start", _onPreStart);
+          this.controller.network.once("battle:result", _onPreResult);
+        }
 
-      if (mode === "full_auto") {
-        await this.handleFullAuto();
-      } else if (mode === "semi_auto") {
-        await this.handleSemiAuto(false, initialTurns);
-      }
-
-      // Remove pre-listeners — waitForBattleEnd registers its own
-      if (this.controller.network) {
-        this.controller.network.off("battle:summon_used", _onPreSummon);
-        this.controller.network.off("battle:boss_died", _onPreBoss);
-        this.controller.network.off("battle:party_wiped", _onPreWipe);
-        this.controller.network.off("battle:start", _onPreStart);
-        this.controller.network.off("battle:result", _onPreResult);
+        if (mode === "full_auto") {
+          await this.handleFullAuto();
+        } else if (mode === "semi_auto") {
+          await this.handleSemiAuto(false, initialTurns);
+        }
+      } finally {
+        // REQUIRED: Remove pre-listeners immediately — waitForBattleEnd registers its own.
+        // This finally block ensures they are removed even if an error occurs during FA/SA activation.
+        if (this.controller.network) {
+          this.controller.network.off("battle:summon_used", _onPreSummon);
+          this.controller.network.off("battle:ability_used", _onPreAbility);
+          this.controller.network.off("battle:attack_used", _onPreAttack);
+          this.controller.network.off("battle:boss_died", _onPreBoss);
+          this.controller.network.off("battle:party_wiped", _onPreWipe);
+          this.controller.network.off("battle:start", _onPreStart);
+          this.controller.network.off("battle:result", _onPreResult);
+        }
       }
 
       if (this.skipRaid) {
@@ -621,14 +638,12 @@ class BattleHandler {
     }
 
     // Network event flags
-    // Seed from pre-registered flags captured during transitions to catch
-    // signals that fired before waitForBattleEnd registered its listeners.
     let networkFinished = this._preNetworkFinished || false;
     let bossDied = this._preBossDied || false;
     let partyWiped = this._prePartyWiped || false;
-    let attackUsed = false;
+    let attackUsed = this._preAttackUsed || false;
     let summonUsed = this._preSummonUsed || false;
-    let abilityUsed = false;
+    let abilityUsed = this._preAbilityUsed || false;
 
     let networkTurn =
       this._preNetworkTurn > 0 ? this._preNetworkTurn : turnCount;
@@ -636,6 +651,8 @@ class BattleHandler {
 
     // Reset pre-flags immediately after seeding
     this._preSummonUsed = false;
+    this._preAbilityUsed = false;
+    this._preAttackUsed = false;
     this._preBossDied = false;
     this._prePartyWiped = false;
     this._preNetworkTurn = 0;
@@ -761,17 +778,29 @@ class BattleHandler {
       }
     };
 
-    if (this.controller.network) {
-      this.controller.network.once("battle:result", onBattleResult);
-      this.controller.network.on("battle:boss_died", onBossDied);
-      this.controller.network.on("battle:party_wiped", onPartyWiped);
-      this.controller.network.on("battle:start", onBattleStart);
-      this.controller.network.on("battle:attack_used", onAttack);
-      this.controller.network.on("battle:ability_used", onAbilityUsed);
-      this.controller.network.on("battle:summon_used", onSummonUsed);
-    }
+    const cleanup = () => {
+      if (this.controller.network) {
+        this.controller.network.off("battle:result", onBattleResult);
+        this.controller.network.off("battle:boss_died", onBossDied);
+        this.controller.network.off("battle:party_wiped", onPartyWiped);
+        this.controller.network.off("battle:attack_used", onAttack);
+        this.controller.network.off("battle:summon_used", onSummonUsed);
+        this.controller.network.off("battle:ability_used", onAbilityUsed);
+        this.controller.network.off("battle:start", onBattleStart);
+      }
+    };
 
     try {
+      if (this.controller.network) {
+        this.controller.network.once("battle:result", onBattleResult);
+        this.controller.network.on("battle:boss_died", onBossDied);
+        this.controller.network.on("battle:party_wiped", onPartyWiped);
+        this.controller.network.on("battle:start", onBattleStart);
+        this.controller.network.on("battle:attack_used", onAttack);
+        this.controller.network.on("battle:ability_used", onAbilityUsed);
+        this.controller.network.on("battle:summon_used", onSummonUsed);
+      }
+
       while (Date.now() - startTime < maxWaitMs) {
         // Sync lastActionTime and threshold from refs (may be updated by handleFullAuto)
         lastActionTime = this.options.lastActionTimeRef.value;
