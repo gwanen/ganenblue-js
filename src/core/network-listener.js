@@ -83,14 +83,15 @@ class NetworkListener extends EventEmitter {
             if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
             // --- Battle end (existing) ---
-            if (url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js')) {
+            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js');
+            if (isResultPattern && !url.includes('.css')) {
                 // For JSON check only if it's the result.json endpoint
                 if (url.includes('.json')) {
                     const contentType = response.headers()['content-type'];
                     if (!contentType || !contentType.includes('application/json')) return;
                 }
 
-                this.logger.info(`[Status] Signal: Combat Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'}) detected`);
+                this.logger.debug(`[Status] Signal: Combat Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'}) detected`);
                 this.emit('battle:result', { url, time: Date.now() });
                 return;
             }

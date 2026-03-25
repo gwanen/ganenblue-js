@@ -19,7 +19,7 @@ class PageController {
     this.lastMousePos = { x: 0, y: 0 };
 
     // Disable background throttling via CDP immediately
-    this.disableBackgroundThrottling().catch(() => {});
+    this.disableBackgroundThrottling().catch(() => { });
   }
 
   async enableResourceBlocking() {
@@ -65,7 +65,7 @@ class PageController {
       this.logger.debug("[Core] State: CDP throttling override failure");
     } finally {
       if (client) {
-        await client.detach().catch(() => {});
+        await client.detach().catch(() => { });
       }
     }
   }
@@ -420,7 +420,7 @@ class PageController {
       const activePoints = fast ? [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].filter(p => !!p) : points;
 
       for (const point of activePoints) {
-        await this.page.mouse.move(point.x, point.y).catch(() => {});
+        await this.page.mouse.move(point.x, point.y).catch(() => { });
       }
 
       this.lastMousePos = end;
@@ -491,7 +491,7 @@ class PageController {
           this.logger.info(
             "[Core] Navigation retry triggered. Performing Hard Reload...",
           );
-          await this.reloadHard().catch(() => {});
+          await this.reloadHard().catch(() => { });
           await sleep(waitTime);
           continue;
         }
@@ -515,19 +515,21 @@ class PageController {
    * Attempts to click the in-game footer reload button.
    * Used for Animation Skips and normal flow.
    */
-  async reloadSoft() {
+  async reloadSoft(options = { fast: true }) {
     this.logger.info("[Core] Action: Soft Refresh (Footer button)");
     this.clearClickCache();
-    const reloadBtn = config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
-    
+    const reloadBtn =
+      config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
+
     // Check if button exists and is visible
     const exists = await this.elementExists(reloadBtn, 500, true);
     if (exists) {
       try {
         await this.page.click(reloadBtn);
-        await sleep(50);
+        await sleep(150); // Snappy yield
         // Wait for game loader to disappear if it appears
-        await this.waitForSPAUpdate();
+        // Using very short timeout if fast: true
+        await this.waitForSPAUpdate(options.fast ? 500 : 5000);
         return;
       } catch (e) {
         this.logger.debug(`[Core] Soft refresh click failed: ${e.message}`);
@@ -545,10 +547,10 @@ class PageController {
   handleDetachedFrame(error) {
     this.logger.error("[Safety] Browser frame detached. High risk of detection.");
     this.logger.warn("[Safety] Halting bot immediately as requested.");
-    
+
     // Set a flag that the bot can check to stop
     this.detachedState = true;
-    
+
     // Re-throw to propagate to QuestBot
     const safetyError = new Error("DETACHED_FRAME");
     safetyError.original = error;
@@ -557,27 +559,40 @@ class PageController {
 
   /**
    * Helper to wait for the game's loading overlay to disappear.
+   * Priority: Network idle (if possible) + DOM loader check.
    */
-  async waitForSPAUpdate(timeout = 5000) {
+  async waitForSPAUpdate(timeout = 3000) {
+    const start = Date.now();
     try {
-      await this.page.waitForFunction(
-        () => {
-          const loader =
-            document.querySelector("#loading") ||
-            document.querySelector(".loading-wrapper") ||
-            document.querySelector(".prt-loading");
-          if (!loader) return true;
-          const style = window.getComputedStyle(loader);
-          return (
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            style.opacity === "0"
-          );
-        },
-        { timeout },
-      );
+      // 1. Give the game a tiny moment (150ms) to even start showing the loader
+      await sleep(150);
+
+      // 2. Wait for either network idle OR the DOM loader to be hidden
+      await Promise.race([
+        this.page.waitForFunction(
+          () => {
+            const loader =
+              document.querySelector("#loading") ||
+              document.querySelector(".loading-wrapper") ||
+              document.querySelector(".prt-loading");
+            if (!loader) return true;
+            const style = window.getComputedStyle(loader);
+            return (
+              style.display === "none" ||
+              style.visibility === "hidden" ||
+              style.opacity === "0"
+            );
+          },
+          { timeout }
+        ),
+        this.page.waitForNetworkIdle({ idleTime: 400, timeout: timeout }).catch(() => { })
+      ]);
+
+      this.logger.debug(`[Core] SPA update finished (${Date.now() - start}ms)`);
+      return true;
     } catch (e) {
-      this.logger.debug("[Core] SPA update wait timed out");
+      this.logger.debug(`[Core] SPA update wait reached timeout/fallback (${Date.now() - start}ms)`);
+      return false;
     }
   }
 
@@ -671,31 +686,9 @@ class PageController {
 
     // Fallback: wait for the game's loading overlay to disappear, which
     // signals that the new page's DOM has been fully injected.
-    try {
-      await this.page.waitForFunction(
-        () => {
-          // GBF uses #loading or .loading-wrapper to signal transitions.
-          const loader =
-            document.querySelector("#loading") ||
-            document.querySelector(".loading-wrapper") ||
-            document.querySelector(".prt-loading");
-          // If no loader present, the page has settled (or never showed one).
-          if (!loader) return true;
-          const style = window.getComputedStyle(loader);
-          return (
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            style.opacity === "0"
-          );
-        },
-        { timeout: Math.max(0, deadline - Date.now()) },
-      );
-    } catch (e) {
-      // Timeout waiting for loader — the DOM may still be fine, log and continue.
-      this.logger.debug(
-        `[Core] gotoSPA: loading overlay wait timed out for ${targetHash}`,
-      );
+    const success = await this.waitForSPAUpdate(Math.max(0, deadline - Date.now()));
 
+    if (!success) {
       // If we timed out, the router might have ignored the SPA hash change.
       // Attempt an in-game footer reload to forcefully unstick it.
       const reloadBtn = ".btn-treasure-footer-reload";
@@ -704,7 +697,7 @@ class PageController {
           "[Core] SPA transition seems stuck. Triggering footer reload...",
         );
         await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(
-          () => {},
+          () => { },
         );
         await sleep(500);
       }
@@ -717,10 +710,6 @@ class PageController {
     await this.waitForFrameStable(500);
   }
 
-  /**
-   * Reload the page using GBF's native footer reload button when possible,
-   * falling back to a full browser reload if not available.
-   */
   /**
    * Reload the page using the Soft Refresh strategy by default.
    */
