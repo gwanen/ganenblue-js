@@ -57,6 +57,9 @@ class RaidBot {
     this.battleTurns = []; // Array to store turn counts
     this.lastEndHonor = 0; // Honor at end of last raid (used for per-raid diff)
     this.totalHonor = 0; // Accumulated honor gained this session
+    this.redChests = 0;
+    this.blueChests = 0;
+    this.goldBricks = 0;
 
     // Network Error State for Fast Fallback
     this.raidErrorType = null;
@@ -65,6 +68,38 @@ class RaidBot {
     this.onRaidError = this._onRaidError.bind(this);
     this.onBattleStart = this._onBattleStart.bind(this);
     this.onSupporterScreen = this._onSupporterScreen.bind(this);
+    this.onBattleResult = this._onBattleResult.bind(this);
+  }
+
+  _onBattleResult({ rewards }) {
+    if (!rewards?.reward_list) {
+      if (rewards) this.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
+      return;
+    }
+    const rl = rewards.reward_list;
+    this.logger.debug(`[Loot] reward_list keys: ${Object.keys(rl).join(", ")}`);
+
+    if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
+      const count = Object.keys(rl["4"]).length;
+      this.redChests += count;
+      if (count > 0) this.logger.info(`[Loot] Red Chests: +${count} (Total: ${this.redChests})`);
+    }
+    if (rl["11"] && !Array.isArray(rl["11"]) && typeof rl["11"] === "object") {
+      const count = Object.keys(rl["11"]).length;
+      this.blueChests += count;
+      if (count > 0) this.logger.info(`[Loot] Blue Chests: +${count} (Total: ${this.blueChests})`);
+    }
+    for (const bucket of Object.values(rl)) {
+      if (bucket && !Array.isArray(bucket) && typeof bucket === "object") {
+        for (const item of Object.values(bucket)) {
+          if (item?.name === "Gold Brick") {
+            const qty = parseInt(item.count) || 1;
+            this.goldBricks += qty;
+            this.logger.info(`[Loot] Gold Brick: +${qty} (Total: ${this.goldBricks})`);
+          }
+        }
+      }
+    }
   }
 
   _onSupporterScreen() {
@@ -139,6 +174,9 @@ class RaidBot {
     this.battleTurns = []; // Reset battle turns on start
     this.lastEndHonor = 0;
     this.totalHonor = 0;
+    this.redChests = 0;
+    this.blueChests = 0;
+    this.goldBricks = 0;
     this.startTime = Date.now();
 
     if (this.controller.network) {
@@ -148,6 +186,7 @@ class RaidBot {
         "raid:supporter_screen",
         this.onSupporterScreen,
       );
+      this.controller.network.on("battle:result", this.onBattleResult);
     }
 
     this.logger.info("[Bot] Session started");
@@ -716,26 +755,51 @@ class RaidBot {
       try {
         await this.controller.clickSafe(entrySelector);
 
-        // Wait for network result event
+        // Wait for the rewards-bearing result endpoint, with a fallback timeout.
+        // content/index responses include rewards directly in option.result_data.
+        // If rewards are missing (e.g. empty result), a detail XHR may follow.
+        // We keep listening until we get rewards or the hard timeout expires.
         await new Promise((resolve) => {
           let resolved = false;
-          const timeout = setTimeout(() => {
+
+          const hardTimeout = setTimeout(() => {
             if (!resolved) {
               resolved = true;
               this.controller.network?.off("battle:result", onResult);
               resolve(null);
             }
-          }, 3000);
+          }, 5000);
 
-          const onResult = () => {
-            if (!resolved) {
-              resolved = true;
-              clearTimeout(timeout);
-              resolve(null);
+          // After the content page fires, give the detail XHR up to 2s extra.
+          let softTimeout = null;
+          const onResult = ({ rewards, url: resultUrl }) => {
+            const shortUrl = resultUrl ? resultUrl.replace('https://game.granbluefantasy.jp', '') : '?';
+            if (rewards !== null) {
+              // Detail endpoint responded with reward data — done.
+              this.logger.info(`[Loot] Pending raid rewards received (${shortUrl})`);
+              if (!resolved) {
+                resolved = true;
+                clearTimeout(hardTimeout);
+                clearTimeout(softTimeout);
+                this.controller.network?.off("battle:result", onResult);
+                resolve(null);
+              }
+            } else if (!softTimeout) {
+              // Result fired but rewards were null — start soft countdown in case a detail XHR follows.
+              this.logger.info(`[Loot] Pending raid page loaded (${shortUrl}) — no rewards yet, waiting briefly for detail XHR`);
+              clearTimeout(hardTimeout);
+              softTimeout = setTimeout(() => {
+                if (!resolved) {
+                  this.logger.warn(`[Loot] Detail XHR did not arrive in time — no chest data for this pending raid`);
+                  resolved = true;
+                  this.controller.network?.off("battle:result", onResult);
+                  resolve(null);
+                }
+              }, 2000);
             }
           };
 
-          this.controller.network?.once("battle:result", onResult);
+          this.controller.network?.on("battle:result", onResult);
         });
 
         clearedCount++;
@@ -1094,6 +1158,7 @@ class RaidBot {
         "raid:supporter_screen",
         this.onSupporterScreen,
       );
+      this.controller.network.removeListener("battle:result", this.onBattleResult);
     }
 
     this.controller
@@ -1167,6 +1232,9 @@ class RaidBot {
           : 0,
       rate: rate,
       totalHonor: this.totalHonor || 0,
+      redChests: this.redChests || 0,
+      blueChests: this.blueChests || 0,
+      goldBricks: this.goldBricks || 0,
     };
   }
 

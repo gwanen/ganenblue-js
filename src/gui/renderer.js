@@ -149,6 +149,9 @@ function getProfileElements(pid) {
         statLastBattle: document.getElementById(`stat-last-battle-${pid}`),
         statRunTimer: document.getElementById(`run-timer-${pid}`),
         statRunRate: document.getElementById(`run-rate-${pid}`),
+        statRedChests: document.getElementById(`stat-red-chests-${pid}`),
+        statBlueChests: document.getElementById(`stat-blue-chests-${pid}`),
+        statGoldBricks: document.getElementById(`stat-gold-bricks-${pid}`),
         // Credentials
         email: document.getElementById(`mobage-email-${pid}`),
         password: document.getElementById(`mobage-password-${pid}`),
@@ -462,10 +465,16 @@ function updateStatsDisplay(pid) {
             els.statRunRate.textContent = '0.0/h';
         }
     } else if (!profileState[pid].isRunning) {
+
         // Keep last values or reset? Usually reset on stop/start, so keeping last known is fine for now
         // or we could show static if we stored end time.
         // For now, if stopped, we might want to just show what we have, but time won't update.
     }
+
+    // Chest counters (raid mode only — always update when data present)
+    if (els.statRedChests) els.statRedChests.textContent = s.redChests ?? 0;
+    if (els.statBlueChests) els.statBlueChests.textContent = s.blueChests ?? 0;
+    if (els.statGoldBricks) els.statGoldBricks.textContent = s.goldBricks ?? 0;
 }
 
 // === Global / Shared Logic ===
@@ -615,7 +624,10 @@ if (window.electronAPI) {
                     avgTurns: s.avgTurns || 0,
                     lastBattleTime: s.lastBattleTime || 0,
                     startTime: s.startTime,
-                    rate: s.rate
+                    rate: s.rate,
+                    redChests: s.redChests || 0,
+                    blueChests: s.blueChests || 0,
+                    goldBricks: s.goldBricks || 0,
                 };
 
                 if (s.duration) {

@@ -83,7 +83,8 @@ class NetworkListener extends EventEmitter {
             if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
             // --- Battle end (existing) ---
-            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js');
+            const isDetailUrl = url.includes('/resultmulti/content/detail/') || url.includes('/result/content/detail/');
+            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js') || isDetailUrl;
             if (isResultPattern && !url.includes('.css')) {
                 // For JSON check only if it's the result.json endpoint
                 if (url.includes('.json')) {
@@ -92,7 +93,23 @@ class NetworkListener extends EventEmitter {
                 }
 
                 this.logger.debug(`[Status] Signal: Combat Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'}) detected`);
-                this.emit('battle:result', { url, time: Date.now() });
+                const isIndexUrl = url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/');
+                let rewards = null;
+                if (isDetailUrl || isIndexUrl || url.includes('.json')) {
+                    const endpointLabel = isDetailUrl ? 'Result detail' : isIndexUrl ? 'Result index' : 'result.json';
+                    this.logger.debug(`[Loot] ${endpointLabel} endpoint detected — attempting to parse rewards`);
+                    const json = await response.json().catch((e) => {
+                        this.logger.warn(`[Loot] Failed to parse ${endpointLabel} response: ${e?.message ?? e}`);
+                        return null;
+                    });
+                    rewards = json?.option?.result_data?.rewards ?? null;
+                    if (!rewards) {
+                        this.logger.debug(`[Loot] ${endpointLabel} parsed but rewards not found (option.result_data.rewards missing)`);
+                    } else {
+                        this.logger.debug('[Loot] Rewards parsed successfully — emitting to listeners');
+                    }
+                }
+                this.emit('battle:result', { url, time: Date.now(), rewards });
                 return;
             }
 
