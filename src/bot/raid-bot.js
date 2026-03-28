@@ -27,6 +27,7 @@ class RaidBot {
         options.summonRefresh !== undefined ? options.summonRefresh : true,
       skillRefresh:
         options.skillRefresh !== undefined ? options.skillRefresh : false,
+      preBattleAutoAttack: options.preBattleAutoAttack || "off",
       logger: this.logger,
       controller: this.controller,
     });

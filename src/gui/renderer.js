@@ -260,7 +260,8 @@ function setupProfileListeners(pid) {
             summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
             skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
             turboMode: els.turboMode ? els.turboMode.checked : false,
-            memoryWatchdog: els.memoryWatchdog ? els.memoryWatchdog.checked : false
+            memoryWatchdog: els.memoryWatchdog ? els.memoryWatchdog.checked : false,
+            preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
         };
 
         if (settings.botMode === 'quest' && !settings.questUrl) {
@@ -332,6 +333,7 @@ function setupProfileListeners(pid) {
         document.getElementById(`skill-refresh-${pid}`),
         document.getElementById(`turbo-mode-${pid}`),
         document.getElementById(`memory-watchdog-${pid}`),
+        document.getElementById(`pre-battle-auto-${pid}`),
         els.replicardUrl
     ];
     inputs.forEach(input => {
@@ -729,6 +731,10 @@ async function loadProfileSettings(pid) {
         }
         if (s.turboMode !== undefined && els.turboMode) els.turboMode.checked = s.turboMode;
         if (s.memoryWatchdog !== undefined && els.memoryWatchdog) els.memoryWatchdog.checked = s.memoryWatchdog;
+        if (s.preBattleAutoAttack !== undefined) {
+            const pbaEl = document.getElementById(`pre-battle-auto-${pid}`);
+            if (pbaEl) pbaEl.checked = s.preBattleAutoAttack;
+        }
     }
 }
 
@@ -753,7 +759,8 @@ function saveProfileSettings(pid) {
         summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
         skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
         turboMode: document.getElementById(`turbo-mode-${pid}`)?.checked || false,
-        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)?.checked || false
+        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)?.checked || false,
+        preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }
