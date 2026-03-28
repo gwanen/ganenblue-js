@@ -17,6 +17,7 @@ class BattleHandler {
       options.summonRefresh !== undefined ? options.summonRefresh : true;
     this.skillRefresh =
       options.skillRefresh !== undefined ? options.skillRefresh : false;
+    this.preBattleAutoAttack = options.preBattleAutoAttack || "off";
     this.logger = options.logger || logger;
     this.faActive = false;
     this.isResultConfirmed = false;
@@ -68,6 +69,13 @@ class BattleHandler {
     this.options.lastActionTimeRef = lastActionTimeRef;
     this.options.faThresholdRef = faThresholdRef;
 
+    // Pre-Battle Auto Attack: fire on every battle:start (page reload during battle).
+    // Defined outside try so it can be cleaned up in finally.
+    const _onBattleStartForTap =
+      this.preBattleAutoAttack !== "off"
+        ? () => { this._doPrebattleTap().catch(() => {}); }
+        : null;
+
     try {
       const currentUrl = this.controller.page.url();
       // Check for result page (both hash-based and path-based URLs)
@@ -97,11 +105,22 @@ class BattleHandler {
       const loadSelector =
         mode === "semi_auto" ? this.selectors.attackButton : ".btn-auto";
 
+      // Pre-Battle (initial load): start.json fires before listener registers, so check DOM directly
+      if (this.preBattleAutoAttack !== "off") {
+        const loadingVisible = await this.controller.page
+          .evaluate(() => {
+            const el = document.querySelector(".prt-start-direction");
+            return el ? el.style.display !== "none" : false;
+          })
+          .catch(() => false);
+        if (loadingVisible) this._doPrebattleTap().catch(() => {});
+      }
+
       // Root Cause Fix: We cannot reliably listen for start.json here because the page navigation
       // (e.g. goto/reload) completes the network request BEFORE this executeBattle logic even runs.
       // Previously, the domReady race masked this by winning instantly. When domReady was removed,
       // it exposed the dead listener, resulting in consistent 10-second timeouts.
-      
+
       // We wait for the battle UI to appear (max 10s) to validate we successfully entered the battle
       // before proceeding to Mode activation. This is a highly optimized DOM mutation check.
       let battleLoaded = await this.controller.waitForElement(loadSelector, 10000);
@@ -210,6 +229,11 @@ class BattleHandler {
         this.isResultConfirmed = true; // Mark as end-state confirmed
       };
 
+      // Register pre-battle tap for all reloads during this battle
+      if (_onBattleStartForTap && this.controller.network) {
+        this.controller.network.on("battle:start", _onBattleStartForTap);
+      }
+
       try {
         if (this.controller.network) {
           this.controller.network.on("battle:summon_used", _onPreSummon);
@@ -278,6 +302,45 @@ class BattleHandler {
       return { duration: 0, turns: 0 };
     } finally {
       // NetworkListener is managed by PageController — stopped only when session ends.
+      if (_onBattleStartForTap && this.controller.network) {
+        this.controller.network.off("battle:start", _onBattleStartForTap);
+      }
+    }
+  }
+
+  async _doPrebattleTap() {
+    try {
+      const coords = await this.controller.page.evaluate(() => {
+        const el = document.querySelector(".prt-auto-setting");
+        if (el) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+        return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      });
+
+      const client = await this.controller.page.target().createCDPSession();
+      try {
+        await client.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: coords.x, y: coords.y, id: 0 }],
+        });
+        await client.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+          changedTouches: [{ x: coords.x, y: coords.y, id: 0 }],
+        });
+      } finally {
+        await client.detach().catch(() => {});
+      }
+
+      const confirmed = await this.controller.waitForElement(".btn-ready-auto", 500);
+      this.logger.info(confirmed
+        ? "[Battle] Pre-Battle: Auto attack armed"
+        : "[Battle] Pre-Battle: btn-ready-auto not detected"
+      );
+    } catch (e) {
+      this.logger.debug(`[Battle] Pre-Battle: Tap failed (${e.message})`);
     }
   }
 
@@ -342,9 +405,19 @@ class BattleHandler {
           return;
         }
 
-        await this.controller.cachedClick(this.selectors.fullAutoButton, 0);
-        this.logger.debug("[Battle] Fast-clicked Full Auto");
-        this.faActive = true;
+        // btn-ready-auto persists in DOM after loading screen hides — reliable FA-armed signal
+        const preBattleArmed = await this.controller.page
+          .evaluate(() => !!document.querySelector(".btn-ready-auto"))
+          .catch(() => false);
+
+        if (preBattleArmed) {
+          this.logger.info("[Battle] Full Auto already active (pre-battle armed). Skipping click");
+          this.faActive = true;
+        } else {
+          await this.controller.cachedClick(this.selectors.fullAutoButton, 0);
+          this.logger.debug("[Battle] Fast-clicked Full Auto");
+          this.faActive = true;
+        }
 
         // Fix: Update lastActionTime AND reset threshold after FA click
         // GBF lockout after chain bursts can last 10-20s, which is normal
@@ -737,13 +810,13 @@ class BattleHandler {
       updateHonor(honor);
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 5000; // 5s after summon
+      this.options.faThresholdRef.value = 3000; // 3s after summon
       lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 5000; // 5s after ability
+      this.options.faThresholdRef.value = 3000; // 3s after ability
       lastFACheckTime = Date.now();
     };
 
