@@ -77,7 +77,6 @@ class RaidBot {
       return;
     }
     const rl = rewards.reward_list;
-    this.logger.debug(`[Loot] reward_list keys: ${Object.keys(rl).join(", ")}`);
 
     if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
       const count = Object.keys(rl["4"]).length;
@@ -186,7 +185,6 @@ class RaidBot {
         "raid:supporter_screen",
         this.onSupporterScreen,
       );
-      this.controller.network.on("battle:result", this.onBattleResult);
     }
 
     this.logger.info("[Bot] Session started");
@@ -343,8 +341,13 @@ class RaidBot {
       skipOnSalute: true, // Just for raid mode
     });
 
+    // Rewards are captured inside waitForBattleEnd before executeBattle returns.
+    if (result?.rewards) {
+      this.logger.info(`[Loot] Battle rewards received`);
+      this._onBattleResult({ rewards: result.rewards });
+    }
+
     // Navigate to backup page after battle ends (don't stay on result page)
-    await sleep(50); // Brief wait for network
     this.logger.info("[Raid] Navigating to backup page...");
     await this.controller.gotoSPA(this.raidBackupUrl);
     await sleep(50);
@@ -775,13 +778,14 @@ class RaidBot {
           const onResult = ({ rewards, url: resultUrl }) => {
             const shortUrl = resultUrl ? resultUrl.replace('https://game.granbluefantasy.jp', '') : '?';
             if (rewards !== null) {
-              // Detail endpoint responded with reward data — done.
+              // Result endpoint responded with reward data — count chests and done.
               this.logger.info(`[Loot] Pending raid rewards received (${shortUrl})`);
               if (!resolved) {
                 resolved = true;
                 clearTimeout(hardTimeout);
                 clearTimeout(softTimeout);
                 this.controller.network?.off("battle:result", onResult);
+                this._onBattleResult({ rewards });
                 resolve(null);
               }
             } else if (!softTimeout) {
@@ -1158,7 +1162,6 @@ class RaidBot {
         "raid:supporter_screen",
         this.onSupporterScreen,
       );
-      this.controller.network.removeListener("battle:result", this.onBattleResult);
     }
 
     this.controller

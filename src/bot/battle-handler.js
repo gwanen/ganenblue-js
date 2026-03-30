@@ -772,8 +772,10 @@ class BattleHandler {
       }
     };
 
-    const onBattleResult = () => {
+    let capturedRewards = null;
+    const onBattleResult = ({ rewards } = {}) => {
       networkFinished = true;
+      if (rewards != null) capturedRewards = rewards;
       if (!this.isResultConfirmed) {
         this.isResultConfirmed = true;
         this.logger.info("[Status] Signal: Combat Result (Rewards) detected");
@@ -865,7 +867,7 @@ class BattleHandler {
 
     try {
       if (this.controller.network) {
-        this.controller.network.once("battle:result", onBattleResult);
+        this.controller.network.on("battle:result", onBattleResult);
         this.controller.network.on("battle:boss_died", onBossDied);
         this.controller.network.on("battle:party_wiped", onPartyWiped);
         this.controller.network.on("battle:start", onBattleStart);
@@ -929,11 +931,17 @@ class BattleHandler {
             if (finalHonor > previousHonors) previousHonors = finalHonor;
             if (finalHonor >= honorTarget) honorTargetReached = true;
           }
+          // Wait up to 2s for content/detail XHR to arrive after content/index
+          if (!capturedRewards) {
+            const deadline = Date.now() + 2000;
+            while (!capturedRewards && Date.now() < deadline) await sleep(50);
+          }
           return {
             duration: (Date.now() - startTime) / 1000,
             turns: isSemiAuto ? "N/A" : Math.max(turnCount + 1, 1),
             honors: previousHonors,
             honorReached: honorTargetReached,
+            rewards: capturedRewards,
           };
         }
 
