@@ -106,6 +106,7 @@ class BrowserManager {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
         const browserType = this.config.browser_type || 'chromium';
         const emulation = this.config.emulation || {};
+        const saveProfile = this.config.save_profile || false;
 
         // Default window size
         let windowWidth = 600;
@@ -119,11 +120,18 @@ class BrowserManager {
             this.logger.info('[Core] Device mode: Desktop (Default)');
         }
 
-        // Create unique temp directory for this session to avoid file locking collisions
+        // Create profile directory
         const tempDir = os.tmpdir();
-        const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
-        this.logger.info(`[Core] Browser process initialized (Profile: ${this.userDataDir})`);
+        if (saveProfile) {
+            // Use persistent profile directory
+            this.userDataDir = path.join(tempDir, 'ganenblue-profiles', 'persistent', this.profileId);
+            this.logger.info(`[Core] Using persistent profile: ${this.userDataDir}`);
+        } else {
+            // Create unique temp directory for this session to avoid file locking collisions
+            const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
+            this.logger.info(`[Core] Launching with temporary profile: ${this.userDataDir}`);
+        }
 
 
         // Prepare launch options
@@ -331,6 +339,12 @@ class BrowserManager {
         if (this.browser) {
             await this.browser.close();
             this.browser = null;
+        }
+
+        // Skip cleanup if save_profile is enabled
+        if (this.config.save_profile) {
+            this.logger.info(`[Core] Keeping profile (save_profile enabled): ${this.userDataDir}`);
+            return;
         }
 
         // Fix #3: Synchronous cleanup — avoids setTimeout firing after process exits on Windows

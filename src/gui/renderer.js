@@ -142,6 +142,7 @@ function getProfileElements(pid) {
         // Browser Settings
         browserType: document.getElementById(`browser-type-${pid}`),
         disableSandbox: document.getElementById(`disable-sandbox-${pid}`),
+        saveProfile: document.getElementById(`save-profile-${pid}`),
         // Stats
         statCompleted: document.getElementById(`completed-runs-${pid}`),
         statAvgBattle: document.getElementById(`avg-battle-${pid}`),
@@ -157,8 +158,7 @@ function getProfileElements(pid) {
         password: document.getElementById(`mobage-password-${pid}`),
         btnSaveCreds: document.getElementById(`btn-save-credentials-${pid}`),
         // Phase 11: Performance
-        turboMode: document.getElementById(`turbo-mode-${pid}`),
-        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)
+        turboMode: document.getElementById(`turbo-mode-${pid}`)
     };
 }
 
@@ -221,7 +221,8 @@ function setupProfileListeners(pid) {
             setLoading(els.btnLaunch, true, '⏳');
             const browserType = els.browserType ? els.browserType.value : 'chromium';
             const settings = {
-                disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false
+                disable_sandbox: els.disableSandbox ? els.disableSandbox.checked : false,
+                save_profile: els.saveProfile ? els.saveProfile.checked : false
             };
 
             const res = await window.electronAPI.launchBrowser(pid, browserType, settings);
@@ -263,7 +264,6 @@ function setupProfileListeners(pid) {
             summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
             skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
             turboMode: els.turboMode ? els.turboMode.checked : false,
-            memoryWatchdog: els.memoryWatchdog ? els.memoryWatchdog.checked : false,
             preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
         };
 
@@ -328,14 +328,13 @@ function setupProfileListeners(pid) {
         els.nameInput,
         els.mode, els.questUrl, els.maxRuns, els.battleMode, els.honorTarget, els.raidTarget,
         els.zone,
-        els.browserType, els.disableSandbox,
+        els.browserType, els.disableSandbox, els.saveProfile,
         document.getElementById(`block-resources-${pid}`),
         document.getElementById(`fast-refresh-${pid}`),
         document.getElementById(`refresh-on-start-${pid}`),
         document.getElementById(`summon-refresh-${pid}`),
         document.getElementById(`skill-refresh-${pid}`),
         document.getElementById(`turbo-mode-${pid}`),
-        document.getElementById(`memory-watchdog-${pid}`),
         document.getElementById(`pre-battle-auto-${pid}`),
         els.replicardUrl
     ];
@@ -721,6 +720,7 @@ async function loadProfileSettings(pid) {
         // Browser Settings
         if (s.browserType && els.browserType) els.browserType.value = s.browserType;
         if (s.disableSandbox !== undefined && els.disableSandbox) els.disableSandbox.checked = s.disableSandbox;
+        if (s.saveProfile !== undefined && els.saveProfile) els.saveProfile.checked = s.saveProfile;
         if (s.fastRefresh !== undefined) {
             const frEl = document.getElementById(`fast-refresh-${pid}`);
             if (frEl) frEl.checked = s.fastRefresh;
@@ -742,7 +742,6 @@ async function loadProfileSettings(pid) {
             if (brEl) brEl.checked = s.blockResources;
         }
         if (s.turboMode !== undefined && els.turboMode) els.turboMode.checked = s.turboMode;
-        if (s.memoryWatchdog !== undefined && els.memoryWatchdog) els.memoryWatchdog.checked = s.memoryWatchdog;
         if (s.preBattleAutoAttack !== undefined) {
             const pbaEl = document.getElementById(`pre-battle-auto-${pid}`);
             if (pbaEl) pbaEl.checked = s.preBattleAutoAttack;
@@ -765,13 +764,13 @@ function saveProfileSettings(pid) {
         // Browser Settings
         browserType: els.browserType ? els.browserType.value : 'chromium',
         disableSandbox: els.disableSandbox ? els.disableSandbox.checked : false,
+        saveProfile: els.saveProfile ? els.saveProfile.checked : false,
         blockResources: document.getElementById(`block-resources-${pid}`)?.checked || false,
         fastRefresh: document.getElementById(`fast-refresh-${pid}`)?.checked || false,
         refreshOnStart: document.getElementById(`refresh-on-start-${pid}`)?.checked ?? true,
         summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
         skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
         turboMode: document.getElementById(`turbo-mode-${pid}`)?.checked || false,
-        memoryWatchdog: document.getElementById(`memory-watchdog-${pid}`)?.checked || false,
         preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));

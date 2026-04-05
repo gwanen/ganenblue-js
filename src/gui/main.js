@@ -9,7 +9,6 @@ import RaidBot from "../bot/raid-bot.js";
 import SkipBot from "../bot/skip-bot.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
-import MemoryWatchdog from "../utils/memory-watchdog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,19 +145,6 @@ function startStatsUpdater() {
       }
     }
 
-    // Memory Watchdog Update
-    let anyWatchdogEnabled = false;
-    for (const [pid, instance] of instances) {
-        if (instance.bot && instance.bot.isRunning && instance.settings && instance.settings.memoryWatchdog) {
-            anyWatchdogEnabled = true;
-            break;
-        }
-    }
-
-    if (anyWatchdogEnabled) {
-        const stats = MemoryWatchdog.getStats();
-        mainWindow.webContents.send("memory:update", stats);
-    }
   }, 1000);
 }
 
@@ -260,6 +246,7 @@ ipcMain.handle(
         ...config.get("browser"),
         browser_type: browserType,
         disable_sandbox: !!deviceSettings.disable_sandbox,
+        save_profile: !!deviceSettings.save_profile,
         emulation: {
           ...deviceSettings,
           mode: "custom", // Force custom mode for browser manager
@@ -341,7 +328,6 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         skillRefresh: settings.skillRefresh,
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         turboMode: settings.turboMode,
-        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else if (botMode === "replicard") {
@@ -357,7 +343,6 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         skillRefresh: settings.skillRefresh,
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         turboMode: settings.turboMode,
-        memoryWatchdog: settings.memoryWatchdog,
         isReplicard: true,
         profileId: profileId,
       });
@@ -374,7 +359,6 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         skillRefresh: settings.skillRefresh,
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         turboMode: settings.turboMode,
-        memoryWatchdog: settings.memoryWatchdog,
         isReplicard: true,
         isXeno: true,
         zoneId: settings.zoneId,
@@ -396,7 +380,6 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         refreshOnStart: settings.refreshOnStart,
         turboMode: settings.turboMode,
-        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else if (botMode === "skip") {
@@ -406,7 +389,6 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         blockResources: settings.blockResources,
         onBattleEnd: createStatsCallback(profileId, instance),
         turboMode: settings.turboMode,
-        memoryWatchdog: settings.memoryWatchdog,
         profileId: profileId,
       });
     } else {
