@@ -73,7 +73,7 @@ class BattleHandler {
     // Defined outside try so it can be cleaned up in finally.
     const _onBattleStartForTap =
       this.preBattleAutoAttack !== "off"
-        ? () => { this._doPrebattleTap().catch(() => {}); }
+        ? () => { this._doPrebattleTap().catch(() => { }); }
         : null;
 
     try {
@@ -113,7 +113,7 @@ class BattleHandler {
             return el ? el.style.display !== "none" : false;
           })
           .catch(() => false);
-        if (loadingVisible) this._doPrebattleTap().catch(() => {});
+        if (loadingVisible) this._doPrebattleTap().catch(() => { });
       }
 
       // Root Cause Fix: We cannot reliably listen for start.json here because the page navigation
@@ -331,7 +331,7 @@ class BattleHandler {
           changedTouches: [{ x: coords.x, y: coords.y, id: 0 }],
         });
       } finally {
-        await client.detach().catch(() => {});
+        await client.detach().catch(() => { });
       }
 
       const confirmed = await this.controller.waitForElement(".btn-ready-auto", 500);
@@ -812,13 +812,13 @@ class BattleHandler {
       updateHonor(honor);
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 3000; // 3s after summon
+      this.options.faThresholdRef.value = 4000; // 5s after summon (+2s per user request)
       lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 3000; // 3s after ability
+      this.options.faThresholdRef.value = 4000; // 5s after ability (+2s per user request)
       lastFACheckTime = Date.now();
     };
 
