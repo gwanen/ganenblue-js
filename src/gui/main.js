@@ -122,6 +122,9 @@ function startStatsUpdater() {
           last.status !== currentStatus ||
           last.completed !== (stats.completedQuests || stats.raidsCompleted) ||
           last.battleCount !== stats.battleCount ||
+          last.redChests !== stats.redChests ||
+          last.blueChests !== stats.blueChests ||
+          last.goldBricks !== stats.goldBricks ||
           Date.now() - (last.time || 0) > 60000;
 
         if (hasChanged) {
@@ -134,6 +137,9 @@ function startStatsUpdater() {
             status: currentStatus,
             completed: stats.completedQuests || stats.raidsCompleted,
             battleCount: stats.battleCount,
+            redChests: stats.redChests,
+            blueChests: stats.blueChests,
+            goldBricks: stats.goldBricks,
             time: Date.now(),
           };
         }
@@ -507,6 +513,9 @@ ipcMain.handle("bot:reset-stats", (event, profileId) => {
       instance.bot.battleCount = 0;
     if (typeof instance.bot.totalTurns !== "undefined")
       instance.bot.totalTurns = 0;
+    if (typeof instance.bot.redChests !== "undefined") instance.bot.redChests = 0;
+    if (typeof instance.bot.blueChests !== "undefined") instance.bot.blueChests = 0;
+    if (typeof instance.bot.goldBricks !== "undefined") instance.bot.goldBricks = 0;
     instance.stats.startTime = null; // Reset timer
     instance.stats.lastRate = "0.0/h"; // Reset rate
 

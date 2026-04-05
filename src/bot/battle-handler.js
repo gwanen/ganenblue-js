@@ -73,7 +73,7 @@ class BattleHandler {
     // Defined outside try so it can be cleaned up in finally.
     const _onBattleStartForTap =
       this.preBattleAutoAttack !== "off"
-        ? () => { this._doPrebattleTap().catch(() => {}); }
+        ? () => { this._doPrebattleTap().catch(() => { }); }
         : null;
 
     try {
@@ -113,7 +113,7 @@ class BattleHandler {
             return el ? el.style.display !== "none" : false;
           })
           .catch(() => false);
-        if (loadingVisible) this._doPrebattleTap().catch(() => {});
+        if (loadingVisible) this._doPrebattleTap().catch(() => { });
       }
 
       // Root Cause Fix: We cannot reliably listen for start.json here because the page navigation
@@ -331,7 +331,7 @@ class BattleHandler {
           changedTouches: [{ x: coords.x, y: coords.y, id: 0 }],
         });
       } finally {
-        await client.detach().catch(() => {});
+        await client.detach().catch(() => { });
       }
 
       const confirmed = await this.controller.waitForElement(".btn-ready-auto", 500);
@@ -772,8 +772,10 @@ class BattleHandler {
       }
     };
 
-    const onBattleResult = () => {
+    let capturedRewards = null;
+    const onBattleResult = ({ rewards } = {}) => {
       networkFinished = true;
+      if (rewards != null) capturedRewards = rewards;
       if (!this.isResultConfirmed) {
         this.isResultConfirmed = true;
         this.logger.info("[Status] Signal: Combat Result (Rewards) detected");
@@ -810,13 +812,13 @@ class BattleHandler {
       updateHonor(honor);
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 3000; // 3s after summon
+      this.options.faThresholdRef.value = 4000; // 5s after summon (+2s per user request)
       lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 3000; // 3s after ability
+      this.options.faThresholdRef.value = 4000; // 5s after ability (+2s per user request)
       lastFACheckTime = Date.now();
     };
 
@@ -865,7 +867,7 @@ class BattleHandler {
 
     try {
       if (this.controller.network) {
-        this.controller.network.once("battle:result", onBattleResult);
+        this.controller.network.on("battle:result", onBattleResult);
         this.controller.network.on("battle:boss_died", onBossDied);
         this.controller.network.on("battle:party_wiped", onPartyWiped);
         this.controller.network.on("battle:start", onBattleStart);
@@ -929,11 +931,17 @@ class BattleHandler {
             if (finalHonor > previousHonors) previousHonors = finalHonor;
             if (finalHonor >= honorTarget) honorTargetReached = true;
           }
+          // Wait up to 2s for content/detail XHR to arrive after content/index
+          if (!capturedRewards) {
+            const deadline = Date.now() + 2000;
+            while (!capturedRewards && Date.now() < deadline) await sleep(50);
+          }
           return {
             duration: (Date.now() - startTime) / 1000,
             turns: isSemiAuto ? "N/A" : Math.max(turnCount + 1, 1),
             honors: previousHonors,
             honorReached: honorTargetReached,
+            rewards: capturedRewards,
           };
         }
 
