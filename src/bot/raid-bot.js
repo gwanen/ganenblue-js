@@ -516,9 +516,17 @@ class RaidBot {
       const raidSelector = this.selectors.raidEntry;
 
       if (this.targetUser) {
+        // Switch to the event/guild tab if the button is present and active
+        const switchBtn = await this.controller.page.$(".btn-switch-list.event.active");
+        if (switchBtn) {
+          this.logger.debug("[Raid] Switching to event tab for target scan...");
+          await switchBtn.click();
+          await sleep(300);
+        }
+
         this.logger.info(`[Raid] Scanning for target: "${this.targetUser}"...`);
 
-        const targetElementHandle = await this.controller.page.evaluateHandle(
+        const raidHandle = await this.controller.page.evaluateHandle(
           (user, selector) => {
             const raids = document.querySelectorAll(selector);
             const targetName = user.toLowerCase();
@@ -537,12 +545,23 @@ class RaidBot {
           raidSelector,
         );
 
-        if (targetElementHandle && targetElementHandle.asElement()) {
+        const raidElement = raidHandle.asElement();
+        const targetClicked = !!raidElement;
+
+        if (targetClicked) {
+          const box = await raidElement.boundingBox();
+          await raidElement.dispose();
+          if (box) {
+            await this.controller.page.mouse.click(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            );
+          }
           this.logger.info(
             `[Raid] Found target user: "${this.targetUser}". Joining...`,
           );
           try {
-            await targetElementHandle.click();
+            // click already performed inside evaluate — no handle to detach
 
             try {
               const raceResult = await Promise.race([
@@ -610,8 +629,9 @@ class RaidBot {
                     "[Raid] Pending battles detected after join. Initializing cleanup",
                   );
                   await this.clearPendingBattles();
+                  this.raidErrorType = null;
                   await this.controller.gotoSPA(this.raidBackupUrl);
-                  await sleep(10);
+                  await sleep(200);
                   continue;
                 }
               }

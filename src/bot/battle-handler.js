@@ -812,13 +812,13 @@ class BattleHandler {
       updateHonor(honor);
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 4000; // 5s after summon (+2s per user request)
+      this.options.faThresholdRef.value = 8000; // 5s after summon (+2s per user request)
       lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 4000; // 5s after ability (+2s per user request)
+      this.options.faThresholdRef.value = 8000; // 5s after ability (+2s per user request)
       lastFACheckTime = Date.now();
     };
 
@@ -842,8 +842,9 @@ class BattleHandler {
         networkTurnReady = true; // Signal Semi Auto: new turn, attack button should be ready
         this.options.lastActionTimeRef.value = Date.now();
         // FA: turn just started — attack + skills haven't resolved yet (can take 10-15s).
-        // SA: button is ready immediately — keep 5s so the watchdog re-arms fast.
-        this.options.faThresholdRef.value = isSemiAuto ? 5000 : 15000;
+        // SA: button is ready immediately — use configured watchdog threshold (default 10s).
+        const saThreshold = config.get("timeouts.semi_auto_watchdog", 10000);
+        this.options.faThresholdRef.value = isSemiAuto ? saThreshold : 15000;
         lastFACheckTime = Date.now();
         lastAttackEventTime = 0;
         attackUsed = false; // Clear stale attack flag on turn change
@@ -1147,21 +1148,27 @@ class BattleHandler {
             continue;
           }
 
-          // 3. FA Persistence Check — refresh after 25s of no FA activity
+          // 3. Persistence Check — refresh after no activity for a long period
+          const persistenceThreshold = mode === "semi_auto" ? 15000 : 25000; // Keeping FA at 25s for persistence, but watchdog will hit earlier
           if (
-            mode === "full_auto" &&
+            (mode === "full_auto" || mode === "semi_auto") &&
             !this.stopped &&
-            Date.now() - lastFACheckTime > 25000
+            Date.now() - lastFACheckTime > persistenceThreshold
           ) {
-            this.logger.info("[Full Auto] Inactive 25s. Performing Hard Reload");
+            this.logger.info(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive ${persistenceThreshold / 1000}s. Performing Hard Reload`);
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
-            this.options.faThresholdRef.value = 5000;
+            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : 15000;
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
-              await this.handleFullAuto();
+              if (mode === "semi_auto") {
+                this.logger.info("[Battle] Re-engaging Semi Auto");
+                networkTurnReady = true;
+              } else {
+                await this.handleFullAuto();
+              }
             } catch (e) {
               this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }
@@ -1169,19 +1176,24 @@ class BattleHandler {
             continue;
           }
 
-          // 4. FA Inactivity Watchdog (Dynamic threshold)
+          // 4. Inactivity Watchdog (Dynamic threshold)
           if (
-            mode === "full_auto" &&
+            (mode === "full_auto" || mode === "semi_auto") &&
             Date.now() - lastActionTime > faInactivityThreshold
           ) {
-            this.logger.warn("[Full Auto] Inactive. Performing Hard Reload");
+            this.logger.warn(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive. Performing Hard Reload`);
             this.options.lastActionTimeRef.value = Date.now();
-            this.options.faThresholdRef.value = 5000; // Reset to 5s after recovery refresh
+            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : 15000; // Reset after recovery refresh
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
             try {
-              await this.handleFullAuto();
+              if (mode === "semi_auto") {
+                this.logger.info("[Battle] Re-engaging Semi Auto");
+                networkTurnReady = true;
+              } else {
+                await this.handleFullAuto();
+              }
             } catch (e) {
               this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }

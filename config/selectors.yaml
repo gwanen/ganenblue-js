@@ -28,7 +28,7 @@ battle:
 raid:
   raidBackupUrl: 'https://game.granbluefantasy.jp/#quest/assist'
   raidList: '.prt-raid-list'
-  raidEntry: '.btn-multi-raid.lis-raid.search:not([style*="none"])'
+  raidEntry: '.btn-multi-raid.lis-raid:not([style*="none"])'
   joinButton: '.btn-raid-join'
   backupRequestButton: '.btn-backup-request'
   errorPopup: '.prt-popup-footer .btn-usual-ok'
