@@ -572,9 +572,6 @@ class RaidBot {
                   .waitForElement(".btn-usual-ok", 3000)
                   .then((res) => (res ? "ok_btn" : null)),
                 this.controller
-                  .waitForElement("#pop-error", 1000)
-                  .then((res) => (res ? "error" : null)),
-                this.controller
                   .waitForElement(".cnt-raid", 3000)
                   .then((res) => (res ? "battle" : null)),
                 this.waitForRaidError(3000).then((res) =>
@@ -646,11 +643,23 @@ class RaidBot {
           }
         } else {
           this.logger.info(
-            `[Raid] Target "${this.targetUser}" not found. Re-checking...`,
+            `[Raid] Target "${this.targetUser}" not found. Refreshing list...`,
           );
-          await sleep(800);
           await this.refreshRaidSearch();
-          await sleep(randomDelay(800, 1200));
+          // Wait up to 2s for the target to appear in the DOM before looping
+          await this.controller.page.waitForFunction(
+            (user, selector) => {
+              const raids = document.querySelectorAll(selector);
+              const targetName = user.toLowerCase();
+              return Array.from(raids).some((raid) => {
+                const nameEl = raid.querySelector(".txt-request-name");
+                return nameEl && nameEl.textContent.trim().toLowerCase().includes(targetName);
+              });
+            },
+            { timeout: 2000, polling: 200 },
+            this.targetUser,
+            raidSelector,
+          ).catch(() => null); // timeout = not in list yet, continue loop
         }
       } else if (await this.controller.elementExists(raidSelector, 2000)) {
         this.logger.info("[Raid] Raid detected. Joining...");
@@ -1276,6 +1285,20 @@ class RaidBot {
           "[Raid] On assist page. Clicking UI refresh button...",
         );
         await this.controller.clickSafe(refreshBtn);
+        return true;
+      }
+      const switchListBtn =
+        '.btn-switch-list.event.active[data-list-type="event"]';
+      const hasSwitchListBtn = await this.controller.elementExists(
+        switchListBtn,
+        500,
+        true,
+      );
+      if (hasSwitchListBtn) {
+        this.logger.debug(
+          "[Raid] Refresh button not found. Clicking switch-list button...",
+        );
+        await this.controller.clickSafe(switchListBtn);
         return true;
       }
     }
