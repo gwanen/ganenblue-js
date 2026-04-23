@@ -5,69 +5,76 @@ import logger, { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
 
+/**
+ * Orchestrates automated quest completion, including navigation, supporter selection,
+ * and replicard-specific battle initiation.
+ */
 class QuestBot {
-  constructor(page, options = {}) {
-    // Assign profileId and scoped logger FIRST so they're available to PageController
-    this.profileId = options.profileId || config.get("profile_id") || "p1";
-    this.logger = createScopedLogger(this.profileId);
+    /**
+     * @param {import('puppeteer').Page} page - The current browser page.
+     * @param {object} [options={}] - Bot configuration parameters.
+     */
+    constructor(page, options = {}) {
+        this.profileId = options.profileId || config.get("profile_id") || "p1";
+        this.logger = createScopedLogger(this.profileId);
+        this.controller = new PageController(page, this.logger);
+        this.questUrl = options.questUrl || config.get("quest.url");
+        this.maxQuests = options.maxQuests || 0;
+        this.battleMode = options.battleMode || "full_auto";
+        this.onBattleEnd = options.onBattleEnd || null;
+        this.selectors = config.selectors.quest;
 
-    this.controller = new PageController(page, this.logger);
-    this.questUrl = options.questUrl || config.get("quest.url");
-    this.maxQuests = options.maxQuests || 0; // 0 = unlimited
-    this.battleMode = options.battleMode || "full_auto";
-    this.onBattleEnd = options.onBattleEnd || null;
-    this.selectors = config.selectors.quest;
-    this.battle = new BattleHandler(page, {
-      fastRefresh: options.fastRefresh || false,
-      summonRefresh:
-        options.summonRefresh !== undefined ? options.summonRefresh : true,
-      skillRefresh:
-        options.skillRefresh !== undefined ? options.skillRefresh : false,
-      preBattleAutoAttack: options.preBattleAutoAttack || "off",
-      logger: this.logger,
-      controller: this.controller,
-    });
+        this.battle = new BattleHandler(page, {
+            fastRefresh: options.fastRefresh || false,
+            noRefresh: options.noRefresh || false,
+            summonRefresh: options.summonRefresh !== undefined ? options.summonRefresh : true,
+            skillRefresh: options.skillRefresh !== undefined ? options.skillRefresh : false,
+            preBattleAutoAttack: options.preBattleAutoAttack || "off",
+            logger: this.logger,
+            controller: this.controller,
+        });
 
-    // Enable performance optimizations
-    if (options.blockResources) {
-      this.logger.info("[System] Image blocking enabled");
-      this.controller
-        .enableResourceBlocking()
-        .catch((e) =>
-          this.logger.warn("[System] Failed to enable image blocking", e),
-        );
-    } else {
-      this.logger.info("[System] Image blocking disabled");
+        // Initialize session state
+        this.questsCompleted = 0;
+        this.isRunning = false;
+        this.isPaused = false;
+        this.battleTimes = [];
+        this.battleTurns = [];
+        this.totalTurns = 0;
+        this.battleCount = 0;
+        this.consecutiveFailures = 0;
+
+        // --- Performance Optimizations ---
+        if (options.blockResources) {
+            this.logger.info("[System] Image blocking enabled");
+            this.controller.enableResourceBlocking().catch((e) =>
+                this.logger.warn("[System] Failed to enable image blocking", e)
+            );
+        }
+
+        if (options.turboMode) {
+            this.controller.enableTurboCSS().catch((e) =>
+                this.logger.warn("[System] Failed to enable turbo CSS", e)
+            );
+        }
+
+        // --- Network Event Binding ---
+        this.raidErrorType = null;
+        this.networkSupporterScreen = false;
+        this.onRaidError = (info) => {
+            this.logger.warn(`[Network] Join error detected: ${info.type}`);
+            this.raidErrorType = info.type;
+        };
+        this.onSupporterScreen = () => {
+            this.logger.debug("[Network] Supporter screen detected (BGM request)");
+            this.networkSupporterScreen = true;
+        };
     }
 
-    if (options.turboMode) {
-      this.controller
-        .enableTurboCSS()
-        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
-    }
-
-    this.questsCompleted = 0;
-    this.isRunning = false;
-    this.isPaused = false;
-    this.battleTimes = []; // Array to store battle durations
-    this.battleTurns = []; // Array to store turn counts
-    this.totalTurns = 0;
-    this.battleCount = 0;
-    this.consecutiveFailures = 0;
-
-    this.raidErrorType = null;
-    this.networkSupporterScreen = false; // Flag for supporter screen detection via network
-    this.onRaidError = (info) => {
-      this.logger.warn(`[Network] Join error detected: ${info.type}`);
-      this.raidErrorType = info.type;
-    };
-    this.onSupporterScreen = () => {
-      this.logger.debug("[Network] Supporter screen detected (BGM request)");
-      this.networkSupporterScreen = true;
-    };
-  }
-
-  async start() {
+    /**
+     * Starts the bot's main loop.
+     */
+    async start() {
     this.isRunning = true;
     this.questsCompleted = 0;
     this.battleTimes = []; // Reset battle times on start
@@ -160,7 +167,11 @@ class QuestBot {
     }
   }
 
-  async runSingleQuest() {
+    /**
+     * Executes a single quest cycle.
+     * @returns {Promise<boolean>} True if the quest was completed successfully.
+     */
+    async runSingleQuest() {
     let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
     const currentUrl = this.controller.page.url();
@@ -516,7 +527,11 @@ class QuestBot {
     return "failed";
   }
 
-  async validatePostClick() {
+    /**
+     * Validates combat UI stability after clicking the start button.
+     * @returns {Promise<string>} Termination status ("success", "ended", "pending", "captcha").
+     */
+    async validatePostClick() {
     // Frame stability check after confirmation click (reduced from 1500ms for speed)
     await this.controller.waitForFrameStable(50);
 
@@ -733,14 +748,11 @@ class QuestBot {
     this.logger.info(`[System] Cleared ${clearedCount} pending battles`);
   }
 
-  /**
-   * Wait for battle:result network event before navigating away.
-   * In quest mode, the result.json loads asynchronously after page reload
-   * (triggered by boss death). If we navigate before it fires, GBF's SPA
-   * router intercepts the late response and redirects back to #result,
-   * causing a navigation loop.
-   */
-  async waitForBattleResult() {
+    /**
+     * Waits for the battle:result network event before navigating away.
+     * Prevents navigation loops caused by late SPA redirects.
+     */
+    async waitForBattleResult() {
     if (!this.controller.network) return;
 
     // Optimization: If BattleHandler already confirmed the result network event, skip waiting.

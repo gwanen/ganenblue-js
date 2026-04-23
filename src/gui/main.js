@@ -315,17 +315,18 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
 
     const botMode = settings.botMode || "quest";
 
-    if (botMode === "quest") {
-      // Quest Mode
+    const isFreeQuest = botMode === "free_quest";
+    if (botMode === "quest" || isFreeQuest) {
       instance.bot = new QuestBot(instance.browser.page, {
         questUrl: settings.questUrl || config.get("bot.quest_url"),
         maxQuests: parseInt(settings.maxRuns) || config.get("bot.max_quests"),
         battleMode: settings.battleMode || config.get("bot.battle_mode"),
         onBattleEnd: createStatsCallback(profileId, instance),
         blockResources: settings.blockResources,
-        fastRefresh: settings.fastRefresh,
-        summonRefresh: settings.summonRefresh,
-        skillRefresh: settings.skillRefresh,
+        fastRefresh: isFreeQuest ? false : settings.fastRefresh,
+        noRefresh: isFreeQuest,
+        summonRefresh: isFreeQuest ? false : settings.summonRefresh,
+        skillRefresh: isFreeQuest ? false : settings.skillRefresh,
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         turboMode: settings.turboMode,
         profileId: profileId,

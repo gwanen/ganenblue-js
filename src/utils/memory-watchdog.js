@@ -1,16 +1,22 @@
 import logger from './logger.js';
 
 /**
- * MemoryWatchdog tracks the process's memory usage and heap statistics.
- * Logs RSS and Heap usage every X minutes to help identify long-term leaks.
+ * Tracks the process's memory usage and heap statistics.
+ * Logs RSS and Heap usage periodically to help identify long-term memory leaks.
  */
 class MemoryWatchdog {
+    /**
+     * @param {number} [intervalMinutes=15] - Frequency of memory checks in minutes.
+     */
     constructor(intervalMinutes = 15) {
         this.interval = intervalMinutes * 60 * 1000;
         this.timer = null;
         this.records = [];
     }
 
+    /**
+     * Starts the memory watchdog timer.
+     */
     start() {
         if (this.timer) return;
         
@@ -19,6 +25,9 @@ class MemoryWatchdog {
         this.logStats(); // Initial log
     }
 
+    /**
+     * Stops the memory watchdog timer.
+     */
     stop() {
         if (this.timer) {
             clearInterval(this.timer);
@@ -27,6 +36,11 @@ class MemoryWatchdog {
         }
     }
 
+    /**
+     * Captures and logs current memory statistics.
+     * Triggers a warning if heap usage exceeds a critical threshold.
+     * @private
+     */
     logStats() {
         const memoryUsage = process.memoryUsage();
         const rss = (memoryUsage.rss / 1024 / 1024).toFixed(2);
@@ -47,12 +61,15 @@ class MemoryWatchdog {
 
         logger.info(`[Memory] Usage: RSS ${rss}MB | Heap ${heapUsed}/${heapTotal}MB | Ext ${external}MB`);
         
-        // Check for aggressive growth
         if (parseFloat(heapUsed) > 500) {
             logger.warn(`[Memory] High heap usage detected: ${heapUsed}MB`);
         }
     }
 
+    /**
+     * Returns the accumulated history of memory snapshots.
+     * @returns {Array<object>} List of memory statistic objects.
+     */
     getHistory() {
         return this.records;
     }

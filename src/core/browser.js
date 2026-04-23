@@ -5,29 +5,39 @@ import { existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import os from 'os';
-import logger, { createScopedLogger } from '../utils/logger.js';
-
 import { fileURLToPath } from 'url';
+import logger, { createScopedLogger } from '../utils/logger.js';
 import LoginHandler from './login-handler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Apply stealth plugin
+// Apply puppeteer-extra stealth plugin for bot detection evasion
 puppeteer.use(StealthPlugin());
 
+/**
+ * Manages browser lifecycle, profile persistence, and stealth configuration.
+ * Automatically detects installed browsers and prepares optimized launch arguments.
+ */
 class BrowserManager {
+    /**
+     * @param {object} config - Configuration object.
+     * @param {string} [profileId='profile1'] - Unique identifier for the profile.
+     */
     constructor(config, profileId = 'profile1') {
         this.config = config || {};
         this.profileId = profileId;
-        this.logger = createScopedLogger(profileId); // Scoped logger for all browser-level logs
+        this.logger = createScopedLogger(profileId);
         this.browser = null;
         this.page = null;
         this.userDataDir = null;
     }
 
+    // --- Executable Detection ---
+
     /**
-     * Detect Edge browser executable path on Windows
+     * Searches for Microsoft Edge executable paths on Windows.
+     * @returns {string|null} Path to msedge.exe or null if not found.
      */
     getEdgePath() {
         const possiblePaths = [
@@ -37,16 +47,14 @@ class BrowserManager {
         ];
 
         for (const path of possiblePaths) {
-            if (existsSync(path)) {
-                return path;
-            }
+            if (existsSync(path)) return path;
         }
-
         return null;
     }
 
     /**
-     * Detect Brave browser executable path on Windows
+     * Searches for Brave Browser executable paths on Windows.
+     * @returns {string|null} Path to brave.exe or null if not found.
      */
     getBravePath() {
         const possiblePaths = [
@@ -56,16 +64,14 @@ class BrowserManager {
         ];
 
         for (const path of possiblePaths) {
-            if (existsSync(path)) {
-                return path;
-            }
+            if (existsSync(path)) return path;
         }
-
         return null;
     }
 
     /**
-     * Detect Chrome browser executable path on Windows
+     * Searches for Google Chrome executable paths on Windows.
+     * @returns {string|null} Path to chrome.exe or null if not found.
      */
     getChromePath() {
         const possiblePaths = [
@@ -75,16 +81,14 @@ class BrowserManager {
         ];
 
         for (const path of possiblePaths) {
-            if (existsSync(path)) {
-                return path;
-            }
+            if (existsSync(path)) return path;
         }
-
         return null;
     }
 
     /**
-     * Detect Firefox browser executable path on Windows
+     * Searches for Mozilla Firefox executable paths on Windows.
+     * @returns {string|null} Path to firefox.exe or null if not found.
      */
     getFirefoxPath() {
         const possiblePaths = [
@@ -94,24 +98,26 @@ class BrowserManager {
         ];
 
         for (const path of possiblePaths) {
-            if (existsSync(path)) {
-                return path;
-            }
+            if (existsSync(path)) return path;
         }
-
         return null;
     }
 
+    // --- Lifecycle Management ---
+
+    /**
+     * Launches the browser with optimized arguments and stealth configuration.
+     * @returns {Promise<import('puppeteer').Page>} The primary browser page.
+     */
     async launch() {
         const userAgent = new UserAgent({ deviceCategory: 'desktop' });
         const browserType = this.config.browser_type || 'chromium';
         const emulation = this.config.emulation || {};
         const saveProfile = this.config.save_profile || false;
 
-        // Default window size
         let windowWidth = 600;
         let windowHeight = 850;
-        // Configure Window Size
+
         if (emulation.mode === 'custom') {
             windowWidth = emulation.width || 600;
             windowHeight = emulation.height || 850;
@@ -120,72 +126,65 @@ class BrowserManager {
             this.logger.info('[Core] Device mode: Desktop (Default)');
         }
 
-        // Create profile directory
+        // Initialize profile directory
         const tempDir = os.tmpdir();
         if (saveProfile) {
-            // Use persistent profile directory
             this.userDataDir = path.join(tempDir, 'ganenblue-profiles', 'persistent', this.profileId);
             this.logger.info(`[Core] Using persistent profile: ${this.userDataDir}`);
         } else {
-            // Create unique temp directory for this session to avoid file locking collisions
+            // Unique ID to prevent file locking collisions between concurrent profiles
             const uniqueId = `${this.profileId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             this.userDataDir = path.join(tempDir, 'ganenblue-profiles', uniqueId);
             this.logger.info(`[Core] Launching with temporary profile: ${this.userDataDir}`);
         }
 
-
-        // Prepare launch options
         const launchArgs = [
             '--disable-blink-features=AutomationControlled',
             '--disable-dev-shm-usage',
             `--window-size=${windowWidth},${windowHeight}`,
 
-            // Lighter: Memory and process optimization flags
+            // Component and extension optimizations
             '--disable-extensions',
             '--disable-component-extensions-with-background-pages',
             '--disable-default-apps',
             '--no-first-run',
             '--disable-sync',
-            '--disable-component-update', // Save CPU: stop background component updates
-            '--disable-client-side-phishing-detection', // Save CPU: skip safety checks
+            '--disable-component-update',
+            '--disable-client-side-phishing-detection',
 
-            // Disable password and security popups
+            // Security and popup suppression
             '--password-store=basic',
             '--disable-features=PasswordImport,PasswordSave,AutofillServerCommunication,Translate,OptimizationGuideModelDownloading,MediaRouter,PasswordManager,PasswordManagerOnboarding,PasswordLeakDetection,CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenFrame',
             '--no-default-browser-check',
             '--disable-infobars',
             '--disable-notifications',
-            '--disable-save-password-bubble', // Disable password manager popup
-            '--mute-audio', // Save CPU by silencing browser
+            '--disable-save-password-bubble',
+            '--mute-audio',
 
-            // Performance: Enable hardware acceleration and shared memory
+            // Graphics and hardware acceleration
             '--ignore-gpu-blocklist',
             '--enable-gpu-rasterization',
             '--enable-zero-copy',
             '--enable-parallel-downloading',
 
-            // Lighter: Fix for Virtual Desktop sluggishness (Prevent Background Throttling)
+            // Background performance fixes
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
             '--disable-background-networking',
 
-            // Safer: IPC and process optimizations
+            // Process and memory management
             '--disable-ipc-flooding-protection',
-            '--process-per-site', // Consolidate game processes
-
-            // Modern V8 and Graphics Optimizations
-            '--js-flags="--max-old-space-size=512 --expose-gc"', // Limit JS heap memory and expose manual GC
+            '--process-per-site',
+            '--js-flags="--max-old-space-size=512 --expose-gc"',
             '--disable-new-id-entities-details',
-            '--disable-checker-imaging', // Skip unnecessary image checks to save CPU
+            '--disable-checker-imaging',
         ];
 
-        // Apply Window Position (Auto-Tiling)
         if (emulation.x !== undefined && emulation.y !== undefined) {
             launchArgs.push(`--window-position=${emulation.x},${emulation.y}`);
         }
 
-        // Conditional Sandbox flags (Default: sandbox enabled to avoid Edge warnings)
         if (this.config.disable_sandbox) {
             launchArgs.push('--no-sandbox');
             launchArgs.push('--disable-setuid-sandbox');
@@ -194,23 +193,19 @@ class BrowserManager {
         const launchOptions = {
             headless: this.config.headless ? 'new' : false,
             args: launchArgs,
-            defaultViewport: null, // Dynamic viewport that matches window size
+            defaultViewport: null,
             ignoreDefaultArgs: ['--enable-automation'],
-            userDataDir: this.userDataDir // Explicitly set unique temp dir
+            userDataDir: this.userDataDir
         };
 
-        // Custom Browser Executable (e.g., portable Chromium or Firefox)
+        // Determine executable path based on preference or auto-detection
         if (this.config.executable_path) {
             launchOptions.executablePath = this.config.executable_path;
             this.logger.info(`[Core] Browser executable: ${this.config.executable_path}`);
-
-            // Puppeteer needs to be told to explicitly drive Firefox instead of CDXP/Chromium
             if (this.config.executable_path.toLowerCase().includes('firefox')) {
-                launchOptions.browser = 'firefox'; // or 'product: firefox' in older puppeteer versions
+                launchOptions.browser = 'firefox';
             }
-        }
-        // Use Edge if specified
-        else if (browserType === 'edge') {
+        } else if (browserType === 'edge') {
             const edgePath = this.getEdgePath();
             if (edgePath) {
                 launchOptions.executablePath = edgePath;
@@ -218,9 +213,7 @@ class BrowserManager {
             } else {
                 this.logger.warn('[Core] Browser detection: Edge not found (Falling back to Chromium)');
             }
-        }
-        // Use Brave if specified
-        else if (browserType === 'brave') {
+        } else if (browserType === 'brave') {
             const bravePath = this.getBravePath();
             if (bravePath) {
                 launchOptions.executablePath = bravePath;
@@ -228,9 +221,7 @@ class BrowserManager {
             } else {
                 this.logger.warn('[Core] Browser detection: Brave not found (Falling back to Chromium)');
             }
-        }
-        // Use Chrome if specified
-        else if (browserType === 'chrome') {
+        } else if (browserType === 'chrome') {
             const chromePath = this.getChromePath();
             if (chromePath) {
                 launchOptions.executablePath = chromePath;
@@ -238,13 +229,11 @@ class BrowserManager {
             } else {
                 this.logger.warn('[Core] Browser detection: Chrome not found (Falling back to Chromium)');
             }
-        }
-        // Use Firefox if specified
-        else if (browserType === 'firefox') {
+        } else if (browserType === 'firefox') {
             const firefoxPath = this.getFirefoxPath();
             if (firefoxPath) {
                 launchOptions.executablePath = firefoxPath;
-                launchOptions.browser = 'firefox'; // Explicitly tell puppeteer
+                launchOptions.browser = 'firefox';
                 this.logger.info('[Core] Browser: Mozilla Firefox');
             } else {
                 this.logger.warn('[Core] Browser detection: Firefox not found (Falling back to Chromium)');
@@ -253,17 +242,20 @@ class BrowserManager {
 
         this.browser = await puppeteer.launch(launchOptions);
 
-        // Reuse the initial blank page if available, otherwise create one
         const pages = await this.browser.pages();
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
-        // Apply generated User Agent (Fix: Was generated but never applied)
         await this.page.setUserAgent(userAgent.toString());
         this.logger.info(`[Core] User Agent applied: ${userAgent.toString()}`);
 
         return this.page;
     }
 
+    /**
+     * Sets the browser viewport dimensions.
+     * @param {number} width - Target width.
+     * @param {number} height - Target height.
+     */
     async setViewport(width, height) {
         if (this.page) {
             await this.page.setViewport({ width, height });
@@ -271,12 +263,11 @@ class BrowserManager {
     }
 
     /**
-     * Navigate to GBF and perform auto-login
+     * Navigates to the specified URL and initiates auto-login.
+     * @param {string} url - Target game URL.
      */
     async navigateAndLogin(url) {
-        if (!this.page) {
-            throw new Error('Browser not launched. Call launch() first.');
-        }
+        if (!this.page) throw new Error('Browser not launched. Call launch() first.');
 
         try {
             await this.page.goto(url, {
@@ -284,11 +275,11 @@ class BrowserManager {
                 timeout: 60000
             });
         } catch (error) {
-            this.logger.error(`[Error] Core: Navigation failure (Fault: ${error.message})`);
+            this.logger.error(`[Error] Core: Navigation failure (${error.message})`);
             return false;
         }
 
-        // Load credentials and perform auto-login
+        // Perform login if credentials exist for the current profile
         try {
             const credentials = this.loadCredentials();
             if (credentials && credentials.mobage) {
@@ -296,74 +287,66 @@ class BrowserManager {
                 await loginHandler.performLogin(credentials.mobage);
             }
         } catch (error) {
-            this.logger.warn(`[Warn] Core: Auto-login bypass (Reason: ${error.message})`);
+            this.logger.warn(`[Warn] Core: Auto-login bypassed (${error.message})`);
         }
     }
 
     /**
-     * Load credentials from config file
+     * Loads game credentials from the local YAML storage.
+     * @returns {object|null} Credential object or null if not found.
      */
     loadCredentials() {
         const credPath = path.join(__dirname, '../../config/credentials.yaml');
-
-        if (!existsSync(credPath)) {
-            return null;
-        }
+        if (!existsSync(credPath)) return null;
 
         try {
             const fileContents = readFileSync(credPath, 'utf8');
             const data = yaml.load(fileContents);
 
-            // Check for profile-based structure first
             if (data && data.profiles) {
                 if (data.profiles[this.profileId]) {
                     return { mobage: data.profiles[this.profileId] };
                 }
-                // Legacy mapping
+                // Legacy profile mapping
                 const legacyMap = { 'p1': 'profile1', 'p2': 'profile2' };
                 const legacyKey = legacyMap[this.profileId];
                 if (legacyKey && data.profiles[legacyKey]) {
                     return { mobage: data.profiles[legacyKey] };
                 }
             }
-
-            // Fallback to legacy structure
             return data;
         } catch (error) {
-            this.logger.error(`[Error] Storage: Credential load failure (Fault: ${error.message})`);
+            this.logger.error(`[Error] Storage: Credential load failure (${error.message})`);
             return null;
         }
     }
 
+    /**
+     * Closes the browser and purges temporary profile data unless persistence is enabled.
+     */
     async close() {
         if (this.browser) {
             await this.browser.close();
             this.browser = null;
         }
 
-        // Skip cleanup if save_profile is enabled
         if (this.config.save_profile) {
             this.logger.info(`[Core] Keeping profile (save_profile enabled): ${this.userDataDir}`);
             return;
         }
 
-        // Fix #3: Synchronous cleanup — avoids setTimeout firing after process exits on Windows
         if (this.userDataDir && existsSync(this.userDataDir)) {
             try {
                 rmSync(this.userDataDir, { recursive: true, force: true });
                 this.logger.info(`[Core] Profile directory purged: ${this.userDataDir}`);
             } catch (e) {
-                this.logger.warn(`[Warn] Core: Profile purge failure (Fault: ${e.message})`);
+                this.logger.warn(`[Warn] Core: Profile purge failure (${e.message})`);
             }
         }
     }
 
     /**
-     * Delete orphaned profiles older than 24 hours (or configurable)
-     */
-    /**
-     * Delete orphaned profiles older than 24 hours
-     * Fix #4: Was a no-op stub. Now implemented.
+     * Scans and deletes orphaned profile directories older than 24 hours.
      */
     static cleanupOldProfiles() {
         try {
@@ -373,7 +356,7 @@ class BrowserManager {
             if (!existsSync(profilesDir)) return;
 
             const entries = readdirSync(profilesDir, { withFileTypes: true });
-            const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+            const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);
 
             for (const entry of entries) {
                 if (!entry.isDirectory()) continue;
@@ -395,3 +378,4 @@ class BrowserManager {
 }
 
 export default BrowserManager;
+

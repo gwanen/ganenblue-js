@@ -4,11 +4,18 @@ import logger, { createScopedLogger } from '../utils/logger.js';
 import config from '../utils/config.js';
 import notifier from '../utils/notifier.js';
 
+/**
+ * Automates the post-battle "Skip" sequence for Nightmare/Quest repetitions.
+ * Orchestrates loot claiming, character rank-up dismissal, and retry loops.
+ */
 class SkipBot {
+    /**
+     * @param {import('puppeteer').Page} page - The current browser page.
+     * @param {object} [options={}] - Bot configuration parameters.
+     */
     constructor(page, options = {}) {
         this.profileId = options.profileId || config.get('profile_id') || 'p1';
         this.logger = createScopedLogger(this.profileId);
-
         this.controller = new PageController(page, this.logger);
         this.questUrl = options.questUrl || '';
         this.maxRuns = options.maxRuns || 0;
@@ -20,17 +27,24 @@ class SkipBot {
         this.startTime = null;
         this.lastRunTime = 0;
 
-        // Enable performance optimizations if requested
+        // --- Performance Optimizations ---
         if (options.blockResources) {
             this.logger.info('[System] Image blocking enabled');
-            this.controller.enableResourceBlocking().catch(e => this.logger.warn('[System] Failed to enable image blocking', e));
+            this.controller.enableResourceBlocking().catch(e =>
+                this.logger.warn('[System] Failed to enable image blocking', e)
+            );
         }
 
         if (options.turboMode) {
-            this.controller.enableTurboCSS().catch(e => this.logger.warn('[System] Failed to enable turbo CSS', e));
+            this.controller.enableTurboCSS().catch(e =>
+                this.logger.warn('[System] Failed to enable turbo CSS', e)
+            );
         }
     }
 
+    /**
+     * Starts the bot's main loop.
+     */
     async start() {
         this.isRunning = true;
         this.runsCompleted = 0;
@@ -84,12 +98,15 @@ class SkipBot {
         }
     }
 
+    /**
+     * Executes a single skip cycle (Play Again -> Claim Loot -> Dismiss Popups).
+     * @returns {Promise<boolean>} True if the skip cycle completed successfully.
+     */
     async runSingleSkip() {
         this.logger.info(`[Skip] Initiating skip cycle (${this.runsCompleted + 1})`);
-
         const runStartTime = Date.now();
 
-        // 1. Play Again
+        // --- 1. Play Again ---
         const playAgainSelector = '.btn-retry.cnt-quest';
         this.logger.debug('[Skip] Waiting for Play Again button');
         if (await this.controller.elementExists(playAgainSelector, 30000)) {
@@ -100,7 +117,7 @@ class SkipBot {
             return false;
         }
 
-        // 2. Claim Loot
+        // --- 2. Claim Loot ---
         const claimLootSelector = '.btn-usual-next';
         this.logger.debug('[Skip] Waiting for Claim Loot button');
         if (await this.controller.elementExists(claimLootSelector, 10000)) {
@@ -111,7 +128,7 @@ class SkipBot {
             return false;
         }
 
-        // 3. OK (First popup)
+        // --- 3. OK (First popup) ---
         const firstOkSelector = '.prt-popup-footer .btn-usual-ok';
         this.logger.debug('[Skip] Waiting for first OK button');
         if (await this.controller.elementExists(firstOkSelector, 10000, true)) {
@@ -122,27 +139,26 @@ class SkipBot {
             return false;
         }
 
-        // 3.5 Character Rank Up Animation
+        // --- 3.5 Character Rank Up Animation ---
         const rankUpSelector = '.onm-anim-parts';
         this.logger.debug('[Skip] Checking for character rank up animation');
         let rankUpCount = 0;
-        const maxRankUps = 6; // Max party size safety limit
+        const maxRankUps = 6;
 
         while (rankUpCount < maxRankUps) {
-            // First one might take a little bit to appear, subsequent ones are faster
             const checkTimeout = rankUpCount === 0 ? 2000 : 800;
             if (await this.controller.elementExists(rankUpSelector, checkTimeout, true)) {
                 this.logger.info(`[Skip] Character rank up detected (#${rankUpCount + 1}). Dismissing...`);
-                await sleep(randomDelay(500, 1000)); // allow animation to play out briefly
+                await sleep(randomDelay(500, 1000));
                 await this.controller.clickSafe(rankUpSelector).catch(() => { });
-                await sleep(randomDelay(300, 600)); // wait briefly to see if another appears
+                await sleep(randomDelay(300, 600));
                 rankUpCount++;
             } else {
-                break; // No more rank up animations visible
+                break;
             }
         }
 
-        // 4. OK (Event Items popup)
+        // --- 4. OK (Event Items popup) ---
         const eventOkSelector = '.pop-usual.pop-event-item.pop-show .btn-usual-ok';
         this.logger.debug('[Skip] Waiting for event OK button');
         if (await this.controller.elementExists(eventOkSelector, 10000, true)) {
@@ -153,7 +169,6 @@ class SkipBot {
             return false;
         }
 
-        // Calculate and log duration
         const duration = Date.now() - runStartTime;
         this.lastRunTime = duration;
 
@@ -176,6 +191,10 @@ class SkipBot {
         this.logger.info('[System] Shutdown initiated');
     }
 
+    /**
+     * Compiles session statistics for reporting.
+     * @returns {object} Summary of runs and rate.
+     */
     getStats() {
         let rate = '0.0/h';
         const now = Date.now();
@@ -190,7 +209,7 @@ class SkipBot {
             isRunning: this.isRunning,
             isPaused: this.isPaused,
             startTime: this.startTime,
-            avgBattleTime: this.lastRunTime, // Approximate as last run time for UI
+            avgBattleTime: this.lastRunTime,
             avgTurns: 0,
             battleCount: this.runsCompleted,
             lastBattleTime: this.lastRunTime,

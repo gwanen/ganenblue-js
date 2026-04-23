@@ -1,7 +1,6 @@
 import {
   sleep,
   randomDelay,
-  getRandomInRange,
   getNormalRandom,
   generateBezierCurve,
 } from "../utils/random.js";
@@ -9,19 +8,33 @@ import logger from "../utils/logger.js";
 import config from "../utils/config.js";
 import NetworkListener from "./network-listener.js";
 
+/**
+ * Orchestrates page interactions, navigation, and resource management.
+ * Provides stealth-oriented clicking, SPA navigation, and performance optimizations.
+ */
 class PageController {
+  /**
+   * @param {import('puppeteer').Page} page - The Puppeteer page instance.
+   * @param {import('winston').Logger} [scopedLogger] - Optional scoped logger instance.
+   */
   constructor(page, scopedLogger = null) {
     this.page = page;
-    this.logger = scopedLogger || logger; // Use scoped (profile-aware) logger if provided
+    this.logger = scopedLogger || logger;
     this.network = new NetworkListener(page, this.logger);
-    this.network.start(); // Start listening immediately
+    this.network.start();
     this.requestHandler = null;
     this.lastMousePos = { x: 0, y: 0 };
 
-    // Disable background throttling via CDP immediately
+    // Disable background throttling via CDP immediately to prevent performance drops when tab is inactive
     this.disableBackgroundThrottling().catch(() => { });
   }
 
+  // --- Resource Management ---
+
+  /**
+   * Enables interception to block trackers, images, and media.
+   * Significantly reduces bandwidth and boosts performance during heavy raiding.
+   */
   async enableResourceBlocking() {
     if (this.blockingEnabled) return;
     this.blockingEnabled = true;
@@ -32,7 +45,6 @@ class PageController {
       const url = req.url().toLowerCase();
       const resourceType = req.resourceType();
 
-      // Block trackers and images/media/fonts
       const isTracker =
         url.includes("google-analytics.com") ||
         url.includes("g-acp.com") ||
@@ -49,15 +61,43 @@ class PageController {
     this.logger.info("[Core] State: Resource blocking active (Images/Media)");
   }
 
+  /**
+   * Disables interception and restores normal resource loading.
+   */
+  async disableResourceBlocking() {
+    if (!this.requestHandler && !this.blockingEnabled) return;
+
+    if (this.requestHandler) {
+      this.page.off("request", this.requestHandler);
+      this.requestHandler = null;
+    }
+
+    try {
+      if (!this.page.isClosed()) {
+        await this.page.setRequestInterception(false);
+        this.logger.info("[Core] State: Resource blocking inactive");
+      }
+    } catch (e) {
+      // Ignore if context is lost or already disabled
+    }
+
+    this.blockingEnabled = false;
+  }
+
+  /**
+   * Overrides browser throttling via CDP to ensure stable performance in the background.
+   */
   async disableBackgroundThrottling() {
     let client = null;
     try {
       client = await this.page.target().createCDPSession();
-      // 1. Force focusless throttling to disabled (prevents background lag)
+
+      // Disable focusless throttling
       await client.send("Emulation.setFocuslessThrottlingEnabled", {
         enabled: false,
       });
-      // 2. Force the page to stay in 'active' lifecycle state
+
+      // Force the page to stay in the 'active' lifecycle state
       await client.send("Page.setWebLifecycleState", { state: "active" });
 
       this.logger.debug("[Core] State: Background throttling disabled");
@@ -71,7 +111,7 @@ class PageController {
   }
 
   /**
-   * Manually trigger Garbage Collection if available (--expose-gc)
+   * Manually triggers Garbage Collection if available (requires --expose-gc).
    */
   triggerGC() {
     if (global.gc) {
@@ -84,42 +124,9 @@ class PageController {
     }
   }
 
-  async disableResourceBlocking() {
-    if (!this.requestHandler && !this.blockingEnabled) return;
-
-    if (this.requestHandler) {
-      this.page.off("request", this.requestHandler);
-      this.requestHandler = null;
-    }
-
-    try {
-      // Only attempt to disable if the page is still open
-      if (!this.page.isClosed()) {
-        await this.page.setRequestInterception(false);
-        this.logger.info("[Core] State: Resource blocking inactive");
-      }
-    } catch (e) {
-      // Ignore if context lost or already disabled
-    }
-
-    this.blockingEnabled = false;
-  }
-
   /**
-   * Stop and cleanup all controller resources
-   */
-  async stop() {
-    if (this.network) {
-      this.network.stop();
-      this.network.clearAllListeners();
-    }
-    await this.disableResourceBlocking();
-    // turbo CSS doesn't strictly need persistent state, but we could add a flag if needed
-  }
-
-  /**
-   * Inject CSS to disable animations and transitions for maximum speed and lower CPU usage.
-   * This is the heart of "Turbo Mode".
+   * Injects CSS to suppress animations and transitions for maximum speed.
+   * Known as "Turbo Mode" — reduces CPU usage significantly.
    */
   async enableTurboCSS() {
     try {
@@ -139,10 +146,10 @@ class PageController {
           
           /* Specific GBF performance overrides */
           .prt-loading-container, #loading-mask {
-            background: #000 !important; /* Lighter weight rendering */
+            background: #000 !important;
           }
           
-          /* Optional: Hide some purely decorative particles if they have specific classes */
+          /* Hide decorative particle effects */
           [class*="effect-"], [class*="particle-"] {
             display: none !important;
           }
@@ -154,112 +161,12 @@ class PageController {
     }
   }
 
-  /**
-   * Check if error is network-related
-   */
-  isNetworkError(error) {
-    const message = error.message || "";
-    return (
-      message.includes("Navigation timeout") ||
-      message.includes("net::ERR") ||
-      message.includes("Protocol error") ||
-      message.includes("Session closed") ||
-      message.includes("Target closed") ||
-      message.includes("Execution context was destroyed") ||
-      message.includes(
-        "Execution context is not available in detached frame",
-      ) ||
-      message.includes("Cannot read properties of null") ||
-      message.includes("detached Frame") ||
-      message.includes("Frame was detached")
-    );
-  }
+  // --- Interaction (Clicking & Mouse) ---
 
   /**
-   * Check if page is still "alive" (not crashed/closed)
-   */
-  isAlive() {
-    try {
-      return this.page && !this.page.isClosed();
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /**
-   * Retry function on network errors.
-   * If a detached frame is encountered, throws to trigger safety stop.
-   */
-  async retryOnNetworkError(fn, maxRetries = 3, operation = "operation") {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await fn();
-      } catch (error) {
-        if (this.isNetworkError(error)) {
-          const isDetached =
-            error.message.includes("detached Frame") ||
-            error.message.includes("context was destroyed") ||
-            error.message.includes("Session closed") ||
-            error.message.includes("Target closed");
-
-          if (isDetached) {
-            this.handleDetachedFrame(error);
-          }
-
-          if (i < maxRetries - 1) {
-            const waitTime = 2000 * (i + 1);
-            this.logger.warn(
-              `[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
-            );
-            await sleep(waitTime);
-            continue;
-          }
-        }
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Wait for element with retry logic
-   */
-  async waitForElement(selector, timeout = 30000) {
-    try {
-      await this.page.waitForSelector(selector, {
-        timeout,
-        visible: true,
-      });
-      return true;
-    } catch (error) {
-      const currentUrl = this.page.url();
-      this.logger.debug(
-        `[Debug] Element not found: ${selector} (URL: ${currentUrl})`,
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Wait for custom function to return truthy
-   */
-  async waitForFunction(fn, timeout = 30000) {
-    try {
-      await this.page.waitForFunction(fn, { timeout });
-      return true;
-    } catch (error) {
-      this.logger.debug(`[Debug] Core: waitForFunction timeout (Fault: ${error.message})`);
-      return false;
-    }
-  }
-
-  /**
-   * Fast click with cached coordinates and minimal stability delay.
-   * Used for time-critical buttons (auto, attack) where snappy response
-   * matters more than full human-like click simulation.
-   *
-   * Caches bounding box to skip DOM lookups on repeat clicks.
-   * Uses fast Bezier mouse movement for stealth (no teleports).
-   * Adds a small 10-50ms stability delay after DOM detection for reliability.
+   * Performs a click using cached coordinates to minimize DOM lookups in time-sensitive loops.
+   * @param {string} selector - The CSS selector for the element.
+   * @param {number} [stabilityDelay=15] - Ms delay to wait for DOM readiness before clicking.
    */
   async cachedClick(selector, stabilityDelay = 15) {
     if (!this._clickCache) this._clickCache = new Map();
@@ -274,42 +181,47 @@ class PageController {
           if (box) this._clickCache.set(selector, box);
         }
       } catch (e) {
-        this.logger.debug(
-          `[Debug] Core: cachedClick element lookup failed (${e.message})`,
-        );
+        this.logger.debug(`[Debug] Core: cachedClick element lookup failed (${e.message})`);
       }
     }
 
-    if (!box)
+    if (!box) {
       throw new Error(`Element not found for cached click: ${selector}`);
+    }
 
-    // Small stability delay for DOM readiness
     if (stabilityDelay > 0) {
       await sleep(stabilityDelay);
     }
 
-    // Uniform random position within element bounds (±2px jitter)
+    // Offset coordinates with jitter (±2px)
     const x = box.x + box.width / 2 + (Math.random() * 4 - 2);
     const y = box.y + box.height / 2 + (Math.random() * 4 - 2);
 
-    // Fast mouse movement for stealth (skips per-point delays)
+    // Fast mouse movement for efficiency
     await this.moveMouseHumanLike(x, y, true);
 
     await this.page.mouse.click(x, y);
-    this.logger.debug(
-      `[Debug] Cached Click: ${selector} (${stabilityDelay}ms delay)`,
-    );
+    this.logger.debug(`[Debug] Cached Click: ${selector} (${stabilityDelay}ms delay)`);
   }
 
   /**
-   * Clear cached click coordinates (call on new battle or page reload)
+   * Clears the coordinate cache. Should be called when the page structure changes.
    */
   clearClickCache() {
     if (this._clickCache) this._clickCache.clear();
   }
 
   /**
-   * Click with human-like behavior
+   * Clicks an element with randomized offset, Gaussian distribution, and human-like delays.
+   * @param {string} selector - CSS selector of the element.
+   * @param {object} [options] - Configuration for the click.
+   * @param {boolean} [options.waitAfter=true] - Whether to sleep after the click.
+   * @param {number} [options.delay] - Sleep duration after the click.
+   * @param {number} [options.preDelay] - Sleep duration before the click.
+   * @param {number} [options.maxRetries=3] - Retry attempts on failure.
+   * @param {number} [options.timeout=5000] - Ms to wait for element visibility.
+   * @param {boolean} [options.silent=false] - If true, suppresses warning logs on failure.
+   * @param {boolean} [options.fast=false] - If true, skips human-like delays and reduces mouse resolution.
    */
   async clickSafe(selector, options = {}) {
     const {
@@ -319,33 +231,27 @@ class PageController {
       maxRetries = 3,
       timeout = 5000,
       silent = false,
-      fast = false, // New: Skip human-like delays
+      fast = false,
     } = options;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Wait for element
         const found = await this.waitForElement(selector, timeout);
-        if (!found) {
-          throw new Error(`Element not found: ${selector}`);
-        }
+        if (!found) throw new Error(`Element not found: ${selector}`);
 
-        // Random delay before click
         if (!fast && preDelay > 0) {
           await sleep(preDelay);
         }
 
-        // Get element and bounding box for randomized click
         const element = await this.page.$(selector);
         if (!element) throw new Error(`Element handle not found: ${selector}`);
 
         const box = await element.boundingBox();
-        await element.dispose(); // Fix Memory Leak
+        await element.dispose();
 
         if (!box) throw new Error(`Bounding box not found for: ${selector}`);
 
-        // Calculate normal (Gaussian) distribution around center
-        // Sigma (std dev) is 1/6th of width/height to keep ~99% of clicks inside
+        // Distribution logic to keep clicks concentrated near center (Gaussian)
         const centerX = box.x + box.width / 2;
         const centerY = box.y + box.height / 2;
 
@@ -355,59 +261,41 @@ class PageController {
         let randomX = getNormalRandom(centerX, sigmaX);
         let randomY = getNormalRandom(centerY, sigmaY);
 
-        // Clamp to box boundaries (with 5% safety padding)
+        // Clamp with 5% safety margin
         const marginX = box.width * 0.05;
         const marginY = box.height * 0.05;
-        randomX = Math.max(
-          box.x + marginX,
-          Math.min(box.x + box.width - marginX, randomX),
-        );
-        randomY = Math.max(
-          box.y + marginY,
-          Math.min(box.y + box.height - marginY, randomY),
-        );
+        randomX = Math.max(box.x + marginX, Math.min(box.x + box.width - marginX, randomX));
+        randomY = Math.max(box.y + marginY, Math.min(box.y + box.height - marginY, randomY));
 
-        // Move mouse to target
         await this.moveMouseHumanLike(randomX, randomY, fast);
-
-        // Perform randomized click
         await this.page.mouse.click(randomX, randomY);
-        this.logger.debug(
-          `[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`,
-        );
 
-        // Wait after click
-        if (waitAfter) {
-          await sleep(delay);
-        }
+        this.logger.debug(`[Debug] Stealth Click: ${selector} at (${Math.round(randomX)}, ${Math.round(randomY)})`);
 
+        if (waitAfter) await sleep(delay);
         return true;
       } catch (error) {
         if (!silent) {
-          this.logger.warn(
-            `[Core] Click attempt ${attempt}/${maxRetries} failed: ${selector}`,
-          );
+          this.logger.warn(`[Core] Click attempt ${attempt}/${maxRetries} failed: ${selector}`);
         }
-        if (attempt === maxRetries) {
-          throw error;
-        }
+        if (attempt === maxRetries) throw error;
         await sleep(1000);
       }
     }
   }
 
   /**
-   * Move mouse cursor naturally
+   * Moves the mouse cursor along a natural Bezier curve to the target.
+   * @param {number} targetX - Target X coordinate.
+   * @param {number} targetY - Target Y coordinate.
+   * @param {boolean} [fast=false] - If true, reduces coordinate resolution for speed.
    */
   async moveMouseHumanLike(targetX, targetY, fast = false) {
     try {
       const start = this.lastMousePos;
       const end = { x: targetX, y: targetY };
 
-      // If movement is very small, skip curve for speed
-      const distance = Math.sqrt(
-        Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2),
-      );
+      const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
       if (distance < 5) {
         await this.page.mouse.move(end.x, end.y);
         this.lastMousePos = end;
@@ -415,8 +303,6 @@ class PageController {
       }
 
       const points = generateBezierCurve(start, end);
-
-      // SPD-03: Optimization - If fast, only use start, middle, and end points to reduce CDP calls
       const activePoints = fast ? [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].filter(p => !!p) : points;
 
       for (const point of activePoints) {
@@ -425,14 +311,120 @@ class PageController {
 
       this.lastMousePos = end;
     } catch (e) {
-      this.logger.debug(
-        `[Debug] Human mouse move failed (swallowing): ${e.message}`,
-      );
+      this.logger.debug(`[Debug] Human mouse move failed (swallowing): ${e.message}`);
+    }
+  }
+
+  // --- Utility & Error Handling ---
+
+  /**
+   * Determines if a thrown error is related to network instability or context loss.
+   * @param {Error} error - The error to analyze.
+   * @returns {boolean} True if the error is considered network-related.
+   */
+  isNetworkError(error) {
+    const message = error.message || "";
+    return (
+      message.includes("Navigation timeout") ||
+      message.includes("net::ERR") ||
+      message.includes("Protocol error") ||
+      message.includes("Session closed") ||
+      message.includes("Target closed") ||
+      message.includes("Execution context was destroyed") ||
+      message.includes("Execution context is not available in detached frame") ||
+      message.includes("Cannot read properties of null") ||
+      message.includes("detached Frame") ||
+      message.includes("Frame was detached")
+    );
+  }
+
+  /**
+   * Checks if the controlled page is still active and connected.
+   */
+  isAlive() {
+    try {
+      return this.page && !this.page.isClosed();
+    } catch (e) {
+      return false;
     }
   }
 
   /**
-   * Check if element exists (no throw)
+   * Wraps an asynchronous operation with retry logic for network-related failures.
+   * @param {Function} fn - The async function to execute.
+   * @param {number} [maxRetries=3] - Number of retry attempts.
+   * @param {string} [operation="operation"] - Label for logging purposes.
+   */
+  async retryOnNetworkError(fn, maxRetries = 3, operation = "operation") {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (this.isNetworkError(error)) {
+          const isDetached =
+            error.message.includes("detached Frame") ||
+            error.message.includes("context was destroyed") ||
+            error.message.includes("Session closed") ||
+            error.message.includes("Target closed");
+
+          if (isDetached) this.handleDetachedFrame(error);
+
+          if (i < maxRetries - 1) {
+            const waitTime = 2000 * (i + 1);
+            this.logger.warn(`[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
+            await sleep(waitTime);
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Signals a fatal frame detachment, which usually requires a bot restart.
+   * @param {Error} error - The source detachment error.
+   */
+  handleDetachedFrame(error) {
+    this.logger.error("[Safety] Browser frame detached. High risk of detection.");
+    this.logger.warn("[Safety] Halting bot immediately.");
+
+    this.detachedState = true;
+    const safetyError = new Error("DETACHED_FRAME");
+    safetyError.original = error;
+    throw safetyError;
+  }
+
+  // --- Observation & Waiting ---
+
+  /**
+   * Waits for a selector to appear in the DOM and becomes visible.
+   */
+  async waitForElement(selector, timeout = 30000) {
+    try {
+      await this.page.waitForSelector(selector, { timeout, visible: true });
+      return true;
+    } catch (error) {
+      this.logger.debug(`[Debug] Element not found: ${selector} (URL: ${this.page.url()})`);
+      return false;
+    }
+  }
+
+  /**
+   * Waits for a custom function to return a truthy value.
+   */
+  async waitForFunction(fn, timeout = 30000) {
+    try {
+      await this.page.waitForFunction(fn, { timeout });
+      return true;
+    } catch (error) {
+      this.logger.debug(`[Debug] Core: waitForFunction timeout (${error.message})`);
+      return false;
+    }
+  }
+
+  /**
+   * Non-throwing check for element existence.
    */
   async elementExists(selector, timeout = 2000, visible = false) {
     try {
@@ -444,7 +436,7 @@ class PageController {
   }
 
   /**
-   * Get element text
+   * Retrieves text content from an element. Returns empty string if failed.
    */
   async getText(selector) {
     try {
@@ -455,9 +447,11 @@ class PageController {
     }
   }
 
+  // --- Navigation & Page Flow ---
+
   /**
-   * Navigate with retry logic (full page load).
-   * For GBF hash-based SPA navigation, prefer gotoSPA() instead.
+   * Navigates to a URL with retry logic and "Hard Reload" fallback.
+   * For SPA transitions, use gotoSPA().
    */
   async goto(url, options = {}) {
     const { maxRetries = 3 } = options;
@@ -471,26 +465,9 @@ class PageController {
           ...options,
         });
       } catch (error) {
-        const isDetached =
-          error.message.includes("detached Frame") ||
-          error.message.includes("context was destroyed") ||
-          error.message.includes("Session closed") ||
-          error.message.includes("Target closed");
-
-        if (isDetached) {
-          this.handleDetachedFrame(error);
-        }
-
         if (this.isNetworkError(error) && i < maxRetries - 1) {
           const waitTime = 2000 * (i + 1);
-          this.logger.warn(
-            `[Network] Error during navigation, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`,
-          );
-
-          // For timeouts/retries, perform a Hard Reload to reset state
-          this.logger.info(
-            "[Core] Navigation retry triggered. Performing Hard Reload...",
-          );
+          this.logger.warn(`[Network] Error during navigation, retrying...`);
           await this.reloadHard().catch(() => { });
           await sleep(waitTime);
           continue;
@@ -501,8 +478,60 @@ class PageController {
   }
 
   /**
-   * Performs a full browser-level reload with networkidle2.
-   * Used for Timeouts and Retry Exhaustion.
+   * Performs an SPA-safe navigation to a GBF hash URL.
+   * Handles edge cases where setting location.hash might be ignored by the game router.
+   */
+  async gotoSPA(url, options = {}) {
+    const { timeout = 15000, waitForSelector = null, clickSelector = null } = options;
+    const targetHash = url.match(/#.+/) ? url.match(/#.+/)[0] : "";
+
+    if (clickSelector) {
+      this.logger.info(`[Core] Navigation (Click): ${clickSelector}`);
+      try {
+        await this.page.click(clickSelector);
+      } catch (e) {
+        this.logger.debug(`[Core] Page click refresh failed. Falling back to hash.`);
+      }
+    } else {
+      if (!targetHash) return this.goto(url, options);
+
+      this.logger.info(`[Core] Navigation (SPA): ${targetHash}`);
+      try {
+        await this.page.evaluate((target) => {
+          const current = window.location.hash;
+          if (current === target || current === target.replace("#", "")) {
+            history.replaceState(null, "", "#");
+          }
+          window.location.hash = target.replace(/^#/, "");
+        }, targetHash);
+      } catch (e) {
+        this.logger.debug(`[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`);
+        return this.goto(url);
+      }
+    }
+
+    const deadline = Date.now() + timeout;
+    if (waitForSelector) {
+      await this.elementExists(waitForSelector, timeout);
+      return;
+    }
+
+    const success = await this.waitForSPAUpdate(Math.max(0, deadline - Date.now()));
+    if (!success) {
+      const reloadBtn = ".btn-treasure-footer-reload";
+      if (await this.elementExists(reloadBtn, 100)) {
+        this.logger.info("[Core] SPA transition seems stuck. Triggering footer reload...");
+        await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(() => { });
+        await sleep(500);
+      }
+    }
+
+    await sleep(10);
+    await this.waitForFrameStable(500);
+  }
+
+  /**
+   * Performs a hard browser reload.
    */
   async reloadHard() {
     this.logger.info("[Core] Action: Hard Reload (Full page reset)");
@@ -512,23 +541,17 @@ class PageController {
   }
 
   /**
-   * Attempts to click the in-game footer reload button.
-   * Used for Animation Skips and normal flow.
+   * Attempts to use the in-game footer refresh button for a "Soft Reload".
    */
   async reloadSoft(options = { fast: true }) {
     this.logger.info("[Core] Action: Soft Refresh (Footer button)");
     this.clearClickCache();
-    const reloadBtn =
-      config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
+    const reloadBtn = config.get("navigation.footerReload") || ".btn-treasure-footer-reload";
 
-    // Check if button exists and is visible
-    const exists = await this.elementExists(reloadBtn, 500, true);
-    if (exists) {
+    if (await this.elementExists(reloadBtn, 500, true)) {
       try {
         await this.page.click(reloadBtn);
-        await sleep(150); // Snappy yield
-        // Wait for game loader to disappear if it appears
-        // Using very short timeout if fast: true
+        await sleep(150);
         await this.waitForSPAUpdate(options.fast ? 500 : 5000);
         return;
       } catch (e) {
@@ -542,32 +565,19 @@ class PageController {
   }
 
   /**
-   * Handles detached frame errors by logging and signaling for safety stop.
+   * Standardized reload strategy.
    */
-  handleDetachedFrame(error) {
-    this.logger.error("[Safety] Browser frame detached. High risk of detection.");
-    this.logger.warn("[Safety] Halting bot immediately as requested.");
-
-    // Set a flag that the bot can check to stop
-    this.detachedState = true;
-
-    // Re-throw to propagate to QuestBot
-    const safetyError = new Error("DETACHED_FRAME");
-    safetyError.original = error;
-    throw safetyError;
+  async reloadPage() {
+    await this.reloadSoft();
   }
 
   /**
-   * Helper to wait for the game's loading overlay to disappear.
-   * Priority: Network idle (if possible) + DOM loader check.
+   * Monitors the game loading overlay and network state to confirm SPA page load.
    */
   async waitForSPAUpdate(timeout = 3000) {
     const start = Date.now();
     try {
-      // 1. Give the game a tiny moment (150ms) to even start showing the loader
       await sleep(150);
-
-      // 2. Wait for either network idle OR the DOM loader to be hidden
       await Promise.race([
         this.page.waitForFunction(
           () => {
@@ -585,167 +595,23 @@ class PageController {
           },
           { timeout }
         ),
-        this.page.waitForNetworkIdle({ idleTime: 400, timeout: timeout }).catch(() => { })
+        this.page.waitForNetworkIdle({ idleTime: 400, timeout }).catch(() => { })
       ]);
-
       this.logger.debug(`[Core] SPA update finished (${Date.now() - start}ms)`);
       return true;
     } catch (e) {
-      this.logger.debug(`[Core] SPA update wait reached timeout/fallback (${Date.now() - start}ms)`);
+      this.logger.debug(`[Core] SPA update wait reached timeout (${Date.now() - start}ms)`);
       return false;
     }
   }
 
   /**
-   * Navigate to a GBF hash-based SPA URL (e.g. '#quest/assist').
-   *
-   * Problem: page.goto() on a same-origin hash URL only fires a 'hashchange'
-   * event — it never triggers 'domcontentloaded'. Worse, if the target hash
-   * is ALREADY the current hash, no event fires at all and the DOM stays frozen.
-   *
-   * This method:
-   *   1. Forces a real hashchange even when already on the target URL by
-   *      briefly resetting the hash to '' first.
-   *   2. Uses in-page JavaScript to set location.hash directly so the SPA
-   *      router always picks up the change.
-   *   3. Waits for the game's own loading spinner to appear then disappear,
-   *      confirming the new page DOM has been rendered.
-   *
-   * @param {string} url - Full URL with hash, e.g.
-   *   'https://game.granbluefantasy.jp/#quest/assist'
-   * @param {object} options
-   * @param {number} [options.timeout=15000] - Max ms to wait for DOM to settle.
-   * @param {string|null} [options.waitForSelector=null] - Optional selector to
-   *   wait for after navigation (faster than relying on spinner alone).
-   * @param {string|null} [options.clickSelector=null] - Optional selector to click
-   *   instead of setting location.hash (Page Click Refresh).
-   */
-  async gotoSPA(url, options = {}) {
-    const { timeout = 15000, waitForSelector = null, clickSelector = null } = options;
-
-    // Extract just the hash portion (e.g. '#quest/assist')
-    const hashMatch = url.match(/#.+/);
-    const targetHash = hashMatch ? hashMatch[0] : "";
-
-    if (clickSelector) {
-      this.logger.info(`[Core] Navigation (Click): ${clickSelector}`);
-      try {
-        await this.page.click(clickSelector);
-      } catch (e) {
-        this.logger.debug(`[Core] Page click refresh failed: ${e.message}. Falling back to hash.`);
-        clickSelector = null; // Continue with hash fallback
-      }
-    }
-
-    if (!clickSelector) {
-      if (!targetHash) {
-        // No hash — fall back to a regular full-page navigation
-        return this.goto(url, options);
-      }
-
-      this.logger.info(`[Core] Navigation (SPA): ${targetHash}`);
-
-      try {
-        await this.page.evaluate((target) => {
-          const current = window.location.hash;
-
-          // If already on this hash, nudge the router by clearing it first
-          // so a real hashchange event fires when we set it again.
-          if (current === target || current === target.replace("#", "")) {
-            // Temporarily set to a dummy hash — this fires hashchange #1
-            history.replaceState(null, "", "#");
-          }
-
-          // Now set the real target — fires hashchange #2 (or #1 if we
-          // weren't on this hash before), triggering the SPA router.
-          window.location.hash = target.replace(/^#/, "");
-        }, targetHash);
-      } catch (e) {
-        // Page context may be mid-navigation; fall back to hard goto.
-        this.logger.debug(
-          `[Core] gotoSPA evaluate failed, falling back to goto: ${e.message}`,
-        );
-        return this.goto(url);
-      }
-    }
-
-    // Wait for the DOM to actually reflect the new page.
-    // GBF renders a .loading-bar / #loading element while switching pages.
-    // We wait for: (a) a page-specific selector OR (b) loading to finish.
-    const deadline = Date.now() + timeout;
-
-    if (waitForSelector) {
-      const found = await this.elementExists(waitForSelector, timeout);
-      if (!found) {
-        this.logger.warn(
-          `[Core] gotoSPA: waitForSelector '${waitForSelector}' not found after ${timeout}ms`,
-        );
-      }
-      return;
-    }
-
-    // Fallback: wait for the game's loading overlay to disappear, which
-    // signals that the new page's DOM has been fully injected.
-    const success = await this.waitForSPAUpdate(Math.max(0, deadline - Date.now()));
-
-    if (!success) {
-      // If we timed out, the router might have ignored the SPA hash change.
-      // Attempt an in-game footer reload to forcefully unstick it.
-      const reloadBtn = ".btn-treasure-footer-reload";
-      if (await this.elementExists(reloadBtn, 100)) {
-        this.logger.info(
-          "[Core] SPA transition seems stuck. Triggering footer reload...",
-        );
-        await this.clickSafe(reloadBtn, { fast: true, silent: true }).catch(
-          () => { },
-        );
-        await sleep(500);
-      }
-    }
-
-    // Extra short yield so any remaining microtasks on the SPA router settle.
-    await sleep(10);
-
-    // Frame stability check: ensure frame is reattached after SPA navigation
-    await this.waitForFrameStable(500);
-  }
-
-  /**
-   * Reload the page using the Soft Refresh strategy by default.
-   */
-  async reloadPage() {
-    await this.reloadSoft();
-  }
-
-  /**
-   * Check if the main frame is still attached and usable.
-   * Returns true if the frame is healthy, false if detached/stale.
-   */
-  async isFrameAttached() {
-    try {
-      // Priority 1: Check Puppeteer's own detached flag
-      if (this.page.mainFrame().isDetached()) return false;
-
-      // Priority 2: Quick evaluation to test frame health
-      return await this.page
-        .evaluate(() => document.readyState, { timeout: 200 })
-        .then(() => true)
-        .catch(() => false);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /**
-   * Wait for frame to be stable after navigation/reload.
-   * This prevents "detached frame" errors by ensuring the frame is reattached
-   * before any interaction attempts.
+   * Ensures the Puppeteer frame context is stable and reattached after transitions.
    */
   async waitForFrameStable(timeout = 3000) {
     const startTime = Date.now();
     while (Date.now() - startTime < timeout) {
       if (await this.isFrameAttached()) {
-        // Frame is attached, give it a brief moment to settle
         await sleep(20);
         return true;
       }
@@ -756,14 +622,38 @@ class PageController {
   }
 
   /**
-   * Wait for navigation to complete
+   * Core frame health check.
+   */
+  async isFrameAttached() {
+    try {
+      if (this.page.mainFrame().isDetached()) return false;
+      return await this.page
+        .evaluate(() => document.readyState, { timeout: 200 })
+        .then(() => true)
+        .catch(() => false);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Native Puppeteer wait for navigation.
    */
   async waitForNavigation(timeout = 30000) {
-    await this.page.waitForNavigation({
-      waitUntil: "networkidle2",
-      timeout,
-    });
+    await this.page.waitForNavigation({ waitUntil: "networkidle2", timeout });
+  }
+
+  /**
+   * Cleanup controller resources.
+   */
+  async stop() {
+    if (this.network) {
+      this.network.stop();
+      this.network.clearAllListeners();
+    }
+    await this.disableResourceBlocking();
   }
 }
 
 export default PageController;
+

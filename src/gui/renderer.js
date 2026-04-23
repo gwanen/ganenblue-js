@@ -267,7 +267,7 @@ function setupProfileListeners(pid) {
             preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
         };
 
-        if (settings.botMode === 'quest' && !settings.questUrl) {
+        if ((settings.botMode === 'quest' || settings.botMode === 'free_quest') && !settings.questUrl) {
             showToast('Quest URL required', 'error');
             return;
         }
@@ -393,7 +393,7 @@ function updateProfileUI(pid) {
 function updateFormVisibility(pid) {
     const els = dom[pid];
     const mode = els.mode.value;
-    const isQuest = mode === 'quest';
+    const isQuest = mode === 'quest' || mode === 'free_quest';
     const isReplicard = mode === 'replicard' || mode === 'xeno_replicard';
     const isSkip = mode === 'skip';
 
@@ -406,7 +406,7 @@ function updateFormVisibility(pid) {
 
     const label = els.maxRunsLabel;
     if (label) {
-        if (mode === 'quest') label.textContent = 'Max Quests';
+        if (isQuest) label.textContent = 'Max Quests';
         else if (mode === 'raid') label.textContent = 'Max Raids';
         else if (mode === 'replicard') label.textContent = 'Max Runs';
         else if (mode === 'xeno_replicard') label.textContent = 'Max Runs';

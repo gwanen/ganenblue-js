@@ -5,71 +5,72 @@ import logger, { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
 
+/**
+ * Orchestrates raid-specific bot logic, including list scanning, supporter selection,
+ * loot tracking, and recovery from common raid-entry errors.
+ */
 class RaidBot {
-  constructor(page, options = {}) {
-    // Assign profileId and scoped logger FIRST so they're available to PageController
-    this.profileId = options.profileId || config.get("profile_id") || "p1";
-    this.logger = createScopedLogger(this.profileId);
+    /**
+     * @param {import('puppeteer').Page} page - The current browser page.
+     * @param {object} [options={}] - Bot configuration parameters.
+     */
+    constructor(page, options = {}) {
+        this.profileId = options.profileId || config.get("profile_id") || "p1";
+        this.logger = createScopedLogger(this.profileId);
+        this.controller = new PageController(page, this.logger);
+        this.raidBackupUrl = "https://game.granbluefantasy.jp/#quest/assist";
+        this.maxRaids = options.maxRaids || 0;
+        this.battleMode = options.battleMode || "full_auto";
+        this.honorTarget = options.honorTarget || 0;
+        this.targetUser = options.targetUser || null;
+        this.onBattleEnd = options.onBattleEnd || null;
+        this.refreshOnStart = options.refreshOnStart !== undefined ? options.refreshOnStart : true;
+        this.selectors = config.selectors.raid;
 
-    this.controller = new PageController(page, this.logger);
-    this.raidBackupUrl = "https://game.granbluefantasy.jp/#quest/assist";
-    this.maxRaids = options.maxRaids || 0; // 0 = unlimited
-    this.battleMode = options.battleMode || "full_auto";
-    this.honorTarget = options.honorTarget || 0;
-    this.targetUser = options.targetUser || null;
-    this.onBattleEnd = options.onBattleEnd || null;
-    this.refreshOnStart =
-      options.refreshOnStart !== undefined ? options.refreshOnStart : true;
-    this.selectors = config.selectors.raid;
-    this.battle = new BattleHandler(page, {
-      fastRefresh: options.fastRefresh || false,
-      summonRefresh:
-        options.summonRefresh !== undefined ? options.summonRefresh : true,
-      skillRefresh:
-        options.skillRefresh !== undefined ? options.skillRefresh : false,
-      preBattleAutoAttack: options.preBattleAutoAttack || "off",
-      logger: this.logger,
-      controller: this.controller,
-    });
+        this.battle = new BattleHandler(page, {
+            fastRefresh: options.fastRefresh || false,
+            summonRefresh: options.summonRefresh !== undefined ? options.summonRefresh : true,
+            skillRefresh: options.skillRefresh !== undefined ? options.skillRefresh : false,
+            preBattleAutoAttack: options.preBattleAutoAttack || "off",
+            logger: this.logger,
+            controller: this.controller,
+        });
 
-    // Enable performance optimizations
-    if (options.blockResources) {
-      this.logger.info("[System] Image blocking enabled");
-      this.controller
-        .enableResourceBlocking()
-        .catch((e) =>
-          this.logger.warn("[System] Failed to enable image blocking", e),
-        );
-    } else {
-      this.logger.info("[System] Image blocking disabled");
+        // Initialize session state
+        this.raidsCompleted = 0;
+        this.isRunning = false;
+        this.isPaused = false;
+        this.battleTimes = [];
+        this.battleTurns = [];
+        this.lastEndHonor = 0;
+        this.totalHonor = 0;
+        this.redChests = 0;
+        this.blueChests = 0;
+        this.goldBricks = 0;
+
+        // --- Performance Optimizations ---
+        if (options.blockResources) {
+            this.logger.info("[System] Image blocking enabled");
+            this.controller.enableResourceBlocking().catch((e) =>
+                this.logger.warn("[System] Failed to enable image blocking", e)
+            );
+        }
+
+        if (options.turboMode) {
+            this.controller.enableTurboCSS().catch((e) =>
+                this.logger.warn("[System] Failed to enable turbo CSS", e)
+            );
+        }
+
+        // --- Network Event Binding ---
+        this.raidErrorType = null;
+        this.networkBattleStarted = false;
+        this.networkSupporterScreen = false;
+        this.onRaidError = this._onRaidError.bind(this);
+        this.onBattleStart = this._onBattleStart.bind(this);
+        this.onSupporterScreen = this._onSupporterScreen.bind(this);
+        this.onBattleResult = this._onBattleResult.bind(this);
     }
-
-    if (options.turboMode) {
-      this.controller
-        .enableTurboCSS()
-        .catch((e) => this.logger.warn("[System] Failed to enable turbo CSS", e));
-    }
-
-    this.raidsCompleted = 0;
-    this.isRunning = false;
-    this.isPaused = false;
-    this.battleTimes = []; // Array to store battle durations
-    this.battleTurns = []; // Array to store turn counts
-    this.lastEndHonor = 0; // Honor at end of last raid (used for per-raid diff)
-    this.totalHonor = 0; // Accumulated honor gained this session
-    this.redChests = 0;
-    this.blueChests = 0;
-    this.goldBricks = 0;
-
-    // Network Error State for Fast Fallback
-    this.raidErrorType = null;
-    this.networkBattleStarted = false;
-    this.networkSupporterScreen = false;
-    this.onRaidError = this._onRaidError.bind(this);
-    this.onBattleStart = this._onBattleStart.bind(this);
-    this.onSupporterScreen = this._onSupporterScreen.bind(this);
-    this.onBattleResult = this._onBattleResult.bind(this);
-  }
 
   _onBattleResult({ rewards }) {
     if (!rewards?.reward_list) {
@@ -118,24 +119,25 @@ class RaidBot {
     this.raidErrorType = info.type;
   }
 
-  /**
-   * Node-side polling for the raidErrorType flag.
-   * Used in Promise.race to avoid Puppeteer context issues.
-   */
-  async waitForRaidError(timeout = 3000) {
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-      if (this.raidErrorType !== null || !this.isRunning) return true;
-      await sleep(100);
+    /**
+     * Polls for network-detected raid entry errors.
+     * @param {number} [timeout=3000] - Search duration in ms.
+     * @returns {Promise<boolean>} True if an error was detected.
+     */
+    async waitForRaidError(timeout = 3000) {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+            if (this.raidErrorType !== null || !this.isRunning) return true;
+            await sleep(100);
+        }
+        return false;
     }
-    return false;
-  }
 
-  /**
-   * Fast Recovery: Clear UI and refresh list.
-   * If already on assist page, reload. Otherwise, navigate back.
-   */
-  async recoverFromJoinError() {
+    /**
+     * Attempts to recover from a raid join error by refreshing or navigating back.
+     * Logic is context-aware based on the specific error type.
+     */
+    async recoverFromJoinError() {
     const errorType = this.raidErrorType;
     const currentUrl = this.controller.page.url();
     const isOnAssistPage = currentUrl.includes("#quest/assist");
@@ -166,28 +168,30 @@ class RaidBot {
     await sleep(200);
   }
 
-  async start() {
-    this.isRunning = true;
-    this.raidsCompleted = 0;
-    this.battleTimes = []; // Reset battle times on start
-    this.battleTurns = []; // Reset battle turns on start
-    this.lastEndHonor = 0;
-    this.totalHonor = 0;
-    this.redChests = 0;
-    this.blueChests = 0;
-    this.goldBricks = 0;
-    this.startTime = Date.now();
+    /**
+     * Starts the bot's main loop.
+     */
+    async start() {
+        this.isRunning = true;
+        this.raidsCompleted = 0;
+        this.battleTimes = [];
+        this.battleTurns = [];
+        this.lastEndHonor = 0;
+        this.totalHonor = 0;
+        this.redChests = 0;
+        this.blueChests = 0;
+        this.goldBricks = 0;
+        this.startTime = Date.now();
 
-    if (this.controller.network) {
-      this.controller.network.on("raid:error", this.onRaidError);
-      this.controller.network.on("battle:start", this.onBattleStart);
-      this.controller.network.on(
-        "raid:supporter_screen",
-        this.onSupporterScreen,
-      );
-    }
+        if (this.controller.network) {
+            this.controller.network.on("raid:error", this.onRaidError);
+            this.controller.network.on("battle:start", this.onBattleStart);
+            this.controller.network.on("raid:supporter_screen", this.onSupporterScreen);
+            this.controller.network.on("battle:result", this.onBattleResult);
+        }
 
-    this.logger.info("[Bot] Session started");
+        this.logger.info("[Bot] Session started");
+        // ... rest of logic
 
     try {
       while (this.isRunning) {
@@ -1019,7 +1023,11 @@ class RaidBot {
     return "failed";
   }
 
-  async validatePostClick() {
+    /**
+     * Validates combat UI stability after clicking the start button.
+     * @returns {Promise<string>} Termination status ("success", "ended", "pending", "captcha").
+     */
+    async validatePostClick() {
     if (await this.checkCaptcha()) return "captcha";
 
     // Check for Deck selection stuck popups
@@ -1107,26 +1115,6 @@ class RaidBot {
         break;
       }
       await sleep(100);
-    }
-
-    const isLoggedOut = await this.controller.page.evaluate(() => {
-      const url = window.location.href;
-      const hasLogin = !!document.querySelector("#login-auth");
-      const isHome =
-        url === "https://game.granbluefantasy.jp/" ||
-        url === "https://game.granbluefantasy.jp/#" ||
-        url.includes("#mypage") ||
-        url.includes("#top") ||
-        url.includes("mobage.jp");
-      return hasLogin || isHome;
-    });
-
-    if (isLoggedOut) {
-      this.logger.error(
-        "[Safety] Session expired or Redirected to landing. Stopping",
-      );
-      this.stop();
-      return "ended";
     }
 
     const finalUrl = this.controller.page.url();
@@ -1238,37 +1226,38 @@ class RaidBot {
     return Math.round(sum / this.battleTimes.length);
   }
 
-  getStats() {
-    let avgTurns = 0;
-    if (this.battleCount > 0) {
-      avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
+    /**
+     * Compiles session statistics for reporting.
+     * @returns {object} Summary of raids, honors, and loot.
+     */
+    getStats() {
+        let avgTurns = 0;
+        if (this.battleCount > 0) {
+            avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
+        }
+        let rate = "0.0/h";
+        const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
+        if (uptimeHours > 0) {
+            const rph = this.raidsCompleted / uptimeHours;
+            rate = `${rph.toFixed(1)}/h`;
+        }
+        return {
+            completedQuests: this.raidsCompleted,
+            raidsCompleted: this.raidsCompleted,
+            isRunning: this.isRunning,
+            isPaused: this.isPaused,
+            startTime: this.startTime,
+            avgBattleTime: this.getAverageBattleTime(),
+            avgTurns: avgTurns,
+            battleCount: this.battleCount || 0,
+            lastBattleTime: this.battleTimes.length > 0 ? this.battleTimes[this.battleTimes.length - 1] : 0,
+            rate: rate,
+            totalHonor: this.totalHonor || 0,
+            redChests: this.redChests || 0,
+            blueChests: this.blueChests || 0,
+            goldBricks: this.goldBricks || 0,
+        };
     }
-    let rate = "0.0/h";
-    const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
-    if (uptimeHours > 0) {
-      const rph = this.raidsCompleted / uptimeHours;
-      rate = `${rph.toFixed(1)}/h`;
-    }
-    return {
-      completedQuests: this.raidsCompleted,
-      raidsCompleted: this.raidsCompleted,
-      isRunning: this.isRunning,
-      isPaused: this.isPaused,
-      startTime: this.startTime,
-      avgBattleTime: this.getAverageBattleTime(),
-      avgTurns: avgTurns,
-      battleCount: this.battleCount || 0,
-      lastBattleTime:
-        this.battleTimes.length > 0
-          ? this.battleTimes[this.battleTimes.length - 1]
-          : 0,
-      rate: rate,
-      totalHonor: this.totalHonor || 0,
-      redChests: this.redChests || 0,
-      blueChests: this.blueChests || 0,
-      goldBricks: this.goldBricks || 0,
-    };
-  }
 
   async refreshRaidSearch() {
     const currentUrl = this.controller.page.url();

@@ -1,6 +1,9 @@
 import logger from './logger.js';
 import config from './config.js';
 
+/**
+ * Handles external notifications (e.g., Discord Webhooks) for critical bot events.
+ */
 class Notifier {
     constructor() {
         this.webhookUrl = null;
@@ -8,6 +11,10 @@ class Notifier {
         this.loadSettings();
     }
 
+    /**
+     * Initializes notification settings from the central configuration.
+     * @private
+     */
     loadSettings() {
         try {
             this.webhookUrl = config.get('notifications.discord_webhook');
@@ -17,6 +24,12 @@ class Notifier {
         }
     }
 
+    /**
+     * Sends a raw message and/or embeds to the configured Discord webhook.
+     * @param {string} content - The text message content.
+     * @param {Array<object>} [embeds=[]] - Optional list of Discord embeds.
+     * @returns {Promise<void>}
+     */
     async sendDiscordMessage(content, embeds = []) {
         if (!this.enabled || !this.webhookUrl) return;
 
@@ -24,7 +37,7 @@ class Notifier {
             const body = {
                 content: content,
                 username: 'GANENBLUE Bot',
-                avatar_url: 'https://raw.githubusercontent.com/jscad/jscad/master/packages/web/gh-pages/img/logo.png' // Default placeholder
+                avatar_url: 'https://raw.githubusercontent.com/jscad/jscad/master/packages/web/gh-pages/img/logo.png' 
             };
 
             if (embeds.length > 0) {
@@ -48,6 +61,12 @@ class Notifier {
         }
     }
 
+    /**
+     * Sends an error notification embed.
+     * @param {string} profileId - The profile identifier where the error occurred.
+     * @param {string} errorMsg - The error message or stack trace.
+     * @returns {Promise<void>}
+     */
     async notifyError(profileId, errorMsg) {
         return this.sendDiscordMessage('', [{
             title: `⚠️ Error Detected - [${profileId}]`,
@@ -57,11 +76,16 @@ class Notifier {
         }]);
     }
 
+    /**
+     * Sends a critical captcha detected notification.
+     * @param {string} profileId - The profile identifier where the captcha appeared.
+     * @returns {Promise<void>}
+     */
     async notifyCaptcha(profileId) {
         return this.sendDiscordMessage(`@everyone 🆘 **CAPTCHA DETECTED** on [${profileId}]!`, [{
             title: 'Human Intervention Required',
             description: 'The bot has stopped due to access verification.',
-            color: 0xf59e0b, // Yellow
+            color: 0xf59e0b, 
             timestamp: new Date().toISOString()
         }]);
     }

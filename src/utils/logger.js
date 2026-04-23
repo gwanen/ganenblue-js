@@ -31,8 +31,12 @@ const logger = winston.createLogger({
     ]
 });
 
-// Helper to create profile-scoped logger
-// Uses Winston's child() so every log entry auto-carries { profileId } as metadata
+/**
+ * Helper to create profile-scoped logger.
+ * Uses Winston's child() so every log entry automatically carries { profileId } as metadata.
+ * @param {string} profileId - The unique identifier for the browser profile.
+ * @returns {import('winston').Logger} A scoped logger instance.
+ */
 export const createScopedLogger = (profileId) => {
     return logger.child({ profileId });
 };

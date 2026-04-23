@@ -3,55 +3,70 @@ import { sleep, randomDelay } from "../utils/random.js";
 import logger from "../utils/logger.js";
 import config from "../utils/config.js";
 
+/**
+ * Handles battle orchestration, including state monitoring, mode execution (Full/Semi Auto),
+ * and result processing. Integrates with NetworkListener for reactive combat logic.
+ */
 class BattleHandler {
-  constructor(page, options = {}) {
-    // Reuse parent bot's PageController if provided (avoids duplicate NetworkListeners per profile)
-    this.controller = options.controller || new PageController(page);
-    this.selectors = config.selectors.battle;
-    this.stopped = false;
-    this.battleStartTime = null;
-    this.lastBattleDuration = 0;
-    this.lastHonors = 0;
-    this.fastRefresh = options.fastRefresh || false;
-    this.summonRefresh =
-      options.summonRefresh !== undefined ? options.summonRefresh : true;
-    this.skillRefresh =
-      options.skillRefresh !== undefined ? options.skillRefresh : false;
-    this.preBattleAutoAttack = options.preBattleAutoAttack || "off";
-    this.logger = options.logger || logger;
-    this.faActive = false;
-    this.isResultConfirmed = false;
-  }
+    /**
+     * @param {import('puppeteer').Page} page - The current browser page.
+     * @param {object} [options={}] - Configuration options.
+     */
+    constructor(page, options = {}) {
+        // Reuse parent bot's PageController if provided to avoid duplicate NetworkListeners
+        this.controller = options.controller || new PageController(page);
+        this.selectors = config.selectors.battle;
+        this.stopped = false;
+        this.battleStartTime = null;
+        this.lastBattleDuration = 0;
+        this.lastHonors = 0;
+        this.fastRefresh = options.fastRefresh || false;
+        this.noRefresh = options.noRefresh || false;
+        this.summonRefresh = options.summonRefresh !== undefined ? options.summonRefresh : true;
+        this.skillRefresh = options.skillRefresh !== undefined ? options.skillRefresh : false;
+        this.preBattleAutoAttack = options.preBattleAutoAttack || "off";
+        this.logger = options.logger || logger;
+        this.faActive = false;
+        this.isResultConfirmed = false;
+    }
 
-  formatTime(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  }
+    /**
+     * Formats milliseconds into a MM:SS string.
+     * @param {number} milliseconds - Duration in ms.
+     * @returns {string} Formatted time string.
+     */
+    formatTime(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+    }
 
   stop() {
     this.stopped = true;
   }
 
-  /**
-   * Clears any pre-registered network event flags that may have been set by
-   * stale events (e.g. a previous battle's result.json arriving during
-   * navigation to the next quest URL). Call this before executeBattle() when
-   * the caller knows the pre-flags are not valid for the upcoming battle.
-   */
-  resetPreFlags() {
-    this._preNetworkFinished = false;
-    this._preBossDied = false;
-    this._prePartyWiped = false;
-    this._preSummonUsed = false;
-    this._preAbilityUsed = false;
-    this._preAttackUsed = false;
-    this._preNetworkTurn = 0;
-    this._preNetworkTurnReady = false;
-  }
+    /**
+     * Resets pre-registered network event flags to prevent stale data from affecting new battles.
+     */
+    resetPreFlags() {
+        this._preNetworkFinished = false;
+        this._preBossDied = false;
+        this._prePartyWiped = false;
+        this._preSummonUsed = false;
+        this._preAbilityUsed = false;
+        this._preAttackUsed = false;
+        this._preNetworkTurn = 0;
+        this._preNetworkTurnReady = false;
+    }
 
-  async executeBattle(mode = "full_auto", options = {}) {
+    /**
+     * Entry point for combat execution.
+     * @param {string} [mode="full_auto"] - Combat mode ("full_auto", "semi_auto").
+     * @param {object} [options={}] - Execution overrides.
+     * @returns {Promise<object>} Battle summary (duration, turns, honors, rewards).
+     */
+    async executeBattle(mode = "full_auto", options = {}) {
     this.stopped = false;
     this.skipRaid = false;
     this.options = options;
@@ -308,7 +323,12 @@ class BattleHandler {
     }
   }
 
-  async _doPrebattleTap() {
+    /**
+     * Performs a pre-battle tap to arm auto-attack before the UI is fully interactive.
+     * Uses CDP touch events for precise timing.
+     * @private
+     */
+    async _doPrebattleTap() {
     try {
       const coords = await this.controller.page.evaluate(() => {
         const el = document.querySelector(".prt-auto-setting");
@@ -344,7 +364,11 @@ class BattleHandler {
     }
   }
 
-  async handleFullAuto() {
+    /**
+     * Activates Full Auto mode and handles common post-activation popups.
+     * Includes retry logic for UI inconsistencies.
+     */
+    async handleFullAuto() {
     const url = this.controller.page.url();
     // Check for result page (both hash-based and path-based URLs)
     const isResultUrl =
@@ -525,7 +549,12 @@ class BattleHandler {
       .catch(() => true); // If evaluate fails, assume active (don't reload on frame issues)
   }
 
-  async handleSemiAuto() {
+    /**
+     * Executes a single combat turn in Semi Auto mode.
+     * Performs a reactive attack and optional animation skip reload.
+     * @returns {Promise<boolean>} True if the attack was network-confirmed.
+     */
+    async handleSemiAuto() {
     const activeSelector = ".btn-attack-start.display-on";
     const startTime = Date.now();
 
@@ -640,7 +669,14 @@ class BattleHandler {
     return attackConfirmed;
   }
 
-  async waitForBattleEnd(mode, initialTurns = null) {
+    /**
+     * Monitors the battle progress until termination (victory, defeat, or timeout).
+     * Orchestrates reactive reloads and honor/turn logging based on network events.
+     * @param {string} mode - Active combat mode.
+     * @param {number|null} [initialTurns=null] - Pre-fetched turn count.
+     * @returns {Promise<object>} Final battle statistics.
+     */
+    async waitForBattleEnd(mode, initialTurns = null) {
     const honorTarget = parseInt(this.options?.honorTarget, 10) || 0;
     this.logger.debug(
       `[Honor] Target: ${honorTarget.toLocaleString()} (raw: "${this.options?.honorTarget}")`,
@@ -902,22 +938,28 @@ class BattleHandler {
 
         // --- PRIORITY 0: Network end-state signals (fastest) ---
         if (bossDied || partyWiped) {
-          await this.controller.page.reload({ waitUntil: "domcontentloaded" });
-          await sleep(this.fastRefresh ? 100 : 200);
-          if (
-            isRaid &&
-            honorTarget > 0 &&
-            !honorTargetReached &&
-            previousHonors >= honorTarget
-          ) {
-            honorTargetReached = true;
+          if (this.noRefresh) {
+            // Free quest: game auto-navigates to result URL — clear flags and wait for networkFinished
+            bossDied = false;
+            partyWiped = false;
+          } else {
+            await this.controller.page.reload({ waitUntil: "domcontentloaded" });
+            await sleep(this.fastRefresh ? 100 : 200);
+            if (
+              isRaid &&
+              honorTarget > 0 &&
+              !honorTargetReached &&
+              previousHonors >= honorTarget
+            ) {
+              honorTargetReached = true;
+            }
+            return {
+              duration: (Date.now() - startTime) / 1000,
+              turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
+              honors: previousHonors,
+              honorReached: honorTargetReached,
+            };
           }
-          return {
-            duration: (Date.now() - startTime) / 1000,
-            turns: isSemiAuto ? "N/A" : Math.max(turnCount, 1),
-            honors: previousHonors,
-            honorReached: honorTargetReached,
-          };
         }
 
         if (networkFinished) {
@@ -1036,7 +1078,7 @@ class BattleHandler {
               missingUiCount = 0;
             } else {
               missingUiCount++;
-              if (missingUiCount >= 6) {
+              if (missingUiCount >= 6 && !this.noRefresh) {
                 // ~18s with 3s checks
                 this.logger.warn("[Battle] UI missing (stuck). Refreshing");
                 await this.controller.reloadPage();
@@ -1063,7 +1105,7 @@ class BattleHandler {
           }
         }
 
-        if (currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/)) {
+        if (currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) && !this.noRefresh) {
           // Animation Skipping (Full Auto only — SA handles its own reload after each attack)
           // Added: Check lastReloadTurn to avoid reloading multiple times for the same turn animation skip
 
@@ -1288,30 +1330,6 @@ class BattleHandler {
   async _checkStateAndResume(mode) {
     const url = this.controller.page.url();
 
-    // 1. Check URL and Login Button (Most reliable)
-    const isLoggedOut = await this.controller.page
-      .evaluate(() => {
-        const url = window.location.href;
-        const hasLogin = !!document.querySelector("#login-auth");
-        const isHome =
-          url === "https://game.granbluefantasy.jp/" ||
-          url === "https://game.granbluefantasy.jp/#" ||
-          url.includes("#mypage") ||
-          url.includes("#top") ||
-          url.includes("mobage.jp") ||
-          url.includes("registration");
-        return hasLogin || isHome;
-      })
-      .catch(() => false);
-
-    if (isLoggedOut) {
-      this.logger.error(
-        `[Safety] Session expired or Redirected to landing (${url}). Stopping`,
-      );
-      this.stop();
-      return true; // Stop execution
-    }
-
     // Check both hash-based and path-based result/quest index URLs
     const isResultUrl =
       url.includes("#result") ||
@@ -1323,7 +1341,7 @@ class BattleHandler {
       return true;
     }
 
-    // 2. Check for Empty Result Notice or Wipe/Cheer popup (network is primary, this is fallback)
+    // Check for Empty Result Notice or Wipe/Cheer popup (network is primary, this is fallback)
     const endState2 = await this.controller.page
       .evaluate((selectors) => {
         if (document.querySelector(selectors.emptyResultNotice))
@@ -1349,7 +1367,7 @@ class BattleHandler {
       return true;
     }
 
-    // 3. Still in battle? Quick pre-check before re-engaging FA to prevent reload loops
+    // Still in battle? Quick pre-check before re-engaging FA to prevent reload loops
     this.logger.debug("[Battle] Checking for battle UI to re-engaging FA");
 
     // Frame stability guard: ensure frame is attached before waitForFunction
@@ -1491,11 +1509,12 @@ class BattleHandler {
     return state.turn || 0;
   }
 
-  /**
-   * Check for early battle end popups (raid full, ended, pending, etc.)
-   * @param {boolean} questMode - If true, skip result page element checks (may be stale from previous battle)
-   */
-  async checkEarlyBattleEndPopup(questMode = false) {
+    /**
+     * Detects popups that indicate an early end to the battle or join failure.
+     * @param {boolean} [questMode=false] - If true, skips stale result page checks.
+     * @returns {Promise<object|null>} Error details if found, otherwise null.
+     */
+    async checkEarlyBattleEndPopup(questMode = false) {
     const popupData = await this.controller.page
       .evaluate((skipResultElement) => {
         // Skip result page check in quest mode - elements may be stale from previous battle
@@ -1599,11 +1618,12 @@ class BattleHandler {
       .catch(() => false);
   }
 
-  /**
-   * SPD-02: Batched UI State Snapshot.
-   * Fetches turn, honor, and terminal states (boss death, wipe, results) in a single CDP roundtrip.
-   */
-  async getBattleStateSnapshot() {
+    /**
+     * Captures a comprehensive snapshot of battle state in a single DOM round-trip.
+     * Highly optimized for combat loop performance.
+     * @returns {Promise<object>} State snapshot including turn, honors, and UI flags.
+     */
+    async getBattleStateSnapshot() {
     return await this.controller.page
       .evaluate((selectors) => {
         const res = {
