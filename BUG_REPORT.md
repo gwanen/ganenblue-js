@@ -1,310 +1,160 @@
-# Bug Report - Ganenblue-JS
+# Bug Report & Fixes - Ganenblue-JS
 
 **Date:** 2026-04-28  
-**Version:** 1.0.0
+**Version:** 1.0.0  
+**Status:** ALL CRITICAL BUGS FIXED ✅
 
 ---
 
-## 🔴 CRITICAL BUGS
+## ✅ FIXED BUGS (5 total)
 
-### 1. Memory Leak: `battle:result` Listener Not Cleaned Up in `raid-bot.js`
+### 1. ✅ Memory Leak: `battle:result` Listener Not Cleaned Up
 **File:** `src/bot/raid-bot.js`  
-**Location:** Lines 186-191 (start) and 1165-1181 (stop)  
-**Severity:** CRITICAL
+**Status:** FIXED  
+**Commit:** 844de14
 
-**Issue:**
-In the `start()` method, the bot registers a listener for `battle:result`:
-```javascript
-this.controller.network.on("battle:result", this.onBattleResult);  // Line 190
-```
+The `battle:result` listener added in `start()` was never removed in `stop()`, causing listener accumulation in long sessions.
 
-However, in the `stop()` method, this listener is **never removed**:
-```javascript
-stop() {
-  // ...removes raid:error, battle:start, raid:supporter_screen
-  // BUT MISSING: this.controller.network.removeListener("battle:result", this.onBattleResult);
-}
-```
-
-**Impact:** 
-- Each raid session accumulates another listener without cleanup
-- Long-running raid sessions will have dozens of duplicate listeners
-- Memory leak increases with session duration
-- NetworkListener already warns about this (line 30-31 of network-listener.js)
-
-**Fix:**
-```javascript
-stop() {
-    // ... existing code ...
-    if (this.controller.network) {
-        this.controller.network.removeListener("raid:error", this.onRaidError);
-        this.controller.network.removeListener("battle:start", this.onBattleStart);
-        this.controller.network.removeListener("raid:supporter_screen", this.onSupporterScreen);
-        this.controller.network.removeListener("battle:result", this.onBattleResult);  // ADD THIS
-    }
-}
-```
+**Fix Applied:** Added listener removal to stop() method.
 
 ---
 
-### 2. Memory Leak: Quest-Bot Network Listeners Not Cleaned Up
-**File:** `src/bot/quest-bot.js`  
-**Location:** Lines 86-92 (start) and missing cleanup in stop()  
-**Severity:** CRITICAL
-
-**Issue:**
-Network listeners are registered but never removed:
-```javascript
-// start() method - listeners registered
-this.controller.network.on("raid:error", this.onRaidError);
-this.controller.network.on("raid:supporter_screen", this.onSupporterScreen);
-
-// stop() method - NO CLEANUP
-stop() {
-    this.isRunning = false;
-    this.battle.stop();
-    this.controller.stop().catch(/* ... */);
-    // Missing listener cleanup
-}
-```
-
-**Impact:**
-- Same listener accumulation as raid-bot
-- Affects quest farming sessions
-
-**Fix:**
-Add cleanup to `stop()` method in quest-bot.js:
-```javascript
-stop() {
-    this.isRunning = false;
-    if (this.battle) this.battle.stop();
-    
-    if (this.controller.network) {
-        this.controller.network.removeListener("raid:error", this.onRaidError);
-        this.controller.network.removeListener("raid:supporter_screen", this.onSupporterScreen);
-    }
-    
-    this.controller.stop().catch(e => 
-        this.logger.warn("[Performance] Failed to stop controller", e)
-    );
-    this.logger.info("[System] Shutdown requested");
-}
-```
-
----
-
-### 3. Listener Cleanup Race Condition in `clearPendingBattles()`
+### 3. ✅ Race Condition in `clearPendingBattles()`
 **File:** `src/bot/raid-bot.js`  
-**Location:** Lines 798-838  
-**Severity:** HIGH
+**Status:** FIXED  
+**Commit:** 844de14
 
-**Issue:**
-The promise-based listener setup has a potential race condition:
-```javascript
-await new Promise((resolve) => {
-    let resolved = false;
-    
-    const hardTimeout = setTimeout(() => {
-        if (!resolved) {
-            resolved = true;
-            this.controller.network?.off("battle:result", onResult);  // Line 804
-            resolve(null);
-        }
-    }, 5000);
-    
-    const onResult = ({ rewards, url: resultUrl }) => { /* ... */ };
-    this.controller.network?.on("battle:result", onResult);  // Line 838
-});
-```
+Race conditions in listener cleanup when network listener became null during promises.
 
-**Problem:**
-- If `this.controller.network` becomes null/undefined during the promise, the listener removal at line 804 silently fails
-- The listener remains attached indefinitely
-- Network listener cleanup won't remove listeners attached with `.on()` if called via optional chaining
-
-**Impact:**
-- Listeners accumulate during pending battle clearing
-- Can affect long raid sessions with many pending battles
-
-**Fix:**
-Check for network before cleanup:
-```javascript
-const hardTimeout = setTimeout(() => {
-    if (!resolved && this.controller.network) {
-        resolved = true;
-        this.controller.network.off("battle:result", onResult);
-        resolve(null);
-    }
-}, 5000);
-```
+**Fix Applied:** Added explicit null checks before listener operations (replaced unsafe optional chaining).
 
 ---
 
-## 🟡 HIGH PRIORITY BUGS
-
-### 4. Missing Error Cleanup in raid-bot.js `start()` Method
+### 4. ✅ Missing Error Cleanup in raid-bot.js `start()`
 **File:** `src/bot/raid-bot.js`  
-**Location:** Lines 186-191  
-**Severity:** HIGH
+**Status:** FIXED  
+**Commit:** 10e9318
 
-**Issue:**
-The `start()` method registers listeners but the outer try/catch's finally block calls `stop()` which may not properly clean them up if an exception occurs during listener attachment.
+Listener attachment happened outside try block, making error handling unreliable.
 
-**Impact:**
-If an error occurs after registering some listeners but before all are registered, cleanup may be incomplete.
+**Fix Applied:** Moved listener attachment into try block for guaranteed cleanup via finally.
 
 ---
 
-### 5. BattleHandler Missing Network Listener Cleanup
-**File:** `src/bot/battle-handler.js`  
-**Severity:** HIGH
-
-**Issue:**
-The BattleHandler class receives a controller with an active network listener (from parent bot) but has no visible cleanup mechanism. If BattleHandler subscribes to events, they're never unsubscribed.
-
-**Current Code:**
-```javascript
-class BattleHandler {
-    constructor(page, options = {}) {
-        this.controller = options.controller || new PageController(page);
-        // ... no stop() method that cleans up network listeners
-    }
-    
-    stop() {
-        this.stopped = true;  // Only sets flag, doesn't clean listeners
-    }
-}
-```
-
-**Impact:**
-If BattleHandler adds listeners (currently it doesn't, but it's architecturally vulnerable), they would leak.
-
----
-
-## 🟠 MEDIUM PRIORITY BUGS
-
-### 6. Event Listener `battle:result` Removed in `stop()` But Never Added
-**File:** `src/bot/raid-bot.js`  
-**Location:** Line 1181 (attempted removal in stop)  
-**Severity:** MEDIUM (Logic Issue)
-
-**Current Code (stop method):**
-```javascript
-stop() {
-    // ... other cleanup ...
-    if (this.controller.network) {
-        this.controller.network.removeListener("raid:error", this.onRaidError);
-        this.controller.network.removeListener("battle:start", this.onBattleStart);
-        this.controller.network.removeListener("raid:supporter_screen", this.onSupporterScreen);
-        // battle:result listener NOT removed (because it was never registered)
-    }
-}
-```
-
-**Issue:**
-The listener is added in `start()` (line 190) but the code structure suggests developers expected it to be removed. Currently it's not in the stop() removal list, which is the root cause of bug #1.
-
----
-
-### 7. Unsafe Optional Chaining in Network Event Binding
-**File:** `src/bot/raid-bot.js`  
-**Location:** Lines 804, 820, 831, 838  
-**Severity:** MEDIUM
-
-**Issue:**
-```javascript
-this.controller.network?.off("battle:result", onResult);  // Line 804
-this.controller.network?.on("battle:result", onResult);   // Line 838
-```
-
-Using optional chaining hides errors. If `this.controller.network` is null, the listener operations silently fail.
-
-**Better Approach:**
-```javascript
-if (this.controller.network) {
-    this.controller.network.off("battle:result", onResult);
-}
-```
-
----
-
-## 🔵 LOW PRIORITY BUGS / CODE QUALITY
-
-### 8. Inconsistent Logger Prefix in NetworkListener
+### 8. ✅ Typo in NetworkListener Warning
 **File:** `src/core/network-listener.js`  
-**Location:** Line 31  
-**Severity:** LOW
+**Status:** FIXED  
+**Commit:** 844de14
 
-**Issue:**
-Typo in log message:
-```javascript
-if (this.listenerCount('battle:result') > 50) {
-    this.logger.warn('[Warn] Core: Potential listener leak detected (combat:result)');
-    //                                                               ^^^^^^ should be "battle:result"
-}
+Warning message said "combat:result" instead of "battle:result".
+
+**Fix Applied:** Corrected typo.
+
+---
+
+### 9. ✅ Hardcoded Timeout Values
+**File:** `src/bot/raid-bot.js` + `config/default.yaml`  
+**Status:** FIXED  
+**Commit:** 57c79ca
+
+All hardcoded timeout values extracted to configurable YAML.
+
+**Fix Applied:** Created `timeouts.raid.*` section in config with 10 configurable parameters.
+
+---
+
+## 🐛 BONUS BUG FOUND & FIXED
+
+### 10. ✅ Detached Frame Errors Retried Unnecessarily (FATAL ERROR)
+**File:** `src/core/page-controller.js`  
+**Status:** FIXED  
+**Commit:** 1eeec7c  
+**Severity:** HIGH
+
+Detached frame errors (fatal/unrecoverable) were being retried with expensive `reloadHard()` operations, causing 6+ second delays before finally failing.
+
+**Fix Applied:** Detect detached frame errors early and throw `DETACHED_FRAME` immediately without retry.
+
+**Impact:** Fixed test timeout in `navigation-stability.test.js`. All 59 tests now pass.
+
+---
+
+## ✅ VERIFIED OK
+
+### 2. ✅ Quest-Bot Listeners - Already Cleaned Up
+**File:** `src/bot/quest-bot.js`  
+Initial analysis was incorrect. The quest-bot DOES properly remove listeners in stop() method (lines 833-837).
+
+### 5. ✅ BattleHandler Listener Cleanup - Working Correctly
+**File:** `src/bot/battle-handler.js`  
+Initial concern was unfounded. Listeners ARE properly cleaned up in the finally block (lines 1299-1309).
+
+---
+
+## 📊 FINAL SUMMARY
+
+| Bug | File | Severity | Status |
+|-----|------|----------|--------|
+| 1 | raid-bot.js | CRITICAL | ✅ FIXED |
+| 2 | quest-bot.js | CRITICAL | ✅ VERIFIED OK |
+| 3 | raid-bot.js | HIGH | ✅ FIXED |
+| 4 | raid-bot.js | HIGH | ✅ FIXED |
+| 5 | battle-handler.js | HIGH | ✅ VERIFIED OK |
+| 8 | network-listener.js | LOW | ✅ FIXED |
+| 9 | raid-bot.js | LOW | ✅ FIXED |
+| BONUS | page-controller.js | HIGH | ✅ FIXED |
+
+---
+
+## 🎯 COMMITS APPLIED
+
+1. **844de14** - Eliminate critical listener memory leaks and race conditions
+2. **10e9318** - Improve error safety in raid-bot start() method
+3. **57c79ca** - Extract hardcoded raid timeouts to config
+4. **772107d** - Remove unused cleanup function in battle-handler
+5. **1eeec7c** - Prevent retrying on detached frame errors (fatal)
+
+---
+
+## 📈 TEST RESULTS
+
+**Before:** 1 test failing (timeout)
+```
+Test Suites: 1 failed, 4 passed, 5 total
+Tests:       1 failed, 58 passed, 59 total
+```
+
+**After:** All tests passing ✅
+```
+Test Suites: 5 passed, 5 total
+Tests:       59 passed, 59 total
 ```
 
 ---
 
-### 9. Hardcoded Timeout Values
-**File:** `src/bot/raid-bot.js`  
-**Location:** Multiple locations (3000ms, 5000ms, 100ms)  
-**Severity:** LOW
+## 🚀 CONFIG IMPROVEMENTS
 
-**Issue:**
-Timeout values are hardcoded throughout the file. Should be configurable constants.
-
-Example:
-```javascript
-await this.waitForRaidError(3000);  // Hardcoded
+New configurable timeouts in `config/default.yaml`:
+```yaml
+timeouts:
+  raid:
+    error_detection: 3000       # Detect raid join errors
+    supporter_list_check: 100   # Check supporter screen
+    element_click: 1000         # Click timeout
+    join_race: 3000             # Join confirmation race
+    page_transition: 200        # Page transition delay
+    spa_navigation: 300         # SPA routing delay
+    pending_detail_xhr: 2000    # Detail XHR wait
+    pending_hard_timeout: 5000  # Hard timeout for pending
+    transient_error_wait: 500   # Retry delay
+    cooldown: 5000              # Cooldown step
 ```
 
 ---
 
-## 📋 TESTING RECOMMENDATIONS
+## 📋 RECOMMENDATIONS
 
-1. **Test long raid sessions** (100+ raids) and monitor listener count:
-   ```javascript
-   console.log(networkListener.listenerCount('battle:result'));  // Should stay < 5
-   ```
-
-2. **Test bot restart cycles:**
-   - Start raid bot
-   - Stop after 5 raids
-   - Restart immediately
-   - Repeat 5 times → Check listener count is stable
-
-3. **Test memory growth:**
-   - Run raid bot for 8+ hours
-   - Monitor RSS memory via memory-watchdog
-   - Should not exceed ~500MB
-
-4. **Test browser disconnection:**
-   - Kill browser process during raid
-   - Verify stop() completes without hanging
-
----
-
-## 📝 SUMMARY TABLE
-
-| Bug ID | File | Severity | Type | Fix Time |
-|--------|------|----------|------|----------|
-| 1 | raid-bot.js | CRITICAL | Memory Leak | 5 min |
-| 2 | quest-bot.js | CRITICAL | Memory Leak | 5 min |
-| 3 | raid-bot.js | HIGH | Race Condition | 10 min |
-| 4 | raid-bot.js | HIGH | Exception Safety | 10 min |
-| 5 | battle-handler.js | HIGH | Arch Vulnerability | 15 min |
-| 6 | raid-bot.js | MEDIUM | Logic Consistency | 2 min |
-| 7 | raid-bot.js | MEDIUM | Error Handling | 10 min |
-| 8 | network-listener.js | LOW | Typo | 1 min |
-| 9 | raid-bot.js | LOW | Code Quality | 15 min |
-
----
-
-## 🚀 RECOMMENDED FIX ORDER
-
-1. **Fix #1 & #2 FIRST** (Memory leaks) - Critical for long-running sessions
-2. **Fix #3** (Race condition) - Affects pending battle clearing
-3. **Fix #7** (Optional chaining) - Better error visibility
-4. **Fix #5** (BattleHandler architecture) - Defensive design
-5. **Fix remaining items** - Polish & code quality
+1. **Monitor long sessions** - Run raid bot for 8+ hours and check RSS memory should stay ~500MB
+2. **Test 100+ raids** - Verify listener count stays < 5 (was accumulating before)
+3. **Test restart cycles** - Start/stop/restart 5+ times to verify no listener leaks
+4. **Tune timeouts** - Adjust `config/default.yaml` timeouts for your network speed
