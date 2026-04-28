@@ -183,6 +183,7 @@ class RaidBot {
         this.goldBricks = 0;
         this.startTime = Date.now();
 
+    try {
         if (this.controller.network) {
             this.controller.network.on("raid:error", this.onRaidError);
             this.controller.network.on("battle:start", this.onBattleStart);
@@ -191,62 +192,60 @@ class RaidBot {
         }
 
         this.logger.info("[Bot] Session started");
-        // ... rest of logic
 
-    try {
-      while (this.isRunning) {
-        if (this.isPaused) {
-          await sleep(1000);
-          continue;
-        }
-
-        // Check raid limit
-        if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
-          this.logger.info(
-            `[Raid] Limit reached: ${this.raidsCompleted}/${this.maxRaids}`,
-          );
-          break;
-        }
-
-        let success = false;
-        try {
-          success = await this.runSingleRaid();
-        } catch (cycleError) {
-          if (this.controller.isNetworkError(cycleError)) {
-            this.logger.warn(
-              `[Raid] Transient error during cycle. Retrying: ${cycleError.message}`,
-            );
-            await sleep(500);
+        while (this.isRunning) {
+          if (this.isPaused) {
+            await sleep(1000);
             continue;
           }
-          throw cycleError; // Re-throw fatal errors
-        }
-        if (success) {
-          this.raidsCompleted++;
-        }
 
-        // Short delay between raids - balanced for browser health
-        await sleep(50);
-      }
+          // Check raid limit
+          if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
+            this.logger.info(
+              `[Raid] Limit reached: ${this.raidsCompleted}/${this.maxRaids}`,
+            );
+            break;
+          }
+
+          let success = false;
+          try {
+            success = await this.runSingleRaid();
+          } catch (cycleError) {
+            if (this.controller.isNetworkError(cycleError)) {
+              this.logger.warn(
+                `[Raid] Transient error during cycle. Retrying: ${cycleError.message}`,
+              );
+              await sleep(500);
+              continue;
+            }
+            throw cycleError; // Re-throw fatal errors
+          }
+          if (success) {
+            this.raidsCompleted++;
+          }
+
+          // Short delay between raids - balanced for browser health
+          await sleep(50);
+        }
     } catch (error) {
-      // Graceful exit on browser close/disconnect
-      if (
-        this.controller.isNetworkError(error) ||
-        error.message.includes("Target closed") ||
-        error.message.includes("Session closed")
-      ) {
-        this.logger.info("[System] Session terminated (Browser closed)");
-      } else {
-        this.logger.error("[Error] [Bot] Raid bot error:", error);
-        notifier
-          .notifyError(this.profileId || "p1", error.message)
-          .catch((e) =>
-            this.logger.debug("[Notifier] Failed to notify error", e),
-          );
-        throw error;
-      }
+        // Graceful exit on browser close/disconnect
+        if (
+          this.controller.isNetworkError(error) ||
+          error.message.includes("Target closed") ||
+          error.message.includes("Session closed")
+        ) {
+          this.logger.info("[System] Session terminated (Browser closed)");
+        } else {
+          this.logger.error("[Error] [Bot] Raid bot error:", error);
+          notifier
+            .notifyError(this.profileId || "p1", error.message)
+            .catch((e) =>
+              this.logger.debug("[Notifier] Failed to notify error", e),
+            );
+          throw error;
+        }
     } finally {
-      this.stop();
+        this.stop();
     }
   }
 
