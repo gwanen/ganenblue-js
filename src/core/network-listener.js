@@ -28,7 +28,7 @@ class NetworkListener extends EventEmitter {
                 this.logger.warn(`[Warn] Core: High listener count for '${eventName}' (Count: ${count})`);
             }
             if (this.listenerCount('battle:result') > 50) {
-                this.logger.warn('[Warn] Core: Potential listener leak detected (combat:result)');
+                this.logger.warn('[Warn] Core: Potential listener leak detected (battle:result)');
             }
         });
 

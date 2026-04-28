@@ -799,9 +799,9 @@ class RaidBot {
           let resolved = false;
 
           const hardTimeout = setTimeout(() => {
-            if (!resolved) {
+            if (!resolved && this.controller.network) {
               resolved = true;
-              this.controller.network?.off("battle:result", onResult);
+              this.controller.network.off("battle:result", onResult);
               resolve(null);
             }
           }, 5000);
@@ -817,7 +817,9 @@ class RaidBot {
                 resolved = true;
                 clearTimeout(hardTimeout);
                 clearTimeout(softTimeout);
-                this.controller.network?.off("battle:result", onResult);
+                if (this.controller.network) {
+                  this.controller.network.off("battle:result", onResult);
+                }
                 resolve(null);
               }
             } else if (!softTimeout) {
@@ -828,14 +830,18 @@ class RaidBot {
                 if (!resolved) {
                   this.logger.warn(`[Loot] Detail XHR did not arrive in time — no chest data for this pending raid`);
                   resolved = true;
-                  this.controller.network?.off("battle:result", onResult);
+                  if (this.controller.network) {
+                    this.controller.network.off("battle:result", onResult);
+                  }
                   resolve(null);
                 }
               }, 2000);
             }
           };
 
-          this.controller.network?.on("battle:result", onResult);
+          if (this.controller.network) {
+            this.controller.network.on("battle:result", onResult);
+          }
         });
 
         clearedCount++;
@@ -1177,6 +1183,10 @@ class RaidBot {
       this.controller.network.removeListener(
         "raid:supporter_screen",
         this.onSupporterScreen,
+      );
+      this.controller.network.removeListener(
+        "battle:result",
+        this.onBattleResult,
       );
     }
 
