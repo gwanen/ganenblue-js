@@ -47,6 +47,7 @@ class RaidBot {
         this.redChests = 0;
         this.blueChests = 0;
         this.goldBricks = 0;
+        this._lastProcessedRewardsHash = null;
 
         // --- Performance Optimizations ---
         if (options.blockResources) {
@@ -77,6 +78,14 @@ class RaidBot {
       if (rewards) this.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
       return;
     }
+
+    // Dedup: Prevent double-counting when both session listener and direct call process same rewards
+    const rewardsHash = JSON.stringify(rewards.reward_list);
+    if (rewardsHash === this._lastProcessedRewardsHash) {
+      this.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
+      return;
+    }
+
     const rl = rewards.reward_list;
 
     if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
@@ -100,6 +109,8 @@ class RaidBot {
         }
       }
     }
+
+    this._lastProcessedRewardsHash = rewardsHash;
   }
 
   _onSupporterScreen() {
@@ -256,6 +267,7 @@ class RaidBot {
     this.raidErrorType = null; // Reset error for new cycle
     this.networkBattleStarted = false; // Reset for new raid
     this.networkSupporterScreen = false; // Reset for new raid
+    this._lastProcessedRewardsHash = null; // Reset dedup for new battle
 
     // Try to find and join a raid
     const joined = await this.findAndJoinRaid();
