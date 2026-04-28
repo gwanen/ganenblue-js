@@ -121,10 +121,12 @@ class RaidBot {
 
     /**
      * Polls for network-detected raid entry errors.
-     * @param {number} [timeout=3000] - Search duration in ms.
+     * @param {number} [timeout] - Search duration in ms (defaults to config value).
      * @returns {Promise<boolean>} True if an error was detected.
      */
-    async waitForRaidError(timeout = 3000) {
+    async waitForRaidError(timeout = null) {
+        const defaultTimeout = config.get("timeouts.raid.error_detection", 3000);
+        timeout = timeout ?? defaultTimeout;
         const start = Date.now();
         while (Date.now() - start < timeout) {
             if (this.raidErrorType !== null || !this.isRunning) return true;
@@ -147,7 +149,7 @@ class RaidBot {
       .clickSafe(".btn-usual-ok", {
         silent: true,
         fast: true,
-        timeout: 1000,
+        timeout: config.get("timeouts.raid.element_click", 1000),
         maxRetries: 1,
       })
       .catch(() => {});
@@ -165,7 +167,7 @@ class RaidBot {
       );
       await this.controller.gotoSPA(this.raidBackupUrl);
     }
-    await sleep(200);
+    await sleep(config.get("timeouts.raid.page_transition", 200));
   }
 
     /**
@@ -461,7 +463,7 @@ class RaidBot {
       if (currentUrl.includes("#result")) {
         // Result from previous battle - navigate to assist page
         await this.controller.gotoSPA(this.raidBackupUrl);
-        await sleep(100);
+        await sleep(config.get("timeouts.raid.page_transition", 200));
         continue;
       }
 
@@ -567,17 +569,18 @@ class RaidBot {
             // click already performed inside evaluate — no handle to detach
 
             try {
+              const joinTimeout = config.get("timeouts.raid.join_race", 3000);
               const raceResult = await Promise.race([
                 this.controller
-                  .waitForElement(".prt-supporter-list", 3000)
+                  .waitForElement(".prt-supporter-list", joinTimeout)
                   .then((res) => (res ? "summon" : null)),
                 this.controller
-                  .waitForElement(".btn-usual-ok", 3000)
+                  .waitForElement(".btn-usual-ok", joinTimeout)
                   .then((res) => (res ? "ok_btn" : null)),
                 this.controller
-                  .waitForElement(".cnt-raid", 3000)
+                  .waitForElement(".cnt-raid", joinTimeout)
                   .then((res) => (res ? "battle" : null)),
-                this.waitForRaidError(3000).then((res) =>
+                this.waitForRaidError(joinTimeout).then((res) =>
                   res ? "network_error" : null,
                 ),
               ]);
@@ -671,12 +674,13 @@ class RaidBot {
           await this.controller.clickSafe(raidSelector);
           await sleep(200);
 
+          const joinTimeout = config.get("timeouts.raid.join_race", 3000);
           const joinResult = await Promise.race([
             this.controller.page.waitForSelector(
               ".prt-supporter-list, .btn-usual-ok",
-              { timeout: 3000 },
+              { timeout: joinTimeout },
             ),
-            this.waitForRaidError(3000).then((res) =>
+            this.waitForRaidError(joinTimeout).then((res) =>
               res ? "network_error" : null,
             ),
           ]).catch(() => null);
@@ -803,7 +807,7 @@ class RaidBot {
               this.controller.network.off("battle:result", onResult);
               resolve(null);
             }
-          }, 5000);
+          }, config.get("timeouts.raid.pending_hard_timeout", 5000));
 
           // After the content page fires, give the detail XHR up to 2s extra.
           let softTimeout = null;
@@ -834,7 +838,7 @@ class RaidBot {
                   }
                   resolve(null);
                 }
-              }, 2000);
+              }, config.get("timeouts.raid.pending_detail_xhr", 2000));
             }
           };
 
@@ -856,13 +860,16 @@ class RaidBot {
 
   async waitForActiveBackupsCooldown() {
     this.logger.warn("[Raid] 3 simultaneous active backup limit reached!");
-    for (let i = 0; i < 15; i += 5) {
+    const cooldownStep = config.get("timeouts.raid.cooldown", 5000);
+    const totalSteps = Math.ceil(15000 / cooldownStep);
+    for (let i = 0; i < totalSteps; i++) {
       if (!this.isRunning) break;
-      this.logger.info(`[Wait] (${i}/15) resuming in ${15 - i}s...`);
-      await sleep(5000);
+      const elapsed = i * cooldownStep;
+      this.logger.info(`[Wait] (${elapsed}/${totalSteps * cooldownStep}) resuming in ${totalSteps * cooldownStep - elapsed}ms...`);
+      await sleep(cooldownStep);
     }
     if (this.isRunning) {
-      this.logger.info(`[Wait] (15/15) resuming...`);
+      this.logger.info(`[Wait] Resuming...`);
     }
   }
 
