@@ -890,18 +890,6 @@ class BattleHandler {
       }
     };
 
-    const cleanup = () => {
-      if (this.controller.network) {
-        this.controller.network.off("battle:result", onBattleResult);
-        this.controller.network.off("battle:boss_died", onBossDied);
-        this.controller.network.off("battle:party_wiped", onPartyWiped);
-        this.controller.network.off("battle:attack_used", onAttack);
-        this.controller.network.off("battle:summon_used", onSummonUsed);
-        this.controller.network.off("battle:ability_used", onAbilityUsed);
-        this.controller.network.off("battle:start", onBattleStart);
-      }
-    };
-
     try {
       if (this.controller.network) {
         this.controller.network.on("battle:result", onBattleResult);
