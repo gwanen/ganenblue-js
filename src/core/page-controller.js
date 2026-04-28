@@ -465,6 +465,14 @@ class PageController {
           ...options,
         });
       } catch (error) {
+        const isDetachedFrame = error.message?.includes("detached Frame") ||
+                               error.message?.includes("Execution context is not available in detached frame");
+
+        if (isDetachedFrame) {
+          this.logger.error(`[Critical] Frame detached - cannot retry navigation`);
+          throw new Error("DETACHED_FRAME");
+        }
+
         if (this.isNetworkError(error) && i < maxRetries - 1) {
           const waitTime = 2000 * (i + 1);
           this.logger.warn(`[Network] Error during navigation, retrying...`);
