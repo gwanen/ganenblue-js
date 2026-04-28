@@ -811,14 +811,13 @@ class RaidBot {
           const onResult = ({ rewards, url: resultUrl }) => {
             const shortUrl = resultUrl ? resultUrl.replace('https://game.granbluefantasy.jp', '') : '?';
             if (rewards !== null) {
-              // Result endpoint responded with reward data — count chests and done.
+              // Result endpoint responded with reward data — session listener will count chests.
               this.logger.info(`[Loot] Pending raid rewards received (${shortUrl})`);
               if (!resolved) {
                 resolved = true;
                 clearTimeout(hardTimeout);
                 clearTimeout(softTimeout);
                 this.controller.network?.off("battle:result", onResult);
-                this._onBattleResult({ rewards });
                 resolve(null);
               }
             } else if (!softTimeout) {
