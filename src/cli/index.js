@@ -55,10 +55,15 @@ program.command('start')
 
             // Handle graceful shutdown
             process.on('SIGINT', async () => {
-                logger.info('[Wait] Stopping bot...');
-                bot.stop();
-                await browserManager.close();
-                process.exit(0);
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
             });
 
             // Start Bot
@@ -102,10 +107,15 @@ program.command('raid')
 
             // Handle graceful shutdown
             process.on('SIGINT', async () => {
-                logger.info('[Wait] Stopping bot...');
-                bot.stop();
-                await browserManager.close();
-                process.exit(0);
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
             });
 
             // Start Bot
@@ -149,10 +159,15 @@ program.command('skip')
 
             // Handle graceful shutdown
             process.on('SIGINT', async () => {
-                logger.info('[Wait] Stopping bot...');
-                bot.stop();
-                await browserManager.close();
-                process.exit(0);
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
             });
 
             // Start Bot
