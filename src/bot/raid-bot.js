@@ -152,7 +152,7 @@ class RaidBot {
      */
     async recoverFromJoinError() {
     const errorType = this.raidErrorType;
-    const currentUrl = this.controller.page.url();
+    const currentUrl = this.controller.page?.url() || '';
     const isOnAssistPage = currentUrl.includes("#quest/assist");
 
     // Dismiss any lingering error popups before navigating/reloading
@@ -285,22 +285,11 @@ class RaidBot {
 
     if (isResult) {
       this.logger.info(
-        "[Raid] Result page detected. Waiting for network to settle...",
+        "[Raid] Result page detected. Navigating to backup...",
       );
-      await sleep(100);
-      // Re-check after waiting
-      const recheckUrl = this.controller.page.url();
-      const stillResult =
-        recheckUrl.includes("#result") ||
-        recheckUrl.includes("/result/content/index/");
-      if (stillResult) {
-        this.logger.warn(
-          "[Raid] Still on result page. Navigating to backup...",
-        );
-        await this.controller.gotoSPA(this.raidBackupUrl);
-        await sleep(50);
-        return false; // Restart cycle
-      }
+      await this.controller.gotoSPA(this.raidBackupUrl);
+      await sleep(50);
+      return false; // Restart cycle
     } else {
       const summonStatus = await this.selectSummon();
 
@@ -415,7 +404,7 @@ class RaidBot {
   }
 
   async findAndJoinRaid() {
-    const initialUrl = this.controller.page.url();
+    const initialUrl = this.controller.page?.url() || '';
     const isInBattleUrl = initialUrl.match(/#(?:raid|raid_multi)(?:\/|$)/);
 
     if (isInBattleUrl || this.networkBattleStarted) {
@@ -745,7 +734,7 @@ class RaidBot {
               return true;
             }
           } else {
-            const urlNow = this.controller.page.url();
+            const urlNow = this.controller.page?.url() || '';
             if (urlNow.includes("#raid") || urlNow.includes("_raid")) {
               this.logger.info("[Raid] Join successful (direct battle)");
               return true;
@@ -768,7 +757,8 @@ class RaidBot {
         await sleep(2000);
 
         // If the game asynchronously redirected us to a pending result screen while we waited
-        if (this.controller.page.url().includes("#result")) {
+        const currentUrl = this.controller.page?.url() || '';
+        if (currentUrl.includes("#result")) {
           continue;
         }
 
@@ -965,7 +955,7 @@ class RaidBot {
           maxRetries: 1,
         });
       } catch (error) {
-        const currentUrl = this.controller.page.url();
+        const currentUrl = this.controller.page?.url() || '';
         if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
           this.logger.info(
             "[Raid] Transitioned to battle. Ignoring click error",
@@ -1100,7 +1090,7 @@ class RaidBot {
 
     for (let i = 0; i < 15; i++) {
       if (this.raidErrorType !== null) return "ended";
-      const currentUrl = this.controller.page.url();
+      const currentUrl = this.controller.page?.url() || '';
 
       if (currentUrl.includes("supporter_raid")) {
         // If we land on the full-page party selection screen, click the start button
@@ -1140,7 +1130,7 @@ class RaidBot {
       await sleep(100);
     }
 
-    const finalUrl = this.controller.page.url();
+    const finalUrl = this.controller.page?.url() || '';
     if (
       !finalUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) &&
       !finalUrl.includes("#result")
