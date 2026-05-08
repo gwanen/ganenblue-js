@@ -47,8 +47,15 @@ class PageController {
 
       const isTracker =
         url.includes("google-analytics.com") ||
+        url.includes("googleanalytics.com") ||
         url.includes("g-acp.com") ||
-        url.includes("doubleclick.net");
+        url.includes("doubleclick.net") ||
+        url.includes("googlesyndication.com") ||
+        url.includes("pagead") ||
+        url.includes("analytics") ||
+        url.includes("adservice") ||
+        url.includes("ads.") ||
+        url.includes("/ads/");
 
       if (isTracker || ["image", "media", "font"].includes(resourceType)) {
         req.abort();
