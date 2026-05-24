@@ -30,7 +30,9 @@ timeouts:
   page_load: 30000
   element_wait: 10000
   battle_max: 600000  # 10 minutes
-  semi_auto_watchdog: 10000 # 10 seconds watchdog for semi-auto mode
+  semi_auto_watchdog: 5000       # Timeout waiting for attack button to appear (ms)
+  semi_auto_attack_confirm: 3000  # Timeout waiting for attack network confirmation (ms)
+  loop_interval: 10       # Battle loop polling interval in ms
 
   # Raid-specific timeouts
   raid:

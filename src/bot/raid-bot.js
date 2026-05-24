@@ -50,7 +50,11 @@ class RaidBot {
         this._lastProcessedRewardsHash = null;
 
         // --- Performance Optimizations ---
-        if (options.blockResources) {
+        const blockResources = options.blockResources !== undefined
+            ? options.blockResources
+            : config.get('stealth.block_resources', false);
+
+        if (blockResources) {
             this.logger.info("[System] Image blocking enabled");
             this.controller.enableResourceBlocking().catch((e) =>
                 this.logger.warn("[System] Failed to enable image blocking", e)

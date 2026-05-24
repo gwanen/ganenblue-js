@@ -142,7 +142,7 @@ class PageController {
 
       await this.page.addStyleTag({
         content: `
-          /* Suppress all animations and transitions */
+          /* 1. Kill all animations and transitions globally */
           *, *::before, *::after {
             animation-duration: 0.001ms !important;
             animation-iteration-count: 1 !important;
@@ -150,14 +150,64 @@ class PageController {
             animation-delay: 0ms !important;
             transition-delay: 0ms !important;
           }
-          
-          /* Specific GBF performance overrides */
+
+          /* 2. Remove GPU compositor layer hints */
+          * {
+            will-change: auto !important;
+          }
+
+          /* 3. Loading screen override */
           .prt-loading-container, #loading-mask {
             background: #000 !important;
           }
-          
-          /* Hide decorative particle effects */
-          [class*="effect-"], [class*="particle-"] {
+
+          /* 4. Particles and effect overlays */
+          [class*="effect-"],
+          [class*="particle-"] {
+            display: none !important;
+          }
+
+          /* 5. Battle backgrounds — pointer-events:none avoids breaking any child selectors */
+          .prt-battle-field,
+          .prt-bg,
+          [class*="background-"] {
+            pointer-events: none !important;
+            will-change: auto !important;
+          }
+
+          /* 6. Character idle animations — paused not hidden (game JS may reference these) */
+          .prt-character,
+          [class*="chara-"] {
+            animation-play-state: paused !important;
+            pointer-events: none !important;
+          }
+
+          /* 7. Canvas (WebGL character renders) — visibility:hidden preserves JS context */
+          canvas {
+            visibility: hidden !important;
+            pointer-events: none !important;
+          }
+
+          /* 8. Ability button flash — target pseudo-elements only, keep button clickable */
+          [class*="btn-ability"]::before,
+          [class*="btn-ability"]::after {
+            display: none !important;
+          }
+
+          /* 9. Story/dialogue text animations */
+          [class*="txt-message-"] {
+            animation-play-state: paused !important;
+          }
+
+          /* 10. Navigation decoration */
+          [class*="prt-navi-"] {
+            pointer-events: none !important;
+          }
+
+          /* 11. Battle result graphic layers (specific sub-class — avoids .prt-result container used by bot) */
+          [class*="result-animation"],
+          [class*="result-bg"],
+          [class*="result-image"] {
             display: none !important;
           }
         `,

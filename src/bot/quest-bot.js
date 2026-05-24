@@ -45,7 +45,11 @@ class QuestBot {
         this.consecutiveFailures = 0;
 
         // --- Performance Optimizations ---
-        if (options.blockResources) {
+        const blockResources = options.blockResources !== undefined
+            ? options.blockResources
+            : config.get('stealth.block_resources', false);
+
+        if (blockResources) {
             this.logger.info("[System] Image blocking enabled");
             this.controller.enableResourceBlocking().catch((e) =>
                 this.logger.warn("[System] Failed to enable image blocking", e)
@@ -497,7 +501,8 @@ class QuestBot {
 
       this.logger.info("[Quest] Supporter selection confirmed");
       const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
-      await this.controller.cachedClick(okSelector, 0).catch(() => { });
+      this.controller.clearClickCache();
+      await this.controller.clickSafe(okSelector, { fast: true, waitAfter: false }).catch(() => { });
       await sleep(50);
       return await this.validatePostClick();
     }
@@ -516,7 +521,8 @@ class QuestBot {
 
       if (await this.controller.elementExists(".btn-usual-ok", 1500, true)) {
         this.logger.info("[Summon] Confirming selection...");
-        await this.controller.cachedClick(".btn-usual-ok", 0).catch(() => { });
+        this.controller.clearClickCache();
+        await this.controller.clickSafe(".btn-usual-ok", { fast: true, waitAfter: false }).catch(() => { });
         await sleep(50);
       }
 
