@@ -499,12 +499,19 @@ class QuestBot {
         return "ended";
       }
 
-      this.logger.info("[Quest] Supporter selection confirmed");
-      const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
-      this.controller.clearClickCache();
-      await this.controller.clickSafe(okSelector, { fast: true, waitAfter: false }).catch(() => { });
-      await sleep(50);
-      return await this.validatePostClick();
+      // If supporter list is also visible, a supporter must be selected first before OK works.
+      // Fall through to the summonSelector path below.
+      const needsSupporterFirst = await this.controller.elementExists(".prt-supporter-list", 0, true);
+      if (!needsSupporterFirst) {
+        this.logger.info("[Quest] Supporter selection confirmed");
+        const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
+        this.controller.clearClickCache();
+        await this.controller.clickSafe(okSelector, { fast: true, waitAfter: false }).catch(() => { });
+        await sleep(50);
+        return await this.validatePostClick();
+      }
+
+      this.logger.info("[Quest] Supporter list present — selecting supporter before confirming");
     }
 
     const summonSelector = ".prt-supporter-detail";
