@@ -480,60 +480,83 @@ class QuestBot {
       return "success";
     }
 
-    // Check for error popups only (skip result page check for quests - stale elements from previous battle)
-    const earlyError = await this.battle.checkEarlyBattleEndPopup(true);
-    if (earlyError) {
-      if (earlyError.raidPending) return "pending";
-      return "ended";
-    }
-
-    const okFound = await this.controller.elementExists(
-      ".btn-usual-ok, .se-quest-start",
-      1000,
-      true,
-    );
+    const okFound = await this.controller.elementExists(".btn-usual-ok", 100, true);
     if (okFound) {
-      // Reuse earlyError result if popup state hasn't changed
-      if (earlyError) {
-        if (earlyError.raidPending) return "pending";
-        return "ended";
+      const error = await this.battle.checkEarlyBattleEndPopup(true);
+      if (error) {
+        if (error.raidEnded || error.raidFull) return "ended";
+        if (error.raidPending) return "pending";
       }
 
-      // If supporter list is also visible, a supporter must be selected first before OK works.
-      // Fall through to the summonSelector path below.
-      const needsSupporterFirst = await this.controller.elementExists(".prt-supporter-list", 0, true);
-      if (!needsSupporterFirst) {
-        this.logger.info("[Quest] Supporter selection confirmed");
-        const okSelector = await this.controller.elementExists(".se-quest-start", 0, true) ? ".se-quest-start" : ".btn-usual-ok";
-        this.controller.clearClickCache();
-        await this.controller.clickSafe(okSelector, { fast: true, waitAfter: false }).catch(() => { });
-        await sleep(50);
-        return await this.validatePostClick();
-      }
+      this.logger.info("[Summon] Clicking start confirmation");
+      this.controller.clearClickCache();
+      await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {
+        this.logger.debug("[Wait] Confirmation popup vanished before click");
+      });
+      await sleep(50);
 
-      this.logger.info("[Quest] Supporter list present — selecting supporter before confirming");
+      return await this.validatePostClick();
     }
 
     const summonSelector = ".prt-supporter-detail";
-    if (await this.controller.elementExists(summonSelector, 3000, true)) {
+    if (await this.controller.elementExists(summonSelector, 2500, true)) {
       this.logger.info("[Summon] Supporter selected");
 
       try {
-        await this.controller.cachedClick(summonSelector, 0);
+        await this.controller.clickSafe(summonSelector, { timeout: 2000, maxRetries: 1 });
       } catch (error) {
-        const url = this.controller.page.url();
+        const url = this.controller.page?.url() || "";
         if (url.match(/#(?:raid|raid_multi)(?:\/|$)/)) return "success";
         throw error;
       }
 
       if (await this.controller.elementExists(".btn-usual-ok", 1500, true)) {
         this.logger.info("[Summon] Confirming selection...");
-        this.controller.clearClickCache();
-        await this.controller.clickSafe(".btn-usual-ok", { fast: true, waitAfter: false }).catch(() => { });
+
+        let clickSuccess = false;
+        for (let i = 0; i < 3; i++) {
+          try {
+            this.controller.clearClickCache();
+            await this.controller.cachedClick(".btn-usual-ok", 15);
+            clickSuccess = true;
+          } catch (e) {}
+
+          if (!(await this.controller.elementExists(".btn-usual-ok", 200, true))) {
+            clickSuccess = true;
+            break;
+          }
+          await sleep(50);
+        }
+
+        if (!clickSuccess)
+          this.logger.warn("[Wait] Failed to click start confirmation properly");
         await sleep(50);
       }
 
       return await this.validatePostClick();
+    }
+
+    const questSelectors = config.selectors.quest;
+    const summonSelectors = [
+      questSelectors.summonSlot1,
+      questSelectors.summonSlot2,
+      questSelectors.summonSlot3,
+    ];
+
+    for (const selector of summonSelectors) {
+      if (await this.controller.elementExists(selector, 1000)) {
+        await this.controller.clickSafe(selector);
+        this.logger.info("[Summon] Supporter selected (fallback)");
+        await sleep(200);
+
+        if (await this.controller.elementExists(".btn-usual-ok", 500, true)) {
+          this.controller.clearClickCache();
+          await this.controller.cachedClick(".btn-usual-ok", 15).catch(() => {});
+          await sleep(50);
+          return await this.validatePostClick();
+        }
+        return "success";
+      }
     }
 
     this.logger.warn("[Summon] No supporter or party selection available");
