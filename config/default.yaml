@@ -30,7 +30,23 @@ timeouts:
   page_load: 30000
   element_wait: 10000
   battle_max: 600000  # 10 minutes
-  semi_auto_watchdog: 10000 # 10 seconds watchdog for semi-auto mode
+  semi_auto_watchdog: 5000       # Timeout waiting for attack button to appear (ms)
+  semi_auto_attack_confirm: 3000  # Timeout waiting for attack network confirmation (ms)
+  loop_interval: 10       # Battle loop polling interval in ms
+
+  # Raid-specific timeouts
+  raid:
+    error_detection: 3000       # Time to detect raid join errors
+    supporter_list_check: 100   # Time to check for supporter selection screen
+    element_click: 1000         # Timeout for click operations
+    join_race: 3000             # Time to wait for join confirmation (summon/ok/battle)
+    page_transition: 200        # Delay for page transitions
+    spa_navigation: 300         # Delay for SPA navigation completion
+    pending_detail_xhr: 2000    # Additional wait for detail XHR in pending battles
+    pending_hard_timeout: 5000  # Hard timeout for pending battle processing
+    transient_error_wait: 500   # Delay after transient errors before retry
+    cooldown: 5000              # Cooldown per step (used in 15s total cooldown)
+    refresh_list_wait: 10       # Minimal wait after raid list refresh
 
 notifications:
   discord_webhook: "" # Add your Discord Webhook URL here

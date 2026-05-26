@@ -47,9 +47,14 @@ class RaidBot {
         this.redChests = 0;
         this.blueChests = 0;
         this.goldBricks = 0;
+        this._lastProcessedRewardsHash = null;
 
         // --- Performance Optimizations ---
-        if (options.blockResources) {
+        const blockResources = options.blockResources !== undefined
+            ? options.blockResources
+            : config.get('stealth.block_resources', false);
+
+        if (blockResources) {
             this.logger.info("[System] Image blocking enabled");
             this.controller.enableResourceBlocking().catch((e) =>
                 this.logger.warn("[System] Failed to enable image blocking", e)
@@ -77,6 +82,14 @@ class RaidBot {
       if (rewards) this.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
       return;
     }
+
+    // Dedup: Prevent double-counting when both session listener and direct call process same rewards
+    const rewardsHash = JSON.stringify(rewards.reward_list);
+    if (rewardsHash === this._lastProcessedRewardsHash) {
+      this.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
+      return;
+    }
+
     const rl = rewards.reward_list;
 
     if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
@@ -100,6 +113,8 @@ class RaidBot {
         }
       }
     }
+
+    this._lastProcessedRewardsHash = rewardsHash;
   }
 
   _onSupporterScreen() {
@@ -121,10 +136,12 @@ class RaidBot {
 
     /**
      * Polls for network-detected raid entry errors.
-     * @param {number} [timeout=3000] - Search duration in ms.
+     * @param {number} [timeout] - Search duration in ms (defaults to config value).
      * @returns {Promise<boolean>} True if an error was detected.
      */
-    async waitForRaidError(timeout = 3000) {
+    async waitForRaidError(timeout = null) {
+        const defaultTimeout = config.get("timeouts.raid.error_detection", 3000);
+        timeout = timeout ?? defaultTimeout;
         const start = Date.now();
         while (Date.now() - start < timeout) {
             if (this.raidErrorType !== null || !this.isRunning) return true;
@@ -139,7 +156,7 @@ class RaidBot {
      */
     async recoverFromJoinError() {
     const errorType = this.raidErrorType;
-    const currentUrl = this.controller.page.url();
+    const currentUrl = this.controller.page?.url() || '';
     const isOnAssistPage = currentUrl.includes("#quest/assist");
 
     // Dismiss any lingering error popups before navigating/reloading
@@ -147,7 +164,7 @@ class RaidBot {
       .clickSafe(".btn-usual-ok", {
         silent: true,
         fast: true,
-        timeout: 1000,
+        timeout: config.get("timeouts.raid.element_click", 1000),
         maxRetries: 1,
       })
       .catch(() => {});
@@ -165,7 +182,7 @@ class RaidBot {
       );
       await this.controller.gotoSPA(this.raidBackupUrl);
     }
-    await sleep(200);
+    await sleep(config.get("timeouts.raid.page_transition", 200));
   }
 
     /**
@@ -183,6 +200,7 @@ class RaidBot {
         this.goldBricks = 0;
         this.startTime = Date.now();
 
+    try {
         if (this.controller.network) {
             this.controller.network.on("raid:error", this.onRaidError);
             this.controller.network.on("battle:start", this.onBattleStart);
@@ -191,62 +209,60 @@ class RaidBot {
         }
 
         this.logger.info("[Bot] Session started");
-        // ... rest of logic
 
-    try {
-      while (this.isRunning) {
-        if (this.isPaused) {
-          await sleep(1000);
-          continue;
-        }
-
-        // Check raid limit
-        if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
-          this.logger.info(
-            `[Raid] Limit reached: ${this.raidsCompleted}/${this.maxRaids}`,
-          );
-          break;
-        }
-
-        let success = false;
-        try {
-          success = await this.runSingleRaid();
-        } catch (cycleError) {
-          if (this.controller.isNetworkError(cycleError)) {
-            this.logger.warn(
-              `[Raid] Transient error during cycle. Retrying: ${cycleError.message}`,
-            );
-            await sleep(500);
+        while (this.isRunning) {
+          if (this.isPaused) {
+            await sleep(1000);
             continue;
           }
-          throw cycleError; // Re-throw fatal errors
-        }
-        if (success) {
-          this.raidsCompleted++;
-        }
 
-        // Short delay between raids - balanced for browser health
-        await sleep(50);
-      }
+          // Check raid limit
+          if (this.maxRaids > 0 && this.raidsCompleted >= this.maxRaids) {
+            this.logger.info(
+              `[Raid] Limit reached: ${this.raidsCompleted}/${this.maxRaids}`,
+            );
+            break;
+          }
+
+          let success = false;
+          try {
+            success = await this.runSingleRaid();
+          } catch (cycleError) {
+            if (this.controller.isNetworkError(cycleError)) {
+              this.logger.warn(
+                `[Raid] Transient error during cycle. Retrying: ${cycleError.message}`,
+              );
+              await sleep(500);
+              continue;
+            }
+            throw cycleError; // Re-throw fatal errors
+          }
+          if (success) {
+            this.raidsCompleted++;
+          }
+
+          // Short delay between raids - balanced for browser health
+          await sleep(50);
+        }
     } catch (error) {
-      // Graceful exit on browser close/disconnect
-      if (
-        this.controller.isNetworkError(error) ||
-        error.message.includes("Target closed") ||
-        error.message.includes("Session closed")
-      ) {
-        this.logger.info("[System] Session terminated (Browser closed)");
-      } else {
-        this.logger.error("[Error] [Bot] Raid bot error:", error);
-        notifier
-          .notifyError(this.profileId || "p1", error.message)
-          .catch((e) =>
-            this.logger.debug("[Notifier] Failed to notify error", e),
-          );
-        throw error;
-      }
+        // Graceful exit on browser close/disconnect
+        if (
+          this.controller.isNetworkError(error) ||
+          error.message.includes("Target closed") ||
+          error.message.includes("Session closed")
+        ) {
+          this.logger.info("[System] Session terminated (Browser closed)");
+        } else {
+          this.logger.error("[Error] [Bot] Raid bot error:", error);
+          notifier
+            .notifyError(this.profileId || "p1", error.message)
+            .catch((e) =>
+              this.logger.debug("[Notifier] Failed to notify error", e),
+            );
+          throw error;
+        }
     } finally {
-      this.stop();
+        this.stop();
     }
   }
 
@@ -255,6 +271,7 @@ class RaidBot {
     this.raidErrorType = null; // Reset error for new cycle
     this.networkBattleStarted = false; // Reset for new raid
     this.networkSupporterScreen = false; // Reset for new raid
+    this._lastProcessedRewardsHash = null; // Reset dedup for new battle
 
     // Try to find and join a raid
     const joined = await this.findAndJoinRaid();
@@ -272,22 +289,11 @@ class RaidBot {
 
     if (isResult) {
       this.logger.info(
-        "[Raid] Result page detected. Waiting for network to settle...",
+        "[Raid] Result page detected. Navigating to backup...",
       );
-      await sleep(100);
-      // Re-check after waiting
-      const recheckUrl = this.controller.page.url();
-      const stillResult =
-        recheckUrl.includes("#result") ||
-        recheckUrl.includes("/result/content/index/");
-      if (stillResult) {
-        this.logger.warn(
-          "[Raid] Still on result page. Navigating to backup...",
-        );
-        await this.controller.gotoSPA(this.raidBackupUrl);
-        await sleep(50);
-        return false; // Restart cycle
-      }
+      await this.controller.gotoSPA(this.raidBackupUrl);
+      await sleep(50);
+      return false; // Restart cycle
     } else {
       const summonStatus = await this.selectSummon();
 
@@ -402,7 +408,7 @@ class RaidBot {
   }
 
   async findAndJoinRaid() {
-    const initialUrl = this.controller.page.url();
+    const initialUrl = this.controller.page?.url() || '';
     const isInBattleUrl = initialUrl.match(/#(?:raid|raid_multi)(?:\/|$)/);
 
     if (isInBattleUrl || this.networkBattleStarted) {
@@ -462,7 +468,7 @@ class RaidBot {
       if (currentUrl.includes("#result")) {
         // Result from previous battle - navigate to assist page
         await this.controller.gotoSPA(this.raidBackupUrl);
-        await sleep(100);
+        await sleep(config.get("timeouts.raid.page_transition", 200));
         continue;
       }
 
@@ -568,17 +574,18 @@ class RaidBot {
             // click already performed inside evaluate — no handle to detach
 
             try {
+              const joinTimeout = config.get("timeouts.raid.join_race", 3000);
               const raceResult = await Promise.race([
                 this.controller
-                  .waitForElement(".prt-supporter-list", 3000)
+                  .waitForElement(".prt-supporter-list", joinTimeout)
                   .then((res) => (res ? "summon" : null)),
                 this.controller
-                  .waitForElement(".btn-usual-ok", 3000)
+                  .waitForElement(".btn-usual-ok", joinTimeout)
                   .then((res) => (res ? "ok_btn" : null)),
                 this.controller
-                  .waitForElement(".cnt-raid", 3000)
+                  .waitForElement(".cnt-raid", joinTimeout)
                   .then((res) => (res ? "battle" : null)),
-                this.waitForRaidError(3000).then((res) =>
+                this.waitForRaidError(joinTimeout).then((res) =>
                   res ? "network_error" : null,
                 ),
               ]);
@@ -672,12 +679,13 @@ class RaidBot {
           await this.controller.clickSafe(raidSelector);
           await sleep(200);
 
+          const joinTimeout = config.get("timeouts.raid.join_race", 3000);
           const joinResult = await Promise.race([
             this.controller.page.waitForSelector(
               ".prt-supporter-list, .btn-usual-ok",
-              { timeout: 3000 },
+              { timeout: joinTimeout },
             ),
-            this.waitForRaidError(3000).then((res) =>
+            this.waitForRaidError(joinTimeout).then((res) =>
               res ? "network_error" : null,
             ),
           ]).catch(() => null);
@@ -730,7 +738,7 @@ class RaidBot {
               return true;
             }
           } else {
-            const urlNow = this.controller.page.url();
+            const urlNow = this.controller.page?.url() || '';
             if (urlNow.includes("#raid") || urlNow.includes("_raid")) {
               this.logger.info("[Raid] Join successful (direct battle)");
               return true;
@@ -753,7 +761,8 @@ class RaidBot {
         await sleep(2000);
 
         // If the game asynchronously redirected us to a pending result screen while we waited
-        if (this.controller.page.url().includes("#result")) {
+        const currentUrl = this.controller.page?.url() || '';
+        if (currentUrl.includes("#result")) {
           continue;
         }
 
@@ -799,26 +808,27 @@ class RaidBot {
           let resolved = false;
 
           const hardTimeout = setTimeout(() => {
-            if (!resolved) {
+            if (!resolved && this.controller.network) {
               resolved = true;
-              this.controller.network?.off("battle:result", onResult);
+              this.controller.network.off("battle:result", onResult);
               resolve(null);
             }
-          }, 5000);
+          }, config.get("timeouts.raid.pending_hard_timeout", 5000));
 
           // After the content page fires, give the detail XHR up to 2s extra.
           let softTimeout = null;
           const onResult = ({ rewards, url: resultUrl }) => {
             const shortUrl = resultUrl ? resultUrl.replace('https://game.granbluefantasy.jp', '') : '?';
             if (rewards !== null) {
-              // Result endpoint responded with reward data — count chests and done.
+              // Result endpoint responded with reward data — session listener will count chests.
               this.logger.info(`[Loot] Pending raid rewards received (${shortUrl})`);
               if (!resolved) {
                 resolved = true;
                 clearTimeout(hardTimeout);
                 clearTimeout(softTimeout);
-                this.controller.network?.off("battle:result", onResult);
-                this._onBattleResult({ rewards });
+                if (this.controller.network) {
+                  this.controller.network.off("battle:result", onResult);
+                }
                 resolve(null);
               }
             } else if (!softTimeout) {
@@ -829,14 +839,18 @@ class RaidBot {
                 if (!resolved) {
                   this.logger.warn(`[Loot] Detail XHR did not arrive in time — no chest data for this pending raid`);
                   resolved = true;
-                  this.controller.network?.off("battle:result", onResult);
+                  if (this.controller.network) {
+                    this.controller.network.off("battle:result", onResult);
+                  }
                   resolve(null);
                 }
-              }, 2000);
+              }, config.get("timeouts.raid.pending_detail_xhr", 2000));
             }
           };
 
-          this.controller.network?.on("battle:result", onResult);
+          if (this.controller.network) {
+            this.controller.network.on("battle:result", onResult);
+          }
         });
 
         clearedCount++;
@@ -852,13 +866,16 @@ class RaidBot {
 
   async waitForActiveBackupsCooldown() {
     this.logger.warn("[Raid] 3 simultaneous active backup limit reached!");
-    for (let i = 0; i < 15; i += 5) {
+    const cooldownStep = config.get("timeouts.raid.cooldown", 5000);
+    const totalSteps = Math.ceil(15000 / cooldownStep);
+    for (let i = 0; i < totalSteps; i++) {
       if (!this.isRunning) break;
-      this.logger.info(`[Wait] (${i}/15) resuming in ${15 - i}s...`);
-      await sleep(5000);
+      const elapsed = i * cooldownStep;
+      this.logger.info(`[Wait] (${elapsed}/${totalSteps * cooldownStep}) resuming in ${totalSteps * cooldownStep - elapsed}ms...`);
+      await sleep(cooldownStep);
     }
     if (this.isRunning) {
-      this.logger.info(`[Wait] (15/15) resuming...`);
+      this.logger.info(`[Wait] Resuming...`);
     }
   }
 
@@ -942,7 +959,7 @@ class RaidBot {
           maxRetries: 1,
         });
       } catch (error) {
-        const currentUrl = this.controller.page.url();
+        const currentUrl = this.controller.page?.url() || '';
         if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
           this.logger.info(
             "[Raid] Transitioned to battle. Ignoring click error",
@@ -1077,7 +1094,7 @@ class RaidBot {
 
     for (let i = 0; i < 15; i++) {
       if (this.raidErrorType !== null) return "ended";
-      const currentUrl = this.controller.page.url();
+      const currentUrl = this.controller.page?.url() || '';
 
       if (currentUrl.includes("supporter_raid")) {
         // If we land on the full-page party selection screen, click the start button
@@ -1117,7 +1134,7 @@ class RaidBot {
       await sleep(100);
     }
 
-    const finalUrl = this.controller.page.url();
+    const finalUrl = this.controller.page?.url() || '';
     if (
       !finalUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) &&
       !finalUrl.includes("#result")
@@ -1178,6 +1195,10 @@ class RaidBot {
       this.controller.network.removeListener(
         "raid:supporter_screen",
         this.onSupporterScreen,
+      );
+      this.controller.network.removeListener(
+        "battle:result",
+        this.onBattleResult,
       );
     }
 

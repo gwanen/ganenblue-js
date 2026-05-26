@@ -25,6 +25,9 @@ class BattleHandler {
         this.summonRefresh = options.summonRefresh !== undefined ? options.summonRefresh : true;
         this.skillRefresh = options.skillRefresh !== undefined ? options.skillRefresh : false;
         this.preBattleAutoAttack = options.preBattleAutoAttack || "off";
+        this.loopInterval = options.loopInterval !== undefined
+            ? options.loopInterval
+            : config.get('timeouts.loop_interval', 10);
         this.logger = options.logger || logger;
         this.faActive = false;
         this.isResultConfirmed = false;
@@ -263,7 +266,7 @@ class BattleHandler {
         if (mode === "full_auto") {
           await this.handleFullAuto();
         } else if (mode === "semi_auto") {
-          await this.handleSemiAuto(false, initialTurns);
+          this._initialSemiAutoAttacked = await this.handleSemiAuto(true);
         }
       } finally {
         // REQUIRED: Remove pre-listeners immediately — waitForBattleEnd registers its own.
@@ -554,7 +557,7 @@ class BattleHandler {
      * Performs a reactive attack and optional animation skip reload.
      * @returns {Promise<boolean>} True if the attack was network-confirmed.
      */
-    async handleSemiAuto() {
+    async handleSemiAuto(skipReloadOnTimeout = false) {
     const activeSelector = ".btn-attack-start.display-on";
     const startTime = Date.now();
 
@@ -562,17 +565,20 @@ class BattleHandler {
     // Replaces waitForSelector with sub-10ms resolution to fire the instant UI is ready.
     this.logger.debug("[Battle] Awaiting reactive attack activation...");
     let attackReady = false;
-    while (Date.now() - startTime < 10000) {
+    const attackWatchdog = config.get('timeouts.semi_auto_watchdog', 10000);
+    while (Date.now() - startTime < attackWatchdog) {
       if (await this.controller.elementExists(activeSelector, 0, true)) {
         attackReady = true;
         break;
       }
-      await sleep(5); // Ultra-snappy cadence
+      await sleep(Math.max(5, Math.floor(this.loopInterval / 2))); // Ultra-snappy cadence
     }
 
     if (!attackReady) {
       this.logger.warn("[Warn] Battle: Exception (Attack button timeout)");
-      await this.controller.reloadPage();
+      if (!skipReloadOnTimeout) {
+        await this.controller.reloadPage();
+      }
       return false;
     }
 
@@ -598,7 +604,7 @@ class BattleHandler {
           }
           resolve(false);
         }
-      }, 3000);
+      }, config.get('timeouts.semi_auto_attack_confirm', 3000));
 
       const onAttack = () => {
         if (!resolved) {
@@ -719,11 +725,10 @@ class BattleHandler {
     let lastTurnChangeTime = Date.now();
     let honorTargetReached = false; // Track when honor target is reached
 
-    // In semi_auto, executeBattle.handleSemiAuto already attacked the FIRST turn before entering
-    // this loop. Seed lastAttackedTurn with that turn number so that any same-turn battle:start
-    // reload (start.json re-firing turn N after reload) doesn't incorrectly re-arm networkTurnReady
-    // and cause a double-attack on the same turn.
-    let lastAttackedTurn = isSemiAuto ? turnCount : -1;
+    // Seed lastAttackedTurn only if the initial semi-auto attack actually landed.
+    // If it failed (button not found → reload), keep -1 so same-turn reload re-arms networkTurnReady.
+    const initialAttacked = isSemiAuto ? (this._initialSemiAutoAttacked === true) : false;
+    let lastAttackedTurn = initialAttacked ? turnCount : -1;
     this.logger.debug(`[Battle] Resolving turns (Mode: ${mode})`);
 
     if (!isSemiAuto && turnCount > 0) {
@@ -890,18 +895,6 @@ class BattleHandler {
       }
     };
 
-    const cleanup = () => {
-      if (this.controller.network) {
-        this.controller.network.off("battle:result", onBattleResult);
-        this.controller.network.off("battle:boss_died", onBossDied);
-        this.controller.network.off("battle:party_wiped", onPartyWiped);
-        this.controller.network.off("battle:attack_used", onAttack);
-        this.controller.network.off("battle:summon_used", onSummonUsed);
-        this.controller.network.off("battle:ability_used", onAbilityUsed);
-        this.controller.network.off("battle:start", onBattleStart);
-      }
-    };
-
     try {
       if (this.controller.network) {
         this.controller.network.on("battle:result", onBattleResult);
@@ -988,6 +981,14 @@ class BattleHandler {
           };
         }
 
+        // DOM fallback: start.json may fire before any listener registers (during waitForElement
+        // or getTurnNumber). If button is ready but networkTurnReady is still false, arm it now.
+        if (isSemiAuto && !networkTurnReady && snapshot.isAttackOn && !networkFinished) {
+          this.logger.debug("[Semi Auto] DOM fallback: attack button ready, arming networkTurnReady");
+          networkTurnReady = true;
+          if (networkTurn === 0) networkTurn = turnCount;
+        }
+
         // --- PRIORITY 1: Semi-Auto Detection (network-driven) ---
         // battle:start fires via start.json when a new turn begins — attack button is ready
         if (isSemiAuto && networkTurnReady && !networkFinished) {
@@ -996,12 +997,10 @@ class BattleHandler {
           );
           networkTurnReady = false;
           const attackedTurnAttempt = networkTurn;
+          lastAttackedTurn = attackedTurnAttempt; // optimistic — blocks same-turn reload re-arm during await
           const confirmed = await this.handleSemiAuto(); // DOM check for .display-on
-          // Only lock lastAttackedTurn when attack was network-confirmed.
-          // If click silently failed (button not ready yet), keep lastAttackedTurn as-is
-          // so the same-turn reload re-arms networkTurnReady correctly.
-          if (confirmed) {
-            lastAttackedTurn = attackedTurnAttempt;
+          if (!confirmed) {
+            lastAttackedTurn = attackedTurnAttempt - 1; // rollback — allow same-turn reload to retry
           }
           continue;
         }
@@ -1292,7 +1291,7 @@ class BattleHandler {
           // Reset iteration counter to avoid immediate GC after reload
           iterationCount = 0;
         }
-        await sleep(10);
+        await sleep(this.loopInterval);
       }
 
       throw new Error("Battle timeout");

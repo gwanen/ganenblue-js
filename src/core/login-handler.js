@@ -120,12 +120,38 @@ class LoginHandler {
             if (newPage) {
                 this.page = newPage;
                 this.logger.info('[Auth] State: Tab synchronization complete');
+
+                // Wait for the new Mobage login page to start navigating
+                try {
+                    await this.page.waitForNavigation({
+                        waitUntil: 'domcontentloaded',
+                        timeout: 15000
+                    });
+                    this.logger.info('[Auth] State: Mobage login page loaded');
+                } catch (navError) {
+                    // If navigation times out, the page may already be loaded or will load shortly
+                    this.logger.debug(`[Auth] Navigation wait timeout: ${navError.message}. Proceeding...`);
+                }
             } else {
                 // Fallback: Check all open pages if race/event fails
+                const currentPageUrl = this.page.url();
                 const pages = await browser.pages();
-                if (pages.length > 1) {
-                    this.page = pages[pages.length - 1];
+                const newPages = pages.filter(p => p.url() !== currentPageUrl);
+
+                if (newPages.length > 0) {
+                    this.page = newPages[0];
                     this.logger.info('[Auth] State: Tab synchronization (Fallback)');
+
+                    // Wait for page to load even in fallback case
+                    try {
+                        await this.page.waitForNavigation({
+                            waitUntil: 'domcontentloaded',
+                            timeout: 15000
+                        });
+                        this.logger.info('[Auth] State: Mobage login page loaded (Fallback)');
+                    } catch (navError) {
+                        this.logger.debug(`[Auth] Navigation wait timeout (Fallback): ${navError.message}. Proceeding...`);
+                    }
                 } else {
                     this.logger.info('[Auth] State: Single-tab authentication active');
                 }

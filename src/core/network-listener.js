@@ -28,7 +28,7 @@ class NetworkListener extends EventEmitter {
                 this.logger.warn(`[Warn] Core: High listener count for '${eventName}' (Count: ${count})`);
             }
             if (this.listenerCount('battle:result') > 50) {
-                this.logger.warn('[Warn] Core: Potential listener leak detected (combat:result)');
+                this.logger.warn('[Warn] Core: Potential listener leak detected (battle:result)');
             }
         });
 
@@ -161,6 +161,18 @@ class NetworkListener extends EventEmitter {
                 if (turn !== null) {
                     this.logger.debug(`[Status] Signal: Combat synchronization received (Turn: ${turn})`);
                     this.emit('battle:start', { turn });
+                }
+
+                // One-shot kill: boss already dead in start.json scenario before player acts.
+                // Just reload — let result page detection in waitForBattleEnd handle rewards naturally.
+                if (json?.scenario && Array.isArray(json.scenario)) {
+                    const bossDied = json.scenario.find(s =>
+                        (s.cmd === 'die' && (s.to === 'boss' || s.to === 'enemy')) || s.cmd === 'win'
+                    );
+                    if (bossDied) {
+                        this.logger.debug('[Status] Signal: One-shot kill in start.json — refreshing to result');
+                        this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+                    }
                 }
                 return;
             }

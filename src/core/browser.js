@@ -163,6 +163,7 @@ class BrowserManager {
 
             // Graphics and hardware acceleration
             '--ignore-gpu-blocklist',
+            '--override-software-rendering-list',
             '--enable-gpu-rasterization',
             '--enable-zero-copy',
             '--enable-parallel-downloading',

@@ -47,8 +47,15 @@ class PageController {
 
       const isTracker =
         url.includes("google-analytics.com") ||
+        url.includes("googleanalytics.com") ||
         url.includes("g-acp.com") ||
-        url.includes("doubleclick.net");
+        url.includes("doubleclick.net") ||
+        url.includes("googlesyndication.com") ||
+        url.includes("pagead") ||
+        url.includes("analytics") ||
+        url.includes("adservice") ||
+        url.includes("ads.") ||
+        url.includes("/ads/");
 
       if (isTracker || ["image", "media", "font"].includes(resourceType)) {
         req.abort();
@@ -135,7 +142,7 @@ class PageController {
 
       await this.page.addStyleTag({
         content: `
-          /* Suppress all animations and transitions */
+          /* 1. Kill all animations and transitions globally */
           *, *::before, *::after {
             animation-duration: 0.001ms !important;
             animation-iteration-count: 1 !important;
@@ -143,14 +150,64 @@ class PageController {
             animation-delay: 0ms !important;
             transition-delay: 0ms !important;
           }
-          
-          /* Specific GBF performance overrides */
+
+          /* 2. Remove GPU compositor layer hints */
+          * {
+            will-change: auto !important;
+          }
+
+          /* 3. Loading screen override */
           .prt-loading-container, #loading-mask {
             background: #000 !important;
           }
-          
-          /* Hide decorative particle effects */
-          [class*="effect-"], [class*="particle-"] {
+
+          /* 4. Particles and effect overlays */
+          [class*="effect-"],
+          [class*="particle-"] {
+            display: none !important;
+          }
+
+          /* 5. Battle backgrounds — pointer-events:none avoids breaking any child selectors */
+          .prt-battle-field,
+          .prt-bg,
+          [class*="background-"] {
+            pointer-events: none !important;
+            will-change: auto !important;
+          }
+
+          /* 6. Character idle animations — paused not hidden (game JS may reference these) */
+          .prt-character,
+          [class*="chara-"] {
+            animation-play-state: paused !important;
+            pointer-events: none !important;
+          }
+
+          /* 7. Canvas (WebGL character renders) — visibility:hidden preserves JS context */
+          canvas {
+            visibility: hidden !important;
+            pointer-events: none !important;
+          }
+
+          /* 8. Ability button flash — target pseudo-elements only, keep button clickable */
+          [class*="btn-ability"]::before,
+          [class*="btn-ability"]::after {
+            display: none !important;
+          }
+
+          /* 9. Story/dialogue text animations */
+          [class*="txt-message-"] {
+            animation-play-state: paused !important;
+          }
+
+          /* 10. Navigation decoration */
+          [class*="prt-navi-"] {
+            pointer-events: none !important;
+          }
+
+          /* 11. Battle result graphic layers (specific sub-class — avoids .prt-result container used by bot) */
+          [class*="result-animation"],
+          [class*="result-bg"],
+          [class*="result-image"] {
             display: none !important;
           }
         `,
@@ -465,6 +522,14 @@ class PageController {
           ...options,
         });
       } catch (error) {
+        const isDetachedFrame = error.message?.includes("detached Frame") ||
+                               error.message?.includes("Execution context is not available in detached frame");
+
+        if (isDetachedFrame) {
+          this.logger.error(`[Critical] Frame detached - cannot retry navigation`);
+          throw new Error("DETACHED_FRAME");
+        }
+
         if (this.isNetworkError(error) && i < maxRetries - 1) {
           const waitTime = 2000 * (i + 1);
           this.logger.warn(`[Network] Error during navigation, retrying...`);
