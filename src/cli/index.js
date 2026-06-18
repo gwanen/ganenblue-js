@@ -31,7 +31,14 @@ program.command('start')
 
             // Override config with CLI options
             if (options.url) config.set('bot.quest_url', options.url);
-            if (options.max) config.set('bot.max_quests', parseInt(options.max));
+            if (options.max) {
+                const maxVal = parseInt(options.max, 10);
+                if (isNaN(maxVal) || maxVal < 0) {
+                    logger.error(`[Error] [Cli] Invalid --max value: '${options.max}'. Must be a non-negative integer.`);
+                    process.exit(1);
+                }
+                config.set('bot.max_quests', maxVal);
+            }
             if (options.mode) config.set('bot.battle_mode', options.mode);
             if (options.headless) config.set('browser.headless', true);
 
@@ -88,7 +95,14 @@ program.command('raid')
             logger.info('[Cli] Starting raid bot...');
 
             // Override config with CLI options
-            if (options.max) config.set('bot.max_raids', parseInt(options.max));
+            if (options.max) {
+                const maxVal = parseInt(options.max, 10);
+                if (isNaN(maxVal) || maxVal < 0) {
+                    logger.error(`[Error] [Cli] Invalid --max value: '${options.max}'. Must be a non-negative integer.`);
+                    process.exit(1);
+                }
+                config.set('bot.max_raids', maxVal);
+            }
             if (options.mode) config.set('bot.battle_mode', options.mode);
             if (options.headless) config.set('browser.headless', true);
 
@@ -141,7 +155,14 @@ program.command('skip')
 
             // Override config with CLI options
             if (options.url) config.set('bot.quest_url', options.url);
-            if (options.max) config.set('bot.max_quests', parseInt(options.max));
+            if (options.max) {
+                const maxVal = parseInt(options.max, 10);
+                if (isNaN(maxVal) || maxVal < 0) {
+                    logger.error(`[Error] [Cli] Invalid --max value: '${options.max}'. Must be a non-negative integer.`);
+                    process.exit(1);
+                }
+                config.set('bot.max_quests', maxVal);
+            }
             if (options.headless) config.set('browser.headless', true);
 
             // Initialize Browser

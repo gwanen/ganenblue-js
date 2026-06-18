@@ -100,60 +100,56 @@ class LoginHandler {
 
             await sleep(1000);
 
-            // Prepare to intercept the newly created tab for Mobage login
+            // Set up BOTH watchers before clicking — navigation may complete before we can await it
             const browser = this.page.browser();
+
+            // Only resolve for actual page targets (not service workers, shared workers, etc.)
             const newPagePromise = new Promise(resolve => {
-                browser.once('targetcreated', target => resolve(target.page()));
+                const handler = async (target) => {
+                    if (target.type() !== 'page') return;
+                    const page = await target.page().catch(() => null);
+                    if (!page) return;
+                    browser.off('targetcreated', handler);
+                    resolve({ type: 'newtab', page });
+                };
+                browser.on('targetcreated', handler);
+                // Clean up listener after 12s regardless
+                setTimeout(() => browser.off('targetcreated', handler), 12000);
             });
+
+            // Same-tab navigation (connect.mobage.jp redirects in place)
+            const sameTabNavPromise = this.page.waitForNavigation({
+                waitUntil: 'domcontentloaded',
+                timeout: 20000
+            }).then(() => ({ type: 'sametab', page: this.page })).catch(() => null);
 
             await this.page.click(this.selectors.okButton);
             this.logger.info('[Auth] Action: Redirect to platform interface');
 
-            let timeoutId;
-            const timeoutPromise = new Promise(resolve => {
-                timeoutId = setTimeout(() => resolve(null), 10000);
-            });
+            const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 10000));
+            const result = await Promise.race([newPagePromise, sameTabNavPromise, timeoutPromise]);
 
-            const newPage = await Promise.race([newPagePromise, timeoutPromise]);
-            clearTimeout(timeoutId);
-
-            if (newPage) {
-                this.page = newPage;
-                this.logger.info('[Auth] State: Tab synchronization complete');
-
-                // Wait for the new Mobage login page to start navigating
+            if (result?.type === 'newtab') {
+                this.page = result.page;
+                this.logger.info('[Auth] State: Tab synchronization complete (New tab)');
+                // New tab starts at about:blank then navigates — wait for the Mobage page to load
                 try {
-                    await this.page.waitForNavigation({
-                        waitUntil: 'domcontentloaded',
-                        timeout: 15000
-                    });
-                    this.logger.info('[Auth] State: Mobage login page loaded');
-                } catch (navError) {
-                    // If navigation times out, the page may already be loaded or will load shortly
-                    this.logger.debug(`[Auth] Navigation wait timeout: ${navError.message}. Proceeding...`);
-                }
+                    await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                    this.logger.info('[Auth] State: New tab navigation complete');
+                } catch (_) { /* page may already be at destination */ }
+            } else if (result?.type === 'sametab') {
+                this.logger.info('[Auth] State: Mobage login page loaded (Same-tab)');
             } else {
-                // Fallback: Check all open pages if race/event fails
-                const currentPageUrl = this.page.url();
+                // Timeout — page may already be loaded or still loading; check for known pages
+                this.logger.info('[Auth] State: Auth redirect timeout — scanning open pages');
+                const currentUrl = this.page.url();
                 const pages = await browser.pages();
-                const newPages = pages.filter(p => p.url() !== currentPageUrl);
-
-                if (newPages.length > 0) {
-                    this.page = newPages[0];
-                    this.logger.info('[Auth] State: Tab synchronization (Fallback)');
-
-                    // Wait for page to load even in fallback case
-                    try {
-                        await this.page.waitForNavigation({
-                            waitUntil: 'domcontentloaded',
-                            timeout: 15000
-                        });
-                        this.logger.info('[Auth] State: Mobage login page loaded (Fallback)');
-                    } catch (navError) {
-                        this.logger.debug(`[Auth] Navigation wait timeout (Fallback): ${navError.message}. Proceeding...`);
-                    }
+                const mobagePage = pages.find(p => p.url().includes('connect.mobage.jp'));
+                if (mobagePage && mobagePage.url() !== currentUrl) {
+                    this.page = mobagePage;
+                    this.logger.info('[Auth] State: Mobage page found via scan');
                 } else {
-                    this.logger.info('[Auth] State: Single-tab authentication active');
+                    this.logger.info('[Auth] State: Assuming same-tab (current page is login target)');
                 }
             }
         } catch (error) {
@@ -174,10 +170,20 @@ class LoginHandler {
         try {
             this.logger.info('[Auth] Awaiting platform interface load');
 
-            await this.page.waitForSelector(this.selectors.emailField, {
-                visible: true,
-                timeout: 30000
-            });
+            // Retry once — if waitForSelector fires mid-navigation the context is destroyed
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    await this.page.waitForSelector(this.selectors.emailField, {
+                        visible: true,
+                        timeout: 30000
+                    });
+                    break;
+                } catch (e) {
+                    if (attempt === 2) throw e;
+                    this.logger.debug(`[Auth] Email field wait failed (attempt ${attempt}), retrying after nav settle...`);
+                    await sleep(2000);
+                }
+            }
 
             this.logger.info('[Auth] State: Platform interface ready');
             await sleep(3000);

@@ -314,8 +314,13 @@ class BrowserManager {
                 if (legacyKey && data.profiles[legacyKey]) {
                     return { mobage: data.profiles[legacyKey] };
                 }
+                this.logger.warn(`[Warn] Storage: No credentials found for profile '${this.profileId}'`);
+                return null;
             }
-            return data;
+            // Support flat format: { mobage: { email, password } }
+            if (data && data.mobage) return data;
+            this.logger.warn('[Warn] Storage: credentials.yaml format unrecognized — expected profiles.<id> or mobage key');
+            return null;
         } catch (error) {
             this.logger.error(`[Error] Storage: Credential load failure (${error.message})`);
             return null;

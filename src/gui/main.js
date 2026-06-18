@@ -9,6 +9,7 @@ import RaidBot from "../bot/raid-bot.js";
 import SkipBot from "../bot/skip-bot.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
+import memoryWatchdog from "../utils/memory-watchdog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +71,7 @@ function showNotification(title, body, playSound = false) {
 
 app.whenReady().then(() => {
   createWindow();
+  memoryWatchdog.start();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -194,7 +196,10 @@ const createStatsCallback = (profileId, instance) => (stats) => {
   }
 };
 
-app.on("before-quit", stopStatsUpdater);
+app.on("before-quit", () => {
+  stopStatsUpdater();
+  memoryWatchdog.stop();
+});
 
 app.on("window-all-closed", async () => {
   if (process.platform !== "darwin") {
@@ -411,10 +416,12 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         logger.info(
           `[System] [${profileId}] Done — Quests: ${quests} | Raids: ${raids}`,
         );
-        mainWindow.webContents.send("bot:status", {
-          profileId,
-          status: "Stopped",
-        });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("bot:status", {
+            profileId,
+            status: "Stopped",
+          });
+        }
 
         // Show completion notification
         showNotification(
@@ -425,10 +432,12 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
       })
       .catch((err) => {
         logger.error(`[Error] [Bot] [${profileId}] Execution error:`, err);
-        mainWindow.webContents.send("bot:status", {
-          profileId,
-          status: "Error",
-        });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("bot:status", {
+            profileId,
+            status: "Error",
+          });
+        }
 
         // Show error notification
         showNotification(

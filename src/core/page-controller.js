@@ -118,6 +118,31 @@ class PageController {
   }
 
   /**
+   * Returns a cached CDP session, creating one if needed.
+   */
+  async getCDPClient() {
+    if (!this._cdpClient) {
+      this._cdpClient = await this.page.target().createCDPSession();
+    }
+    return this._cdpClient;
+  }
+
+  /**
+   * Clears the browser's HTTP response cache via CDP.
+   * Safe to call at any time — does not affect cookies or session data.
+   */
+  async clearBrowserCache() {
+    try {
+      const client = await this.getCDPClient();
+      await client.send('Network.clearBrowserCache');
+      this.logger.info('[Memory] Browser HTTP cache cleared');
+    } catch (e) {
+      this._cdpClient = null;
+      this.logger.debug(`[Memory] Browser cache clear failed: ${e.message}`);
+    }
+  }
+
+  /**
    * Manually triggers Garbage Collection if available (requires --expose-gc).
    */
   triggerGC() {
@@ -138,11 +163,22 @@ class PageController {
   async enableTurboCSS() {
     try {
       if (this.turboEnabled) return;
-      this.turboEnabled = true;
 
-      await this.page.addStyleTag({
-        content: `
-          /* 1. Kill all animations and transitions globally */
+      // Guard against accumulating duplicate style tags across stop/start cycles on the same page
+      const alreadyInjected = await this.page.evaluate(
+        () => !!document.querySelector('style[data-ganenblue-turbo]')
+      ).catch(() => false);
+
+      this.turboEnabled = true;
+      if (alreadyInjected) {
+        this.logger.debug("[Core] Turbo CSS already injected in page — skipping duplicate");
+        return;
+      }
+
+      await this.page.evaluate(() => {
+        const style = document.createElement('style');
+        style.setAttribute('data-ganenblue-turbo', '');
+        style.textContent = `
           *, *::before, *::after {
             animation-duration: 0.001ms !important;
             animation-iteration-count: 1 !important;
@@ -150,67 +186,24 @@ class PageController {
             animation-delay: 0ms !important;
             transition-delay: 0ms !important;
           }
-
-          /* 2. Remove GPU compositor layer hints */
-          * {
-            will-change: auto !important;
-          }
-
-          /* 3. Loading screen override */
-          .prt-loading-container, #loading-mask {
-            background: #000 !important;
-          }
-
-          /* 4. Particles and effect overlays */
-          [class*="effect-"],
-          [class*="particle-"] {
-            display: none !important;
-          }
-
-          /* 5. Battle backgrounds — pointer-events:none avoids breaking any child selectors */
-          .prt-battle-field,
-          .prt-bg,
-          [class*="background-"] {
+          * { will-change: auto !important; }
+          .prt-loading-container, #loading-mask { background: #000 !important; }
+          [class*="effect-"], [class*="particle-"] { display: none !important; }
+          .prt-battle-field, .prt-bg, [class*="background-"] {
             pointer-events: none !important;
             will-change: auto !important;
           }
-
-          /* 6. Character idle animations — paused not hidden (game JS may reference these) */
-          .prt-character,
-          [class*="chara-"] {
+          .prt-character, [class*="chara-"] {
             animation-play-state: paused !important;
             pointer-events: none !important;
           }
-
-          /* 7. Canvas (WebGL character renders) — visibility:hidden preserves JS context */
-          canvas {
-            visibility: hidden !important;
-            pointer-events: none !important;
-          }
-
-          /* 8. Ability button flash — target pseudo-elements only, keep button clickable */
-          [class*="btn-ability"]::before,
-          [class*="btn-ability"]::after {
-            display: none !important;
-          }
-
-          /* 9. Story/dialogue text animations */
-          [class*="txt-message-"] {
-            animation-play-state: paused !important;
-          }
-
-          /* 10. Navigation decoration */
-          [class*="prt-navi-"] {
-            pointer-events: none !important;
-          }
-
-          /* 11. Battle result graphic layers (specific sub-class — avoids .prt-result container used by bot) */
-          [class*="result-animation"],
-          [class*="result-bg"],
-          [class*="result-image"] {
-            display: none !important;
-          }
-        `,
+          canvas { visibility: hidden !important; pointer-events: none !important; }
+          [class*="btn-ability"]::before, [class*="btn-ability"]::after { display: none !important; }
+          [class*="txt-message-"] { animation-play-state: paused !important; }
+          [class*="prt-navi-"] { pointer-events: none !important; }
+          [class*="result-animation"], [class*="result-bg"], [class*="result-image"] { display: none !important; }
+        `;
+        document.head.appendChild(style);
       });
       this.logger.info("[Core] State: Turbo CSS active (Animations suppressed)");
     } catch (e) {
@@ -596,12 +589,13 @@ class PageController {
   }
 
   /**
-   * Performs a hard browser reload.
+   * Performs a hard browser reload and clears the HTTP cache to prevent memory bloat on long runs.
    */
   async reloadHard() {
     this.logger.info("[Core] Action: Hard Reload (Full page reset)");
     this.clearClickCache();
     await this.page.reload({ waitUntil: "networkidle2", timeout: 60000 });
+    await this.clearBrowserCache();
     await this.waitForFrameStable(1000);
   }
 
@@ -717,6 +711,10 @@ class PageController {
       this.network.clearAllListeners();
     }
     await this.disableResourceBlocking();
+    if (this._cdpClient) {
+      await this._cdpClient.detach().catch(() => {});
+      this._cdpClient = null;
+    }
   }
 }
 

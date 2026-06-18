@@ -56,7 +56,11 @@ class QuestBot {
             );
         }
 
-        if (options.turboMode) {
+        const turboMode = options.turboMode !== undefined
+            ? options.turboMode
+            : config.get('stealth.turbo_css', true);
+
+        if (turboMode) {
             this.controller.enableTurboCSS().catch((e) =>
                 this.logger.warn("[System] Failed to enable turbo CSS", e)
             );
@@ -131,6 +135,10 @@ class QuestBot {
         if (success) {
           this.questsCompleted++;
           this.consecutiveFailures = 0; // Reset counter on success
+
+          if (this.questsCompleted % 30 === 0) {
+            await this.controller.clearBrowserCache();
+          }
         } else {
           this.consecutiveFailures++; // Increment counter on failure
         }

@@ -786,11 +786,10 @@ class BattleHandler {
     let lastAttackEventTime = 0; // Track when attack event was received
     let lastAttackRefreshTime = 0; // Track last attack-based refresh
 
-    const updateHonor = async (netHonor) => {
+    const updateHonor = async (netHonor, existingHonors = null) => {
       if (isSemiAuto || !isRaid) return; // Skip honor reads in semi-auto and non-raid modes
-      // Priority: Always read the actual current honor from the DOM (screen)
-      // Local DOM is much more reliable for the TOTAL current honor.
-      const honor = await this.getHonors();
+      // Use snapshot honors when available to avoid a redundant IPC round-trip.
+      const honor = existingHonors !== null ? existingHonors : await this.getHonors();
 
       if (honor !== null && honor > previousHonors) {
         const diff = honor - previousHonors;
@@ -910,6 +909,24 @@ class BattleHandler {
         // Sync lastActionTime and threshold from refs (may be updated by handleFullAuto)
         lastActionTime = this.options.lastActionTimeRef.value;
         faInactivityThreshold = this.options.faThresholdRef.value;
+
+        // Fast-path: battle:result already fired — exit without DOM snapshot.
+        // Prevents hang when page.evaluate blocks mid-navigation (e.g. semi-auto reload
+        // on result page sets networkFinished during the reload, but snapshot call never resolves).
+        if (networkFinished) {
+          await sleep(50);
+          if (!capturedRewards) {
+            const deadline = Date.now() + 2000;
+            while (!capturedRewards && Date.now() < deadline) await sleep(50);
+          }
+          return {
+            duration: (Date.now() - startTime) / 1000,
+            turns: isSemiAuto ? "N/A" : Math.max(turnCount + 1, 1),
+            honors: previousHonors,
+            honorReached: honorTargetReached,
+            rewards: capturedRewards,
+          };
+        }
 
         // SPD-02: Batched UI State Snapshot (Replaces multiple individual IPC calls)
         const snapshot = await this.getBattleStateSnapshot();
@@ -1161,8 +1178,9 @@ class BattleHandler {
             this.logger.info("[Battle] Normal attack fired");
 
             // Check honor once: After attack, but BEFORE reload (as requested)
+            // Pass snapshot.honors to skip redundant getBattleStateSnapshot IPC call.
             if (isRaid) {
-              await updateHonor(null);
+              await updateHonor(null, snapshot.honors ?? null);
             }
 
             // Exit immediately if goal was just reached — no need to reload/re-engage
@@ -1460,42 +1478,6 @@ class BattleHandler {
     }
 
     return false;
-  }
-
-  async getBattleState() {
-    try {
-      return await this.controller.page.evaluate(() => {
-        const state = { turn: 0, honors: null };
-        const container = document.querySelector(
-          ".prt-turn-info, #js-turn-num, #js-turn-num-count",
-        );
-        if (container) {
-          const digits = container.querySelectorAll('div[class*="num-info"]');
-          if (digits && digits.length > 0) {
-            let str = "";
-            for (const d of digits) {
-              const match = d.className.match(/num-info(\d)/);
-              if (match) str += match[1];
-            }
-            state.turn = parseInt(str, 10) || 0;
-          }
-        }
-        const userRow = document.querySelector(".lis-user.guild-member");
-        if (userRow) {
-          const pointEl = userRow.querySelector(".txt-point");
-          if (pointEl) {
-            const honorsStr = pointEl.textContent
-              .replace(/,/g, "")
-              .replace("pt", "")
-              .trim();
-            state.honors = parseInt(honorsStr, 10) || 0;
-          }
-        }
-        return state;
-      });
-    } catch (e) {
-      return { turn: 0, honors: null };
-    }
   }
 
   async getHonors() {

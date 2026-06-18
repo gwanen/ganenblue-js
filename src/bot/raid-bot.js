@@ -61,7 +61,11 @@ class RaidBot {
             );
         }
 
-        if (options.turboMode) {
+        const turboMode = options.turboMode !== undefined
+            ? options.turboMode
+            : config.get('stealth.turbo_css', true);
+
+        if (turboMode) {
             this.controller.enableTurboCSS().catch((e) =>
                 this.logger.warn("[System] Failed to enable turbo CSS", e)
             );
@@ -84,13 +88,12 @@ class RaidBot {
     }
 
     // Dedup: Prevent double-counting when both session listener and direct call process same rewards
-    const rewardsHash = JSON.stringify(rewards.reward_list);
+    const rl = rewards.reward_list;
+    const rewardsHash = `${Object.keys(rl).sort().join(',')}|${JSON.stringify(rl).length}`;
     if (rewardsHash === this._lastProcessedRewardsHash) {
       this.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
       return;
     }
-
-    const rl = rewards.reward_list;
 
     if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
       const count = Object.keys(rl["4"]).length;
@@ -239,6 +242,10 @@ class RaidBot {
           }
           if (success) {
             this.raidsCompleted++;
+
+            if (this.raidsCompleted % 50 === 0) {
+              await this.controller.clearBrowserCache();
+            }
           }
 
           // Short delay between raids - balanced for browser health
@@ -888,39 +895,28 @@ class RaidBot {
       if (this.raidErrorType !== null) return "ended";
 
       if (this.networkBattleStarted) {
-        this.logger.info(
-          "[Raid] Battle started via network (start.json). Skipping summon search",
-        );
+        this.logger.info("[Raid] Battle started via network (start.json). Skipping summon search");
         return "success";
       }
 
-      const instantBattle = await this.controller.page.evaluate(() => {
+      // Single batched DOM check — replaces 3 separate IPC calls per iteration
+      const state = await this.controller.page.evaluate(() => {
         const hash = window.location.hash;
         const att = document.querySelector(".btn-attack-start");
-        const isBattleHash =
-          hash.startsWith("#raid") || hash.startsWith("#raid_multi");
-        const hasAttackBtn =
-          att && (att.offsetWidth > 0 || att.classList.contains("display-on"));
-        return isBattleHash || hasAttackBtn;
-      });
+        if (hash.startsWith("#raid") || hash.startsWith("#raid_multi")) return "battle";
+        if (att && (att.offsetWidth > 0 || att.classList.contains("display-on"))) return "battle";
+        if (document.querySelector(".prt-supporter-list")) return "supporter";
+        if (document.querySelector(".btn-usual-ok")) return "ok_btn";
+        return null;
+      }).catch(() => null);
 
-      if (instantBattle) {
-        this.logger.info(
-          "[Raid] Transitioned to battle. Skipping summon search",
-        );
+      if (state === "battle") {
+        this.logger.info("[Raid] Transitioned to battle. Skipping summon search");
         return "success";
       }
-
-      if (
-        await this.controller.elementExists(".prt-supporter-list", 100, true)
-      ) {
-        break;
-      }
-
-      if (await this.controller.elementExists(".btn-usual-ok", 50, true)) {
-        this.logger.info(
-          "[Summon] OK button detected during wait. Breaking loop",
-        );
+      if (state === "supporter") break;
+      if (state === "ok_btn") {
+        this.logger.info("[Summon] OK button detected during wait. Breaking loop");
         break;
       }
 
