@@ -582,7 +582,57 @@ class BattleHandler {
       return false;
     }
 
-    // Step 2: Instant Click via cached coordinates (lookup occurs once on first appearance)
+    // Step 2: Register listeners BEFORE clicking — fast servers can return _attack_result.json
+    // before a post-click registration would catch it, causing a 3s timeout every turn.
+    // Also listen for battle:result to short-circuit the timeout when the boss dies on this hit
+    // (killing blow triggers result directly with no attack_result.json).
+    this.logger.debug("[Battle] Waiting for attack confirmation...");
+    let battleEndedDuringAttack = false;
+    const attackConfirmedPromise = new Promise((resolve) => {
+      let resolved = false;
+      const cleanup = () => {
+        if (this.controller.network) {
+          this.controller.network.off("battle:attack_used", onAttack);
+          this.controller.network.off("battle:result", onResult);
+        }
+      };
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(false);
+        }
+      }, config.get('timeouts.semi_auto_attack_confirm', 3000));
+
+      const onAttack = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          cleanup();
+          this.logger.debug("[Semi Auto] Attack confirmed via network");
+          resolve(true);
+        }
+      };
+
+      const onResult = () => {
+        if (!resolved) {
+          resolved = true;
+          battleEndedDuringAttack = true;
+          clearTimeout(timeout);
+          cleanup();
+          resolve(false);
+        }
+      };
+
+      if (this.controller.network) {
+        this.controller.network.once("battle:attack_used", onAttack);
+        this.controller.network.once("battle:result", onResult);
+      } else {
+        clearTimeout(timeout);
+        resolve(false);
+      }
+    });
+
     try {
       await this.controller.cachedClick(activeSelector, 0);
     } catch (e) {
@@ -592,38 +642,15 @@ class BattleHandler {
     }
     this.logger.info("[Battle] Attack execution initiated");
 
-    // Step 3: Wait for normal_attack network listener (attack confirmation)
-    this.logger.debug("[Battle] Waiting for attack confirmation...");
-    const attackConfirmed = await new Promise((resolve) => {
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          if (this.controller.network) {
-            this.controller.network.off("battle:attack_used", onAttack);
-          }
-          resolve(false);
-        }
-      }, config.get('timeouts.semi_auto_attack_confirm', 3000));
-
-      const onAttack = () => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          this.logger.debug("[Semi Auto] Attack confirmed via network");
-          resolve(true);
-        }
-      };
-
-      if (this.controller.network) {
-        this.controller.network.once("battle:attack_used", onAttack);
-      } else {
-        clearTimeout(timeout);
-        resolve(false);
-      }
-    });
+    // Step 3: Await confirmation (listener was armed before the click)
+    const attackConfirmed = await attackConfirmedPromise;
 
     if (!attackConfirmed) {
+      // battle:result fired during the wait — boss died on this hit, no need to reload
+      if (battleEndedDuringAttack) {
+        this.logger.info("[Battle] State: Combat concluded (Killing blow detected)");
+        return false;
+      }
       this.logger.warn(
         "[Semi Auto] Network confirmation timeout. Checking state...",
       );
