@@ -450,7 +450,7 @@ class PageController {
   /**
    * Waits for a selector to appear in the DOM and becomes visible.
    */
-  async waitForElement(selector, timeout = 30000) {
+  async waitForElement(selector, timeout = config.get("timeouts.element_wait", 10000)) {
     try {
       await this.page.waitForSelector(selector, { timeout, visible: true });
       return true;
@@ -511,7 +511,7 @@ class PageController {
         this.logger.info(`[Core] Navigation target: ${url}`);
         return await this.page.goto(url, {
           waitUntil: "domcontentloaded",
-          timeout: 60000,
+          timeout: config.get("timeouts.page_load", 30000),
           ...options,
         });
       } catch (error) {

@@ -1,5 +1,6 @@
 import EventEmitter from 'events';
 import logger from '../utils/logger.js';
+import config from '../utils/config.js';
 
 /**
  * Monitors network traffic to detect Granblue Fantasy game signals.
@@ -18,6 +19,15 @@ class NetworkListener extends EventEmitter {
 
         // Increased to allow headroom for complex monitoring across multiple concurrent listeners
         this.setMaxListeners(150);
+
+        // Abilities that attack without consuming a turn behave like normal attacks for
+        // refresh purposes. Precompute a normalized lookup Set from config to avoid
+        // per-response array work in the hot path.
+        this.attackLikeAbilities = new Set(
+            (config.get('combat.attack_like_abilities', []) || [])
+                .map((name) => String(name).trim().toLowerCase())
+                .filter(Boolean)
+        );
 
         // --- Memory Management ---
 
@@ -111,7 +121,8 @@ class NetworkListener extends EventEmitter {
             // --- Battle Result Detection ---
 
             const isDetailUrl = url.includes('/resultmulti/content/detail/') || url.includes('/result/content/detail/');
-            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js') || isDetailUrl;
+            const isEmptyUrl = url.includes('/resultmulti/content/empty/') || url.includes('/result/content/empty/');
+            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js') || isEmptyUrl || isDetailUrl;
 
             if (isResultPattern && !url.includes('.css')) {
                 // Ensure JSON integrity for specific result endpoints
@@ -120,7 +131,7 @@ class NetworkListener extends EventEmitter {
                     if (!contentType || !contentType.includes('application/json')) return;
                 }
 
-                this.logger.debug(`[Status] Signal: Combat Result (${url.includes('empty.js') ? 'Empty' : 'Rewards'}) detected`);
+                this.logger.debug(`[Status] Signal: Combat Result (${url.includes('empty.js') || isEmptyUrl ? 'Empty' : 'Rewards'}) detected`);
                 const isIndexUrl = url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/');
                 let rewards = null;
 
@@ -245,7 +256,18 @@ class NetworkListener extends EventEmitter {
                 } else if (url.includes('fatal_chain_result.json')) {
                     this.emit('battle:ability_used', { honor });
                 } else if (url.includes('ability_result.json')) {
-                    this.emit('battle:ability_used', { honor });
+                    // Some abilities attack without using a turn (e.g. Unbound Charge). Treat
+                    // these as normal attacks so the bot refreshes immediately regardless of
+                    // the skill-refresh setting.
+                    const abilityName = this.attackLikeAbilities.size
+                        ? json.scenario?.find((s) => s.cmd === 'ability' && s.name)?.name
+                        : null;
+                    if (abilityName && this.attackLikeAbilities.has(abilityName.trim().toLowerCase())) {
+                        this.logger.debug(`[Status] Signal: Attack-like ability '${abilityName}' — refreshing as normal attack`);
+                        this.emit('battle:attack_used', { honor });
+                    } else {
+                        this.emit('battle:ability_used', { honor });
+                    }
                 } else if (url.includes('_attack_result.json')) {
                     this.emit('battle:attack_used', { honor });
                 }

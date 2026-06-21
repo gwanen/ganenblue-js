@@ -12,6 +12,17 @@ browser:
   height: 1080
   timeout: 30000
 
+combat:
+  # Abilities that attack without consuming a turn (e.g. charge/dash attacks).
+  # When one of these fires in ability_result.json, the bot refreshes the page
+  # immediately like a normal attack (animation skip) instead of obeying the
+  # skill-refresh setting. Match is case-insensitive on the ability name.
+  attack_like_abilities:
+    - "Unbound Charge"
+    - "Koenig Dekret"
+    - "Advanced Kinesis"
+    - "Tag Team"
+
 stealth:
   randomize_viewport: true
   randomize_user_agent: true
@@ -29,24 +40,30 @@ screenshots:
 timeouts:
   page_load: 30000
   element_wait: 10000
-  battle_max: 600000  # 10 minutes
+  battle_max: 1800000  # 30 minutes
   semi_auto_watchdog: 5000       # Timeout waiting for attack button to appear (ms)
   semi_auto_attack_confirm: 3000  # Timeout waiting for attack network confirmation (ms)
   loop_interval: 10       # Battle loop polling interval in ms
 
+  # Full-auto inactivity watchdogs & persistence reloads (ms)
+  full_auto:
+    ability_watchdog: 8000      # Inactivity reload after an ability is used
+    summon_watchdog: 8000       # Inactivity reload after a summon is used
+    turn_start_watchdog: 15000  # Inactivity reload after a new turn begins
+    initial_lockout: 25000      # Initial threshold after FA click (OUGI animation lockout)
+    recovery_reset: 15000       # Threshold reset after a recovery reload
+    persistence: 25000          # Hard reload after prolonged inactivity (full_auto)
+    persistence_semi: 5000     # Hard reload after prolonged inactivity (semi_auto)
+
   # Raid-specific timeouts
   raid:
     error_detection: 3000       # Time to detect raid join errors
-    supporter_list_check: 100   # Time to check for supporter selection screen
     element_click: 1000         # Timeout for click operations
     join_race: 3000             # Time to wait for join confirmation (summon/ok/battle)
     page_transition: 200        # Delay for page transitions
-    spa_navigation: 300         # Delay for SPA navigation completion
     pending_detail_xhr: 2000    # Additional wait for detail XHR in pending battles
     pending_hard_timeout: 5000  # Hard timeout for pending battle processing
-    transient_error_wait: 500   # Delay after transient errors before retry
     cooldown: 5000              # Cooldown per step (used in 15s total cooldown)
-    refresh_list_wait: 10       # Minimal wait after raid list refresh
 
 notifications:
   discord_webhook: "" # Add your Discord Webhook URL here

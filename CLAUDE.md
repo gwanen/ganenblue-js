@@ -186,13 +186,10 @@ ganenblue-js/
 
 ```bash
 # Start quest farming
-npm run cli -- start --url "https://game.granbluefantasy.jp/#quest/..." -n 50 -m full_auto
+npm cli -- start --url "https://game.granbluefantasy.jp/#quest/..." -n 50 -m full_auto
 
 # Start raid backup farming
-npm run cli -- raid -n 100 -m full_auto
-
-# Run development CLI with auto-reload
-npm run dev:cli
+npm cli -- raid -n 100 -m full_auto
 ```
 
 **Available CLI Commands:**
@@ -213,18 +210,15 @@ Launches Electron desktop app with interactive UI controls.
 ### Development
 
 ```bash
-npm run dev          # Auto-restarting dev server
-npm test             # Run Jest tests
-npm run lint         # Run ESLint
-npm run format       # Format code with Prettier
-npm run audit:logs   # Analyze bot logs
+npm test            # Run Jest tests
+npm audit:logs      # Analyze bot logs
 ```
 
 ### Build Desktop App
 
 ```bash
-npm run dist         # Build NSIS installer for Windows
-npm run pack         # Build portable (no installer)
+npm dist            # Build NSIS installer for Windows
+npm pack            # Build portable (no installer)
 ```
 
 ## Configuration
@@ -348,9 +342,8 @@ Uses `puppeteer-extra-stealth` plugin to:
 ## Testing
 
 ```bash
-npm test             # Run all Jest tests
-npm test -- --watch  # Watch mode for TDD
-npm run test:stealth # Test stealth plugin
+npm test            # Run all Jest tests
+npm test -- --watch # Watch mode for TDD
 ```
 
 Tests located in `__tests__/` directories parallel to source files.
@@ -360,7 +353,7 @@ Tests located in `__tests__/` directories parallel to source files.
 ### Desktop Application
 
 ```bash
-npm run dist
+npm dist
 # Output: dist/Ganenblue-JS-Setup-1.0.0.exe
 ```
 
@@ -381,6 +374,14 @@ gbf-bot start --url "https://..." -n 50
 - **Session tokens** - Stored in Puppeteer cache, not logged.
 - **Network monitoring** - Only reads API responses, doesn't modify requests.
 - **Proxy support** - Configured in browser settings for anonymity.
+
+## Stack Alternatives
+
+Current stack is the right call for this use case. Notable alternatives if pain points arise:
+
+- **Playwright** > Puppeteer — better multi-tab handling, built-in wait strategies. Stealth plugins less mature; GBF requires Chrome specifically so multi-browser support is moot.
+- **Pino** > Winston — 5-10x faster logging, lower overhead at high raid volumes.
+- **Tauri** > Electron — smaller bundle, lower RAM, Rust backend. High migration cost for marginal desktop-tool benefit.
 
 ## License
 

@@ -453,7 +453,7 @@ class BattleHandler {
           this.options.lastActionTimeRef.value = Date.now();
         }
         if (this.options && this.options.faThresholdRef) {
-          this.options.faThresholdRef.value = 25000; // 25s after every FA click
+          this.options.faThresholdRef.value = config.get("timeouts.full_auto.initial_lockout", 25000); // OUGI lockout after every FA click
         }
 
         // Handle common post-click popups
@@ -714,8 +714,9 @@ class BattleHandler {
     this.logger.debug(
       `[Honor] Target: ${honorTarget.toLocaleString()} (raw: "${this.options?.honorTarget}")`,
     );
-    const maxWaitMinutes = config.get("bot.max_battle_time") || 15;
-    const maxWaitMs = maxWaitMinutes * 60 * 1000;
+    const maxWaitMs =
+      config.get("timeouts.battle_max") ||
+      (config.get("bot.max_battle_time") || 15) * 60 * 1000;
     const startTime = Date.now();
     // checkInterval will be dynamic inside the loop
     let missingUiCount = 0;
@@ -799,8 +800,18 @@ class BattleHandler {
     this._preNetworkTurn = 0;
     this._preNetworkTurnReady = false;
     this._preNetworkFinished = false;
+    // Full-auto watchdog/persistence thresholds (ms) — cached once per battle
+    const faTimers = {
+      ability: config.get("timeouts.full_auto.ability_watchdog", 8000),
+      summon: config.get("timeouts.full_auto.summon_watchdog", 8000),
+      turnStart: config.get("timeouts.full_auto.turn_start_watchdog", 15000),
+      initialLockout: config.get("timeouts.full_auto.initial_lockout", 25000),
+      recoveryReset: config.get("timeouts.full_auto.recovery_reset", 15000),
+      persistence: config.get("timeouts.full_auto.persistence", 25000),
+      persistenceSemi: config.get("timeouts.full_auto.persistence_semi", 15000),
+    };
     let lastActionTime = Date.now();
-    let faInactivityThreshold = 25000; // Initial: 25s for OUGI lockout after FA click
+    let faInactivityThreshold = faTimers.initialLockout; // Initial: OUGI lockout after FA click
     let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
     // If turn changed during transition, log it now (full_auto only)
@@ -879,13 +890,13 @@ class BattleHandler {
       updateHonor(honor);
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 8000; // 5s after summon (+2s per user request)
+      this.options.faThresholdRef.value = faTimers.summon; // inactivity watchdog after summon
       lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
-      this.options.faThresholdRef.value = 8000; // 5s after ability (+2s per user request)
+      this.options.faThresholdRef.value = faTimers.ability; // inactivity watchdog after ability
       lastFACheckTime = Date.now();
     };
 
@@ -911,7 +922,7 @@ class BattleHandler {
         // FA: turn just started — attack + skills haven't resolved yet (can take 10-15s).
         // SA: button is ready immediately — use configured watchdog threshold (default 10s).
         const saThreshold = config.get("timeouts.semi_auto_watchdog", 10000);
-        this.options.faThresholdRef.value = isSemiAuto ? saThreshold : 15000;
+        this.options.faThresholdRef.value = isSemiAuto ? saThreshold : faTimers.turnStart;
         lastFACheckTime = Date.now();
         lastAttackEventTime = 0;
         attackUsed = false; // Clear stale attack flag on turn change
@@ -1235,7 +1246,7 @@ class BattleHandler {
           }
 
           // 3. Persistence Check — refresh after no activity for a long period
-          const persistenceThreshold = mode === "semi_auto" ? 15000 : 25000; // Keeping FA at 25s for persistence, but watchdog will hit earlier
+          const persistenceThreshold = mode === "semi_auto" ? faTimers.persistenceSemi : faTimers.persistence; // FA persistence; watchdog usually hits earlier
           if (
             (mode === "full_auto" || mode === "semi_auto") &&
             !this.stopped &&
@@ -1244,7 +1255,7 @@ class BattleHandler {
             this.logger.info(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive ${persistenceThreshold / 1000}s. Performing Hard Reload`);
             lastFACheckTime = Date.now();
             this.options.lastActionTimeRef.value = Date.now();
-            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : 15000;
+            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : faTimers.recoveryReset;
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1269,7 +1280,7 @@ class BattleHandler {
           ) {
             this.logger.warn(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive. Performing Hard Reload`);
             this.options.lastActionTimeRef.value = Date.now();
-            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : 15000; // Reset after recovery refresh
+            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : faTimers.recoveryReset; // Reset after recovery refresh
             await this.controller.reloadHard();
             await sleep(this.fastRefresh ? 20 : 50);
             this.controller.clearClickCache();
@@ -1694,6 +1705,12 @@ class BattleHandler {
           ".prt-result, #js-result, .cnt-result, .prt-result-head",
         );
         if (result && result.offsetWidth > 0) res.isResultPage = true;
+        // Empty result (e.g. raid boss already dead on join) renders a notice
+        // instead of the standard result wrapper — detect it as a terminal state too.
+        if (!res.isResultPage && selectors.emptyResultNotice) {
+          const empty = document.querySelector(selectors.emptyResultNotice);
+          if (empty && empty.offsetWidth > 0) res.isResultPage = true;
+        }
 
         // 4. UI Controls
         const att = document.querySelector(selectors.attackButton);
