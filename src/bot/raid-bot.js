@@ -813,14 +813,17 @@ class RaidBot {
         // We keep listening until we get rewards or the hard timeout expires.
         await new Promise((resolve) => {
           let resolved = false;
+          const hardTimeoutMs = config.get("timeouts.raid.pending_hard_timeout", 5000);
+          const detailXhrMs = config.get("timeouts.raid.pending_detail_xhr", 2000);
 
           const hardTimeout = setTimeout(() => {
             if (!resolved && this.controller.network) {
               resolved = true;
               this.controller.network.off("battle:result", onResult);
+              this.logger.warn(`[Loot] Pending raid result timeout (${Math.round(hardTimeoutMs / 1000)}s) — no result endpoint, skipping`);
               resolve(null);
             }
-          }, config.get("timeouts.raid.pending_hard_timeout", 5000));
+          }, hardTimeoutMs);
 
           // After the content page fires, give the detail XHR up to 2s extra.
           let softTimeout = null;
@@ -844,14 +847,14 @@ class RaidBot {
               clearTimeout(hardTimeout);
               softTimeout = setTimeout(() => {
                 if (!resolved) {
-                  this.logger.warn(`[Loot] Detail XHR did not arrive in time — no chest data for this pending raid`);
+                  this.logger.warn(`[Loot] Detail XHR did not arrive in time (${Math.round(detailXhrMs / 1000)}s) — no chest data for this pending raid`);
                   resolved = true;
                   if (this.controller.network) {
                     this.controller.network.off("battle:result", onResult);
                   }
                   resolve(null);
                 }
-              }, config.get("timeouts.raid.pending_detail_xhr", 2000));
+              }, detailXhrMs);
             }
           };
 

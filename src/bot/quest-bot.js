@@ -830,7 +830,7 @@ class QuestBot {
           if (this.controller.network) {
             this.controller.network.off("battle:result", onResult);
           }
-          this.logger.debug("[Network] Battle result timeout, proceeding anyway");
+          this.logger.debug("[Network] Battle result timeout (5s), proceeding anyway");
           resolve();
         }
       }, 5000);

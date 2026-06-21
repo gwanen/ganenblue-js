@@ -45,15 +45,15 @@ timeouts:
   semi_auto_attack_confirm: 3000  # Timeout waiting for attack network confirmation (ms)
   loop_interval: 10       # Battle loop polling interval in ms
 
-  # Full-auto inactivity watchdogs & persistence reloads (ms)
+  # Full-auto inactivity watchdog thresholds (ms). The watchdog hard-reloads and
+  # re-engages FA when no battle action is seen within the active threshold, which
+  # is dynamic: set per event below and starting at initial_lockout.
   full_auto:
-    ability_watchdog: 8000      # Inactivity reload after an ability is used
-    summon_watchdog: 8000       # Inactivity reload after a summon is used
-    turn_start_watchdog: 15000  # Inactivity reload after a new turn begins
-    initial_lockout: 25000      # Initial threshold after FA click (OUGI animation lockout)
-    recovery_reset: 15000       # Threshold reset after a recovery reload
-    persistence: 25000          # Hard reload after prolonged inactivity (full_auto)
-    persistence_semi: 5000     # Hard reload after prolonged inactivity (semi_auto)
+    ability_watchdog: 8000      # After an ability is used
+    summon_watchdog: 8000       # After a summon is used
+    turn_start_watchdog: 15000  # After a new turn begins
+    initial_lockout: 25000      # After every FA click (OUGI animation lockout)
+    recovery_reset: 15000       # After a watchdog recovery reload
 
   # Raid-specific timeouts
   raid:

@@ -575,7 +575,7 @@ class BattleHandler {
     }
 
     if (!attackReady) {
-      this.logger.warn("[Warn] Battle: Exception (Attack button timeout)");
+      this.logger.warn(`[Warn] Battle: Exception (Attack button timeout: ${Math.round(attackWatchdog / 1000)}s)`);
       if (!skipReloadOnTimeout) {
         await this.controller.reloadPage();
       }
@@ -587,6 +587,7 @@ class BattleHandler {
     // Also listen for battle:result to short-circuit the timeout when the boss dies on this hit
     // (killing blow triggers result directly with no attack_result.json).
     this.logger.debug("[Battle] Waiting for attack confirmation...");
+    const attackConfirmTimeout = config.get('timeouts.semi_auto_attack_confirm', 3000);
     let battleEndedDuringAttack = false;
     const attackConfirmedPromise = new Promise((resolve) => {
       let resolved = false;
@@ -602,7 +603,7 @@ class BattleHandler {
           cleanup();
           resolve(false);
         }
-      }, config.get('timeouts.semi_auto_attack_confirm', 3000));
+      }, attackConfirmTimeout);
 
       const onAttack = () => {
         if (!resolved) {
@@ -652,7 +653,7 @@ class BattleHandler {
         return false;
       }
       this.logger.warn(
-        "[Semi Auto] Network confirmation timeout. Checking state...",
+        `[Semi Auto] Network confirmation timeout (${Math.round(attackConfirmTimeout / 1000)}s). Checking state...`,
       );
       // Check if battle ended
       const ended = await this.controller.page
@@ -720,7 +721,6 @@ class BattleHandler {
     const startTime = Date.now();
     // checkInterval will be dynamic inside the loop
     let missingUiCount = 0;
-    let lastFACheckTime = Date.now(); // Start timer from now to avoid immediate fire
     let lastEndStateCheckTime = 0; // Throttle battle-end DOM checks to 1000ms
     let lastCheckTurn = 0; // Used for Turn-Change Priority Refresh
     let lastSkipCheckTime = 0; // Throttle non-raid menu checks
@@ -800,15 +800,13 @@ class BattleHandler {
     this._preNetworkTurn = 0;
     this._preNetworkTurnReady = false;
     this._preNetworkFinished = false;
-    // Full-auto watchdog/persistence thresholds (ms) — cached once per battle
+    // Full-auto inactivity watchdog thresholds (ms) — cached once per battle
     const faTimers = {
       ability: config.get("timeouts.full_auto.ability_watchdog", 8000),
       summon: config.get("timeouts.full_auto.summon_watchdog", 8000),
       turnStart: config.get("timeouts.full_auto.turn_start_watchdog", 15000),
       initialLockout: config.get("timeouts.full_auto.initial_lockout", 25000),
       recoveryReset: config.get("timeouts.full_auto.recovery_reset", 15000),
-      persistence: config.get("timeouts.full_auto.persistence", 25000),
-      persistenceSemi: config.get("timeouts.full_auto.persistence_semi", 15000),
     };
     let lastActionTime = Date.now();
     let faInactivityThreshold = faTimers.initialLockout; // Initial: OUGI lockout after FA click
@@ -883,7 +881,6 @@ class BattleHandler {
       this.options.lastActionTimeRef.value = Date.now();
       // Do NOT touch faThresholdRef here — handleFullAuto sets it to 25s after every FA click,
       // and reducing it to 5s races against the loop's attackUsed handler on fast (no-skill) turns.
-      lastFACheckTime = Date.now();
       lastAttackEventTime = Date.now();
     };
     const onSummonUsed = ({ honor } = {}) => {
@@ -891,13 +888,11 @@ class BattleHandler {
       summonUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.summon; // inactivity watchdog after summon
-      lastFACheckTime = Date.now();
     };
     const onAbilityUsed = ({ honor } = {}) => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.ability; // inactivity watchdog after ability
-      lastFACheckTime = Date.now();
     };
 
     const onBattleStart = ({ turn }) => {
@@ -923,7 +918,6 @@ class BattleHandler {
         // SA: button is ready immediately — use configured watchdog threshold (default 10s).
         const saThreshold = config.get("timeouts.semi_auto_watchdog", 10000);
         this.options.faThresholdRef.value = isSemiAuto ? saThreshold : faTimers.turnStart;
-        lastFACheckTime = Date.now();
         lastAttackEventTime = 0;
         attackUsed = false; // Clear stale attack flag on turn change
         this.logger.debug(
@@ -1150,7 +1144,7 @@ class BattleHandler {
                     `[Battle] Re-engagement failed: ${e.message}`,
                   );
                 }
-                lastFACheckTime = Date.now();
+                this.options.lastActionTimeRef.value = Date.now();
                 missingUiCount = 0;
               }
             }
@@ -1176,7 +1170,6 @@ class BattleHandler {
               } catch (e) {
                 this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
               }
-              lastFACheckTime = Date.now();
               continue;
             }
           }
@@ -1194,7 +1187,6 @@ class BattleHandler {
               } catch (e) {
                 this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
               }
-              lastFACheckTime = Date.now();
               continue;
             }
           }
@@ -1241,44 +1233,15 @@ class BattleHandler {
               this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }
             lastAttackRefreshTime = Date.now();
-            lastFACheckTime = Date.now();
             continue;
           }
 
-          // 3. Persistence Check — refresh after no activity for a long period
-          const persistenceThreshold = mode === "semi_auto" ? faTimers.persistenceSemi : faTimers.persistence; // FA persistence; watchdog usually hits earlier
-          if (
-            (mode === "full_auto" || mode === "semi_auto") &&
-            !this.stopped &&
-            Date.now() - lastFACheckTime > persistenceThreshold
-          ) {
-            this.logger.info(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive ${persistenceThreshold / 1000}s. Performing Hard Reload`);
-            lastFACheckTime = Date.now();
-            this.options.lastActionTimeRef.value = Date.now();
-            this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : faTimers.recoveryReset;
-            await this.controller.reloadHard();
-            await sleep(this.fastRefresh ? 20 : 50);
-            this.controller.clearClickCache();
-            try {
-              if (mode === "semi_auto") {
-                this.logger.info("[Battle] Re-engaging Semi Auto");
-                networkTurnReady = true;
-              } else {
-                await this.handleFullAuto();
-              }
-            } catch (e) {
-              this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
-            }
-            lastFACheckTime = Date.now();
-            continue;
-          }
-
-          // 4. Inactivity Watchdog (Dynamic threshold)
+          // 3. Inactivity Watchdog (Dynamic threshold)
           if (
             (mode === "full_auto" || mode === "semi_auto") &&
             Date.now() - lastActionTime > faInactivityThreshold
           ) {
-            this.logger.warn(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive. Performing Hard Reload`);
+            this.logger.warn(`[${mode === "semi_auto" ? "Semi Auto" : "Full Auto"}] Inactive. Performing Hard Reload (timeout: ${Math.round(faInactivityThreshold / 1000)}s)`);
             this.options.lastActionTimeRef.value = Date.now();
             this.options.faThresholdRef.value = mode === "semi_auto" ? config.get("timeouts.semi_auto_watchdog", 10000) : faTimers.recoveryReset; // Reset after recovery refresh
             await this.controller.reloadHard();
@@ -1294,7 +1257,6 @@ class BattleHandler {
             } catch (e) {
               this.logger.warn(`[Battle] Re-engagement failed: ${e.message}`);
             }
-            lastFACheckTime = Date.now();
             continue;
           }
         }
@@ -1350,7 +1312,8 @@ class BattleHandler {
         await sleep(this.loopInterval);
       }
 
-      throw new Error("Battle timeout");
+      this.logger.error(`[Battle] Battle timeout — exceeded max duration (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
+      throw new Error(`Battle timeout (${Math.round(maxWaitMs / 1000)}s)`);
     } finally {
       if (this.controller.network) {
         this.controller.network.off("battle:result", onBattleResult);
