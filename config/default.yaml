@@ -64,6 +64,3 @@ timeouts:
     pending_detail_xhr: 2000    # Additional wait for detail XHR in pending battles
     pending_hard_timeout: 5000  # Hard timeout for pending battle processing
     cooldown: 5000              # Cooldown per step (used in 15s total cooldown)
-
-notifications:
-  discord_webhook: "" # Add your Discord Webhook URL here

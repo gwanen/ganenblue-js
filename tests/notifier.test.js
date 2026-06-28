@@ -2,18 +2,16 @@ import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 import notifier from '../src/utils/notifier.js';
 import config from '../src/utils/config.js';
 
-// Mock config
-jest.spyOn(config, 'get').mockImplementation((key) => {
-    if (key === 'notifications.discord_webhook') return 'https://discord.com/api/webhooks/mock';
+// Mock config — webhook now lives per-profile in credentials, read via getCredential
+jest.spyOn(config, 'getCredential').mockImplementation((key) => {
+    if (key === 'profiles.p1.discord_webhook') return 'https://discord.com/api/webhooks/mock';
     return null;
 });
 
 describe('Notifier Discord Cleanup Verification', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        // Manually reload settings because it's a singleton
-        notifier.loadSettings();
-        
+
         // Mock global fetch
         global.fetch = jest.fn(() =>
             Promise.resolve({

@@ -156,6 +156,7 @@ function getProfileElements(pid) {
         // Credentials
         email: document.getElementById(`mobage-email-${pid}`),
         password: document.getElementById(`mobage-password-${pid}`),
+        discordWebhook: document.getElementById(`discord-webhook-${pid}`),
         btnSaveCreds: document.getElementById(`btn-save-credentials-${pid}`),
         // Phase 11: Performance
         turboMode: document.getElementById(`turbo-mode-${pid}`)
@@ -317,8 +318,9 @@ function setupProfileListeners(pid) {
     els.btnSaveCreds.addEventListener('click', async () => {
         const email = els.email.value.trim();
         const password = els.password.value;
+        const discordWebhook = els.discordWebhook ? els.discordWebhook.value.trim() : '';
         if (!email || !password) return showToast('Email & Password required', 'warn');
-        await window.electronAPI.saveCredentials(pid, { email, password });
+        await window.electronAPI.saveCredentials(pid, { email, password, discordWebhook });
         log(pid, 'Credentials saved', 'success');
     });
 
@@ -782,6 +784,9 @@ async function loadCredentials(pid) {
         // pid is 'p1' or 'p2'
         dom[pid].email.value = res.credentials.email || '';
         dom[pid].password.value = res.credentials.password || '';
+        if (dom[pid].discordWebhook) {
+            dom[pid].discordWebhook.value = res.credentials.discord_webhook || '';
+        }
     } else {
         // Check if legacy formatting exists? No, assuming main process handles it or returns null
         // If we want to support 'profile1' -> 'p1' migration, it should happen in main.js

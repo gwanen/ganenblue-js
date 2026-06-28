@@ -5,33 +5,31 @@ import config from './config.js';
  * Handles external notifications (e.g., Discord Webhooks) for critical bot events.
  */
 class Notifier {
-    constructor() {
-        this.webhookUrl = null;
-        this.enabled = false;
-        this.loadSettings();
-    }
-
     /**
-     * Initializes notification settings from the central configuration.
+     * Resolves the Discord webhook for a profile from credentials.yaml.
+     * Each profile (p1, p2, ...) carries its own optional webhook.
+     * @param {string} profileId - The profile identifier.
+     * @returns {string|null} The webhook URL, or null if not configured.
      * @private
      */
-    loadSettings() {
+    getWebhook(profileId) {
         try {
-            this.webhookUrl = config.get('notifications.discord_webhook');
-            this.enabled = !!this.webhookUrl;
+            return config.getCredential(`profiles.${profileId}.discord_webhook`) || null;
         } catch (e) {
-            this.enabled = false;
+            return null;
         }
     }
 
     /**
-     * Sends a raw message and/or embeds to the configured Discord webhook.
+     * Sends a raw message and/or embeds to a profile's Discord webhook.
+     * @param {string} profileId - The profile whose webhook to use.
      * @param {string} content - The text message content.
      * @param {Array<object>} [embeds=[]] - Optional list of Discord embeds.
      * @returns {Promise<void>}
      */
-    async sendDiscordMessage(content, embeds = []) {
-        if (!this.enabled || !this.webhookUrl) return;
+    async sendDiscordMessage(profileId, content, embeds = []) {
+        const webhookUrl = this.getWebhook(profileId);
+        if (!webhookUrl) return;
 
         try {
             const body = {
@@ -44,7 +42,7 @@ class Notifier {
                 body.embeds = embeds;
             }
 
-            const response = await fetch(this.webhookUrl, {
+            const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -68,7 +66,7 @@ class Notifier {
      * @returns {Promise<void>}
      */
     async notifyError(profileId, errorMsg) {
-        return this.sendDiscordMessage('', [{
+        return this.sendDiscordMessage(profileId, '', [{
             title: `⚠️ Error Detected - [${profileId}]`,
             description: `\`\`\`${errorMsg}\`\`\``,
             color: 0xef4444, // Red
@@ -82,7 +80,7 @@ class Notifier {
      * @returns {Promise<void>}
      */
     async notifyCaptcha(profileId) {
-        return this.sendDiscordMessage(`@everyone 🆘 **CAPTCHA DETECTED** on [${profileId}]!`, [{
+        return this.sendDiscordMessage(profileId, `@everyone 🆘 **CAPTCHA DETECTED** on [${profileId}]!`, [{
             title: 'Human Intervention Required',
             description: 'The bot has stopped due to access verification.',
             color: 0xf59e0b, 

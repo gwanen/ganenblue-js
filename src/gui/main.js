@@ -543,6 +543,7 @@ ipcMain.handle("credentials:save", async (event, profileId, credentials) => {
     data.profiles[profileId] = {
       email: credentials.email || "",
       password: credentials.password || "",
+      discord_webhook: credentials.discordWebhook || "",
     };
 
     writeFileSync(credPath, yaml.dump(data), "utf8");

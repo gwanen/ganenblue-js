@@ -169,9 +169,12 @@ ganenblue-js/
 
 ### Notification System (`src/utils/notifier.js`)
 
-- Desktop notifications (OS-level)
-- Console notifications (CLI)
-- Configurable message styling
+- Discord webhook notifications for errors and captcha detection
+- **Per-profile webhooks** - each profile's webhook is read from
+  `config/credentials.yaml` (`profiles.<id>.discord_webhook`) via
+  `config.getCredential()`, so p1 and p2 can target different channels
+- No webhook configured for a profile → notifications silently disabled
+- Configurable in the Electron GUI under each profile's Credentials section
 
 ### Utilities (`src/utils/`)
 
@@ -252,12 +255,25 @@ CSS selectors for game elements (quest button, raid list, etc.). Maps UI element
 
 ### `config/credentials.yaml`
 
-Account login credentials (git-ignored, use `credentials.example.yaml` as template):
+Account login credentials and per-profile secrets (git-ignored, use
+`credentials.example.yaml` as template). One entry per profile; the GUI
+reads/writes this format:
 
 ```yaml
-email: your-email@example.com
-password: your-password
+profiles:
+  p1:
+    email: your-email@example.com
+    password: your-password
+    discord_webhook: ""  # optional, per-profile error/captcha alerts
+  p2:
+    email:
+    password:
+    discord_webhook: ""
 ```
+
+Secrets are read via `config.getCredential('profiles.<id>.<key>')`, kept
+separate from `config.get()` so they never live in the committed config.
+A legacy top-level `mobage: {email, password}` format is also supported.
 
 ### Environment Variables (`.env`)
 
