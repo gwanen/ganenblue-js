@@ -398,13 +398,18 @@ function updateFormVisibility(pid) {
     const isQuest = mode === 'quest' || mode === 'free_quest';
     const isReplicard = mode === 'replicard' || mode === 'xeno_replicard';
     const isSkip = mode === 'skip';
+    const isAutoQuest = mode === 'auto_quest';
 
     els.questUrlGroup.style.display = isQuest ? 'block' : 'none';
     els.replicardUrlGroup.style.display = isReplicard ? 'block' : 'none';
     els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.raidTargetGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.zoneGroup.style.display = mode === 'xeno_replicard' ? 'block' : 'none';
-    els.battleMode.parentElement.style.display = isSkip ? 'none' : 'block';
+    // Auto Quest and Skip have no battle mode; Auto Quest also runs until stopped (no max).
+    els.battleMode.parentElement.style.display = (isSkip || isAutoQuest) ? 'none' : 'block';
+    if (els.maxRuns) {
+        els.maxRuns.parentElement.style.display = isAutoQuest ? 'none' : 'block';
+    }
 
     const label = els.maxRunsLabel;
     if (label) {

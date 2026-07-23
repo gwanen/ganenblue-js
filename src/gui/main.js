@@ -7,6 +7,7 @@ import BrowserManager from "../core/browser.js";
 import QuestBot from "../bot/quest-bot.js";
 import RaidBot from "../bot/raid-bot.js";
 import SkipBot from "../bot/skip-bot.js";
+import AutoQuestBot from "../bot/auto-quest-bot.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
 import memoryWatchdog from "../utils/memory-watchdog.js";
@@ -385,6 +386,13 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         skillRefresh: settings.skillRefresh,
         preBattleAutoAttack: settings.preBattleAutoAttack ? "one-touch" : "off",
         refreshOnStart: settings.refreshOnStart,
+        turboMode: settings.turboMode,
+        profileId: profileId,
+      });
+    } else if (botMode === "auto_quest") {
+      instance.bot = new AutoQuestBot(instance.browser.page, {
+        onBattleEnd: createStatsCallback(profileId, instance),
+        blockResources: settings.blockResources,
         turboMode: settings.turboMode,
         profileId: profileId,
       });

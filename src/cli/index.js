@@ -203,6 +203,50 @@ program.command('skip')
         }
     });
 
+program.command('auto-quest')
+    .description('Auto-advance story quests by clicking skip / scene-skip / continue (runs until Ctrl+C)')
+    .option('--headless', 'Run in headless mode')
+    .action(async (options) => {
+        try {
+            logger.info('[Cli] Starting auto quest bot...');
+
+            if (options.headless) config.set('browser.headless', true);
+
+            // Initialize Browser
+            const browserManager = new BrowserManager(config.get('browser'));
+            const page = await browserManager.launch();
+
+            // Import dynamically
+            const { default: AutoQuestBot } = await import('../bot/auto-quest-bot.js');
+
+            // Initialize Bot
+            const bot = new AutoQuestBot(page, {});
+
+            // Handle graceful shutdown
+            process.on('SIGINT', async () => {
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
+            });
+
+            // Start Bot
+            await bot.start();
+
+            await browserManager.close();
+            logger.info('[Cli] Finished successfully.');
+
+        } catch (error) {
+            logger.error('[Error] [Cli] Fatal error:', error);
+            process.exit(1);
+        }
+    });
+
 program.command('config')
     .description('View current configuration')
     .action(() => {
