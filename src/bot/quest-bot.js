@@ -5,6 +5,7 @@ import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
 import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
+import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha } from "./bot-common.js";
 
 /**
  * Orchestrates automated quest completion, including navigation, supporter selection,
@@ -47,26 +48,7 @@ class QuestBot {
         this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
 
         // --- Performance Optimizations ---
-        const blockResources = options.blockResources !== undefined
-            ? options.blockResources
-            : config.get('stealth.block_resources', false);
-
-        if (blockResources) {
-            this.logger.info("[System] Image blocking enabled");
-            this.controller.enableResourceBlocking().catch((e) =>
-                this.logger.warn("[System] Failed to enable image blocking", e)
-            );
-        }
-
-        const turboMode = options.turboMode !== undefined
-            ? options.turboMode
-            : config.get('stealth.turbo_css', true);
-
-        if (turboMode) {
-            this.controller.enableTurboCSS().catch((e) =>
-                this.logger.warn("[System] Failed to enable turbo CSS", e)
-            );
-        }
+        applyPerformanceOptions({ controller: this.controller, logger: this.logger, options });
 
         // --- Network Event Binding ---
         this.raidErrorType = null;
@@ -836,21 +818,7 @@ class QuestBot {
   }
 
   async checkCaptcha() {
-    const selectors = config.selectors.battle;
-    if (
-      await this.controller.elementExists(selectors.captchaPopup, 1000, true)
-    ) {
-      const headerText = await this.controller.getText(selectors.captchaHeader);
-      if (headerText.includes("Access Verification")) {
-        this.logger.error(
-          "[Safety] CAPTCHA detected. Human intervention required",
-        );
-        notifier.notifyCaptcha(this.profileId || "p1").catch(() => { });
-        this.pause();
-        return true;
-      }
-    }
-    return false;
+    return checkBattleCaptcha(this);
   }
 
   pause() {
@@ -899,9 +867,7 @@ class QuestBot {
   }
 
   getAverageBattleTime() {
-    if (this.battleTimes.length === 0) return 0;
-    const sum = this.battleTimes.reduce((a, b) => a + b, 0);
-    return Math.round(sum / this.battleTimes.length);
+    return averageBattleTime(this.battleTimes);
   }
 
   getStats() {
@@ -910,13 +876,7 @@ class QuestBot {
       avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
     }
 
-    let rate = "0.0/h";
-    const now = Date.now();
-    const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
-    if (this.startTime && uptimeHours > 0) {
-      const rph = this.questsCompleted / uptimeHours;
-      rate = `${rph.toFixed(1)}/h`;
-    }
+    const rate = computeRate(this.startTime, this.questsCompleted);
 
     return {
       completedQuests: this.questsCompleted,

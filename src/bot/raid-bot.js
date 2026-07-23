@@ -5,6 +5,7 @@ import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
 import { isResultUrl, isRaidUrl } from "../utils/game-url.js";
+import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha } from "./bot-common.js";
 
 /**
  * Orchestrates raid-specific bot logic, including list scanning, supporter selection,
@@ -52,26 +53,7 @@ class RaidBot {
         this._lastProcessedRewardsHash = null;
 
         // --- Performance Optimizations ---
-        const blockResources = options.blockResources !== undefined
-            ? options.blockResources
-            : config.get('stealth.block_resources', false);
-
-        if (blockResources) {
-            this.logger.info("[System] Image blocking enabled");
-            this.controller.enableResourceBlocking().catch((e) =>
-                this.logger.warn("[System] Failed to enable image blocking", e)
-            );
-        }
-
-        const turboMode = options.turboMode !== undefined
-            ? options.turboMode
-            : config.get('stealth.turbo_css', true);
-
-        if (turboMode) {
-            this.controller.enableTurboCSS().catch((e) =>
-                this.logger.warn("[System] Failed to enable turbo CSS", e)
-            );
-        }
+        applyPerformanceOptions({ controller: this.controller, logger: this.logger, options });
 
         // --- Network Event Binding ---
         this.raidErrorType = null;
@@ -1137,25 +1119,7 @@ class RaidBot {
   }
 
   async checkCaptcha() {
-    const selectors = config.selectors.battle;
-    if (
-      await this.controller.elementExists(selectors.captchaPopup, 1000, true)
-    ) {
-      const headerText = await this.controller.getText(selectors.captchaHeader);
-      if (headerText.includes("Access Verification")) {
-        this.logger.error(
-          "[Safety] Captcha detected. Human intervention required",
-        );
-        notifier
-          .notifyCaptcha(this.profileId || "p1")
-          .catch((e) =>
-            this.logger.debug("[Notifier] Failed to notify captcha", e),
-          );
-        this.pause();
-        return true;
-      }
-    }
-    return false;
+    return checkBattleCaptcha(this);
   }
 
   pause() {
@@ -1230,9 +1194,7 @@ class RaidBot {
   }
 
   getAverageBattleTime() {
-    if (this.battleTimes.length === 0) return 0;
-    const sum = this.battleTimes.reduce((a, b) => a + b, 0);
-    return Math.round(sum / this.battleTimes.length);
+    return averageBattleTime(this.battleTimes);
   }
 
     /**
@@ -1244,12 +1206,7 @@ class RaidBot {
         if (this.battleCount > 0) {
             avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
         }
-        let rate = "0.0/h";
-        const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
-        if (this.startTime && uptimeHours > 0) {
-            const rph = this.raidsCompleted / uptimeHours;
-            rate = `${rph.toFixed(1)}/h`;
-        }
+        const rate = computeRate(this.startTime, this.raidsCompleted);
         return {
             completedQuests: this.raidsCompleted,
             raidsCompleted: this.raidsCompleted,

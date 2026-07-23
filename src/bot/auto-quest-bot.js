@@ -3,6 +3,7 @@ import { sleep } from '../utils/random.js';
 import { createScopedLogger } from '../utils/logger.js';
 import config from '../utils/config.js';
 import notifier from '../utils/notifier.js';
+import { applyPerformanceOptions, computeRate } from './bot-common.js';
 
 /**
  * Auto-advances story quests by polling for the scene-skip, skip, and
@@ -33,22 +34,7 @@ class AutoQuestBot {
         this.startTime = null;
         this.lastClickTime = 0;
 
-        const blockResources = options.blockResources !== undefined
-            ? options.blockResources
-            : config.get('stealth.block_resources', false);
-
-        if (blockResources) {
-            this.logger.info('[System] Image blocking enabled');
-            this.controller.enableResourceBlocking().catch(e =>
-                this.logger.warn('[System] Failed to enable image blocking', e)
-            );
-        }
-
-        if (options.turboMode) {
-            this.controller.enableTurboCSS().catch(e =>
-                this.logger.warn('[System] Failed to enable turbo CSS', e)
-            );
-        }
+        applyPerformanceOptions({ controller: this.controller, logger: this.logger, options });
     }
 
     /**
@@ -179,13 +165,7 @@ class AutoQuestBot {
      * @returns {object} Summary of progress and rate.
      */
     getStats() {
-        let rate = '0.0/h';
-        const now = Date.now();
-        const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
-        if (this.startTime && uptimeHours > 0) {
-            const rph = this.questsCompleted / uptimeHours;
-            rate = `${rph.toFixed(1)}/h`;
-        }
+        const rate = computeRate(this.startTime, this.questsCompleted);
 
         return {
             completedQuests: this.questsCompleted,
