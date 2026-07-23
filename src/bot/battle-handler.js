@@ -1,6 +1,5 @@
 import PageController from "../core/page-controller.js";
 import { sleep, randomDelay } from "../utils/random.js";
-import logger from "../utils/logger.js";
 import config from "../utils/config.js";
 
 /**
@@ -515,41 +514,6 @@ class BattleHandler {
     await this.controller.reloadHard();
     await sleep(200);
     await this.checkStateAndResume("full_auto");
-  }
-
-  /**
-   * Verifies if FA is actually running.
-   * Since GBF doesn't change the DOM when FA is clicked (no class toggle),
-   * we track state internally via this.faActive flag set by handleFullAuto.
-   */
-  async verifyFullAutoState() {
-    // Internal state tracking: if handleFullAuto clicked the button without error,
-    // FA is running. GBF provides no reliable DOM signal for FA state.
-    if (this.faActive) return true;
-
-    // Frame validity guard: check frame is attached before evaluate
-    if (!(await this.controller.isFrameAttached())) {
-      this.logger.debug(
-        "[Full Auto] Frame detached during verify, assuming active",
-      );
-      return true;
-    }
-
-    return await this.controller.page
-      .evaluate((selectors) => {
-        // Safety: If the page is still in a loading/overlay state, assume FA is active/pending
-        const loading = document.querySelector(
-          ".prt-loading-container, .prt-popup-back.show, #loading-mask",
-        );
-        if (loading && loading.offsetHeight > 0) return true;
-
-        // Check for explicit FA-active signals (some GBF versions may add 'pushed')
-        const autoBtn = document.querySelector(selectors.fullAutoButton);
-        if (autoBtn && autoBtn.classList.contains("pushed")) return true;
-
-        return false;
-      }, this.selectors)
-      .catch(() => true); // If evaluate fails, assume active (don't reload on frame issues)
   }
 
     /**
@@ -1325,10 +1289,6 @@ class BattleHandler {
         this.controller.network.off("battle:summon_used", onSummonUsed);
       }
     }
-  }
-
-  async handleResult() {
-    // Skips clicking OK as requested.
   }
 
   /**

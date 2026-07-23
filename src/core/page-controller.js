@@ -400,38 +400,6 @@ class PageController {
   }
 
   /**
-   * Wraps an asynchronous operation with retry logic for network-related failures.
-   * @param {Function} fn - The async function to execute.
-   * @param {number} [maxRetries=3] - Number of retry attempts.
-   * @param {string} [operation="operation"] - Label for logging purposes.
-   */
-  async retryOnNetworkError(fn, maxRetries = 3, operation = "operation") {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await fn();
-      } catch (error) {
-        if (this.isNetworkError(error)) {
-          const isDetached =
-            error.message.includes("detached Frame") ||
-            error.message.includes("context was destroyed") ||
-            error.message.includes("Session closed") ||
-            error.message.includes("Target closed");
-
-          if (isDetached) this.handleDetachedFrame(error);
-
-          if (i < maxRetries - 1) {
-            const waitTime = 2000 * (i + 1);
-            this.logger.warn(`[Core] Error during ${operation}, retrying (${i + 1}/${maxRetries}) in ${waitTime / 1000}s...`);
-            await sleep(waitTime);
-            continue;
-          }
-        }
-        throw error;
-      }
-    }
-  }
-
-  /**
    * Signals a fatal frame detachment, which usually requires a bot restart.
    * @param {Error} error - The source detachment error.
    */
@@ -456,19 +424,6 @@ class PageController {
       return true;
     } catch (error) {
       this.logger.debug(`[Debug] Element not found: ${selector} (URL: ${this.page.url()})`);
-      return false;
-    }
-  }
-
-  /**
-   * Waits for a custom function to return a truthy value.
-   */
-  async waitForFunction(fn, timeout = 30000) {
-    try {
-      await this.page.waitForFunction(fn, { timeout });
-      return true;
-    } catch (error) {
-      this.logger.debug(`[Debug] Core: waitForFunction timeout (${error.message})`);
       return false;
     }
   }
@@ -693,13 +648,6 @@ class PageController {
     } catch (e) {
       return false;
     }
-  }
-
-  /**
-   * Native Puppeteer wait for navigation.
-   */
-  async waitForNavigation(timeout = 30000) {
-    await this.page.waitForNavigation({ waitUntil: "networkidle2", timeout });
   }
 
   /**
