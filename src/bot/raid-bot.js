@@ -40,6 +40,7 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.isRunning = false;
         this.isPaused = false;
+        this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
         this.battleTimes = [];
         this.battleTurns = [];
         this.lastEndHonor = 0;
@@ -348,7 +349,7 @@ class RaidBot {
       this.logger.debug(
         "[System] Operation cancelled before combat initiation",
       );
-      return;
+      return false;
     }
 
     // Handle battle
@@ -976,7 +977,9 @@ class RaidBot {
           try {
             await this.controller.cachedClick(".btn-usual-ok", 15);
             clickSuccess = true;
-          } catch (e) {}
+          } catch (e) {
+            this.logger.debug(`[Summon] Start-confirm click attempt ${i + 1} failed: ${e.message}`);
+          }
 
           if (
             !(await this.controller.elementExists(".btn-usual-ok", 200, true))
@@ -1257,7 +1260,7 @@ class RaidBot {
         }
         let rate = "0.0/h";
         const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
-        if (uptimeHours > 0) {
+        if (this.startTime && uptimeHours > 0) {
             const rph = this.raidsCompleted / uptimeHours;
             rate = `${rph.toFixed(1)}/h`;
         }

@@ -182,7 +182,7 @@ class AutoQuestBot {
         let rate = '0.0/h';
         const now = Date.now();
         const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
-        if (uptimeHours > 0) {
+        if (this.startTime && uptimeHours > 0) {
             const rph = this.questsCompleted / uptimeHours;
             rate = `${rph.toFixed(1)}/h`;
         }

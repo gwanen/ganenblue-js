@@ -182,6 +182,10 @@ class NetworkListener extends EventEmitter {
                     );
                     if (bossDied) {
                         this.logger.debug('[Status] Signal: One-shot kill in start.json — refreshing to result');
+                        // Clear the owning controller's click-coord cache first: this reload
+                        // invalidates cached bounding boxes, and skipping it risks misclicks
+                        // (and double-reload races) on the post-reload result page.
+                        this.owner?.clearClickCache?.();
                         this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
                     }
                 }

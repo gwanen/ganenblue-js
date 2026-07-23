@@ -43,6 +43,7 @@ class QuestBot {
         this.totalTurns = 0;
         this.battleCount = 0;
         this.consecutiveFailures = 0;
+        this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
 
         // --- Performance Optimizations ---
         const blockResources = options.blockResources !== undefined
@@ -139,8 +140,8 @@ class QuestBot {
           if (this.questsCompleted % 30 === 0) {
             await this.controller.clearBrowserCache();
           }
-        } else {
-          this.consecutiveFailures++; // Increment counter on failure
+        } else if (this.isRunning) {
+          this.consecutiveFailures++; // Increment on real failure only (not a clean stop)
         }
 
         // Short delay between quests for browser stability
@@ -309,7 +310,7 @@ class QuestBot {
       this.logger.debug(
         "[System] Operation cancelled before combat initiation",
       );
-      return;
+      return false;
     }
 
     // Handle battle
@@ -527,7 +528,9 @@ class QuestBot {
             this.controller.clearClickCache();
             await this.controller.cachedClick(".btn-usual-ok", 15);
             clickSuccess = true;
-          } catch (e) {}
+          } catch (e) {
+            this.logger.debug(`[Summon] Confirm click attempt ${i + 1} failed: ${e.message}`);
+          }
 
           if (!(await this.controller.elementExists(".btn-usual-ok", 200, true))) {
             clickSuccess = true;
@@ -917,7 +920,7 @@ class QuestBot {
     let rate = "0.0/h";
     const now = Date.now();
     const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
-    if (uptimeHours > 0) {
+    if (this.startTime && uptimeHours > 0) {
       const rph = this.questsCompleted / uptimeHours;
       rate = `${rph.toFixed(1)}/h`;
     }

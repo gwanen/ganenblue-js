@@ -21,6 +21,7 @@ class PageController {
     this.page = page;
     this.logger = scopedLogger || logger;
     this.network = new NetworkListener(page, this.logger);
+    this.network.owner = this; // back-ref so listener-driven reloads can clear the click cache
     this.network.start();
     this.requestHandler = null;
     this.lastMousePos = { x: 0, y: 0 };
