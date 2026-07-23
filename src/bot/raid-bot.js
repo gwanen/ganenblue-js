@@ -4,6 +4,7 @@ import { sleep, randomDelay } from "../utils/random.js";
 import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
+import { isResultUrl, isRaidUrl } from "../utils/game-url.js";
 
 /**
  * Orchestrates raid-specific bot logic, including list scanning, supporter selection,
@@ -291,11 +292,7 @@ class RaidBot {
 
     // Select summon
     const currentUrl = this.controller.page.url();
-    const isResult =
-      currentUrl.includes("#result") ||
-      currentUrl.includes("/result/content/index/");
-
-    if (isResult) {
+    if (isResultUrl(currentUrl)) {
       this.logger.info(
         "[Raid] Result page detected. Navigating to backup...",
       );
@@ -402,11 +399,7 @@ class RaidBot {
 
     // Navigate back to assist page for next raid
     const raidCurrentUrl = this.controller.page.url();
-    if (
-      raidCurrentUrl.includes("#raid") ||
-      raidCurrentUrl.includes("_raid") ||
-      raidCurrentUrl.includes("#result")
-    ) {
+    if (isRaidUrl(raidCurrentUrl) || isResultUrl(raidCurrentUrl)) {
       await this.controller.gotoSPA(this.raidBackupUrl);
       // wait briefly to ensure SPA routing has time to trigger
       await sleep(300);
@@ -417,7 +410,7 @@ class RaidBot {
 
   async findAndJoinRaid() {
     const initialUrl = this.controller.page?.url() || '';
-    const isInBattleUrl = initialUrl.match(/#(?:raid|raid_multi)(?:\/|$)/);
+    const isInBattleUrl = isRaidUrl(initialUrl);
 
     if (isInBattleUrl || this.networkBattleStarted) {
       this.logger.info("[Raid] Already in battle mode. Skipping search.");
@@ -473,7 +466,7 @@ class RaidBot {
       }
 
       const currentUrl = this.controller.page.url();
-      if (currentUrl.includes("#result")) {
+      if (isResultUrl(currentUrl)) {
         // Result from previous battle - navigate to assist page
         await this.controller.gotoSPA(this.raidBackupUrl);
         await sleep(config.get("timeouts.raid.page_transition", 200));
@@ -738,8 +731,7 @@ class RaidBot {
 
             const urlNow = this.controller.page.url();
             if (
-              urlNow.includes("#raid") ||
-              urlNow.includes("_raid") ||
+              isRaidUrl(urlNow) ||
               (await this.controller.elementExists(".prt-supporter-list", 200))
             ) {
               this.logger.info("[Raid] Joined after popup confirmation");
@@ -747,7 +739,7 @@ class RaidBot {
             }
           } else {
             const urlNow = this.controller.page?.url() || '';
-            if (urlNow.includes("#raid") || urlNow.includes("_raid")) {
+            if (isRaidUrl(urlNow)) {
               this.logger.info("[Raid] Join successful (direct battle)");
               return true;
             }
@@ -770,7 +762,7 @@ class RaidBot {
 
         // If the game asynchronously redirected us to a pending result screen while we waited
         const currentUrl = this.controller.page?.url() || '';
-        if (currentUrl.includes("#result")) {
+        if (isResultUrl(currentUrl)) {
           continue;
         }
 
@@ -960,7 +952,7 @@ class RaidBot {
         });
       } catch (error) {
         const currentUrl = this.controller.page?.url() || '';
-        if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
+        if (isRaidUrl(currentUrl)) {
           this.logger.info(
             "[Raid] Transitioned to battle. Ignoring click error",
           );
@@ -1113,10 +1105,7 @@ class RaidBot {
           });
           await sleep(500);
         }
-      } else if (
-        currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) ||
-        currentUrl.includes("#result")
-      ) {
+      } else if (isRaidUrl(currentUrl) || isResultUrl(currentUrl)) {
         return "success";
       }
 
@@ -1137,10 +1126,7 @@ class RaidBot {
     }
 
     const finalUrl = this.controller.page?.url() || '';
-    if (
-      !finalUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) &&
-      !finalUrl.includes("#result")
-    ) {
+    if (!isRaidUrl(finalUrl) && !isResultUrl(finalUrl)) {
       this.logger.warn(
         "[Raid] URL did not transition to battle. Potential error",
       );

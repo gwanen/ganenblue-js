@@ -4,6 +4,7 @@ import { sleep, randomDelay } from "../utils/random.js";
 import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
+import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
 
 /**
  * Orchestrates automated quest completion, including navigation, supporter selection,
@@ -188,16 +189,12 @@ class QuestBot {
     let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
     const currentUrl = this.controller.page.url();
-    const isInBattleUrl =
-      currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) !== null;
+    const isInBattleUrl = isRaidUrl(currentUrl);
 
     // Check if we're on result page (should navigate away, not fight)
-    const isResultUrl =
-      currentUrl.includes("#result") ||
-      currentUrl.includes("/result/content/index/") ||
-      currentUrl.includes("/result_multi/content/index/");
+    const onResultPage = isResultUrl(currentUrl);
 
-    if (isResultUrl) {
+    if (onResultPage) {
       this.logger.info(
         "[Quest] State: Result page detected (Navigating to quest target)",
       );
@@ -515,7 +512,7 @@ class QuestBot {
         await this.controller.clickSafe(summonSelector, { timeout: 2000, maxRetries: 1 });
       } catch (error) {
         const url = this.controller.page?.url() || "";
-        if (url.match(/#(?:raid|raid_multi)(?:\/|$)/)) return "success";
+        if (isRaidUrl(url)) return "success";
         throw error;
       }
 
@@ -720,11 +717,7 @@ class QuestBot {
 
     const finalUrl = this.controller.page.url();
     // Check for valid battle/quest URLs (including path-based result URLs)
-    const isValidUrl =
-      finalUrl.match(/#(?:raid|raid_multi|quest\/index)(?:\/|$)/) ||
-      finalUrl.includes("#result") ||
-      finalUrl.includes("/result/content/index/") ||
-      finalUrl.includes("/result_multi/content/index/");
+    const isValidUrl = isRaidUrl(finalUrl) || isBattleEndUrl(finalUrl);
     if (!isValidUrl) {
       this.logger.warn("[Quest] URL transition failed. Potential error state");
       return "ended";

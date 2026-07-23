@@ -1,6 +1,7 @@
 import PageController from "../core/page-controller.js";
 import { sleep, randomDelay } from "../utils/random.js";
 import config from "../utils/config.js";
+import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
 
 /**
  * Handles battle orchestration, including state monitoring, mode execution (Full/Semi Auto),
@@ -95,12 +96,7 @@ class BattleHandler {
 
     try {
       const currentUrl = this.controller.page.url();
-      // Check for result page (both hash-based and path-based URLs)
-      const isResultUrl =
-        currentUrl.includes("#result") ||
-        currentUrl.includes("/result/content/index/") ||
-        currentUrl.includes("/result_multi/content/index/");
-      if (isResultUrl) {
+      if (isResultUrl(currentUrl)) {
         return await this.waitForBattleEnd(mode);
       }
 
@@ -153,7 +149,7 @@ class BattleHandler {
           return earlyStateFallback;
         }
 
-        if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
+        if (isRaidUrl(currentUrl)) {
           const dismissed = await this.dismissSalutePopup();
           if (dismissed) {
             if (this.options.skipOnSalute) {
@@ -185,7 +181,7 @@ class BattleHandler {
               );
             }
           }
-        } else if (!currentUrl.includes("#result")) {
+        } else if (!isResultUrl(currentUrl)) {
           // Safety: Check for a lagged confirmation button (OK) before throwing error
           const okBtn = ".btn-usual-ok";
           if (await this.controller.elementExists(okBtn, 2000, true)) {
@@ -372,12 +368,7 @@ class BattleHandler {
      */
     async handleFullAuto() {
     const url = this.controller.page.url();
-    // Check for result page (both hash-based and path-based URLs)
-    const isResultUrl =
-      url.includes("#result") ||
-      url.includes("/result/content/index/") ||
-      url.includes("/result_multi/content/index/");
-    if (isResultUrl || url.includes("#quest/index")) return;
+    if (isBattleEndUrl(url)) return;
 
     this.logger.info("[Battle] Mode: Full Auto activation initiated");
     this.faActive = false; // Reset — will be set true after successful click
@@ -392,10 +383,7 @@ class BattleHandler {
         // Quick pre-check: if page is already on result/login, skip 20s wait
         const preUrl = this.controller.page.url();
         if (
-          preUrl.includes("#result") ||
-          preUrl.includes("/result/content/index/") ||
-          preUrl.includes("/result_multi/content/index/") ||
-          preUrl.includes("#quest/index") ||
+          isBattleEndUrl(preUrl) ||
           preUrl.includes("#mypage") ||
           preUrl.includes("#top")
         ) {
@@ -693,7 +681,7 @@ class BattleHandler {
     const hardReloadInterval = 30 * 60 * 1000; // 30 minutes in ms
 
     const currentUrl = this.controller.page.url();
-    const isRaid = currentUrl.includes("#raid") || currentUrl.includes("_raid");
+    const isRaid = isRaidUrl(currentUrl);
 
     // Initial turn/honor detection consolidated into a single fetch
     const isSemiAuto = mode === "semi_auto";
@@ -1225,7 +1213,7 @@ class BattleHandler {
           }
         }
 
-        if (!currentUrl.includes("#raid") && !currentUrl.includes("_raid")) {
+        if (!isRaidUrl(currentUrl)) {
           // Throttled menu checks (network-primary, DOM fallback for empty result)
           if (Date.now() - lastSkipCheckTime > 1000) {
             lastSkipCheckTime = Date.now();
@@ -1308,14 +1296,7 @@ class BattleHandler {
   async _checkStateAndResume(mode) {
     const url = this.controller.page.url();
 
-    // Check both hash-based and path-based result/quest index URLs
-    const isResultUrl =
-      url.includes("#result") ||
-      url.includes("/result/content/index/") ||
-      url.includes("/result_multi/content/index/") ||
-      url.includes("#quest/index") ||
-      url.includes("/quest/index/content/index/");
-    if (isResultUrl) {
+    if (isBattleEndUrl(url)) {
       return true;
     }
 
@@ -1427,13 +1408,7 @@ class BattleHandler {
     }
 
     const finalUrl = this.controller.page.url();
-    // Check both hash-based and path-based result/quest index URLs
-    const isFinalResultUrl =
-      finalUrl.includes("#result") ||
-      finalUrl.includes("/result/content/index/") ||
-      finalUrl.includes("/result_multi/content/index/") ||
-      finalUrl.includes("#quest/index");
-    if (isFinalResultUrl) {
+    if (isBattleEndUrl(finalUrl)) {
       await sleep(50); // SPA navigation buffer
       return true;
     }
