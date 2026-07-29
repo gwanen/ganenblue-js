@@ -512,20 +512,15 @@ class BattleHandler {
      */
     async handleSemiAuto(skipReloadOnTimeout = false) {
     const activeSelector = ".btn-attack-start.display-on";
-    const startTime = Date.now();
 
-    // Step 1: Reactive Attack Activation (Ultra-fast polling)
-    // Replaces waitForSelector with sub-10ms resolution to fire the instant UI is ready.
+    // Step 1: Wait for the attack button to become visible.
+    // A single mutation-observer-backed visibility wait (one round-trip) bounded
+    // by the watchdog. The previous manual loop called elementExists with
+    // timeout:0 — which in Puppeteer disables the timeout (waits forever) — so
+    // the outer watchdog could never fire if the button never appeared.
     this.logger.debug("[Battle] Awaiting reactive attack activation...");
-    let attackReady = false;
     const attackWatchdog = config.get('timeouts.semi_auto_watchdog', 10000);
-    while (Date.now() - startTime < attackWatchdog) {
-      if (await this.controller.elementExists(activeSelector, 0, true)) {
-        attackReady = true;
-        break;
-      }
-      await sleep(Math.max(5, Math.floor(this.loopInterval / 2))); // Ultra-snappy cadence
-    }
+    const attackReady = await this.controller.elementExists(activeSelector, attackWatchdog, true);
 
     if (!attackReady) {
       this.logger.warn(`[Warn] Battle: Exception (Attack button timeout: ${Math.round(attackWatchdog / 1000)}s)`);
