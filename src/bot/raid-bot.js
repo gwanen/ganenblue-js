@@ -1,6 +1,6 @@
 import PageController from "../core/page-controller.js";
 import BattleHandler from "./battle-handler.js";
-import { sleep, randomDelay } from "../utils/random.js";
+import { sleep } from "../utils/random.js";
 import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";

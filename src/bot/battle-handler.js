@@ -1,6 +1,7 @@
 import PageController from "../core/page-controller.js";
 import { sleep, randomDelay } from "../utils/random.js";
 import config from "../utils/config.js";
+import logger from "../utils/logger.js";
 import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
 
 /**
