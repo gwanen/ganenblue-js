@@ -12,7 +12,7 @@
  * 3. Attack Cooldown   — 2s debounce prevents double refresh on rapid attacks
  */
 
-import { jest, describe, test, expect, beforeEach } from "@jest/globals";
+import { describe, test, expect } from "@jest/globals";
 import EventEmitter from "events";
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@
  * Run: npm test -- --testPathPattern=network-listener
  */
 
-import { jest, describe, test, expect, beforeEach } from '@jest/globals';
+import { jest, describe, test, expect } from '@jest/globals';
 import NetworkListener from '../src/core/network-listener.js';
 
 // ---------------------------------------------------------------------------

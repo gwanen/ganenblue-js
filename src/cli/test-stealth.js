@@ -65,7 +65,7 @@ async function testStealth() {
 
         // Extract table text for analysis
         const tableTexts = [];
-        tables.forEach((table, i) => {
+        tables.forEach((table) => {
             tableTexts.push(table.textContent.substring(0, 500));
         });
         output.tableContent = tableTexts;

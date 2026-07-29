@@ -1,5 +1,5 @@
 import PageController from "../core/page-controller.js";
-import { sleep, randomDelay } from "../utils/random.js";
+import { sleep } from "../utils/random.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
 import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
@@ -697,8 +697,6 @@ class BattleHandler {
       }
     }
 
-    let lastTurn = turnCount;
-    let lastTurnChangeTime = Date.now();
     let honorTargetReached = false; // Track when honor target is reached
 
     // Seed lastAttackedTurn only if the initial semi-auto attack actually landed.
@@ -758,7 +756,6 @@ class BattleHandler {
     };
     let lastActionTime = Date.now();
     let faInactivityThreshold = faTimers.initialLockout; // Initial: OUGI lockout after FA click
-    let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
     // If turn changed during transition, log it now (full_auto only)
     if (!isSemiAuto && networkTurn > turnCount) {
@@ -824,7 +821,7 @@ class BattleHandler {
     if (this._preNetworkFinished && !this.isResultConfirmed) {
       onBattleResult();
     }
-    const onAttack = ({ honor } = {}) => {
+    const onAttack = () => {
       attackUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       // Do NOT touch faThresholdRef here — handleFullAuto sets it to 25s after every FA click,
@@ -837,7 +834,7 @@ class BattleHandler {
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.summon; // inactivity watchdog after summon
     };
-    const onAbilityUsed = ({ honor } = {}) => {
+    const onAbilityUsed = () => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.ability; // inactivity watchdog after ability

@@ -242,10 +242,8 @@ function setupProfileListeners(pid) {
     els.btnStart.addEventListener('click', async () => {
         // Get checkbox element dynamically to avoid null reference on init
         const blockResourcesEl = document.getElementById(`block-resources-${pid}`);
-        let blockResources = false;
-
         if (blockResourcesEl) {
-            blockResources = blockResourcesEl.checked;
+            const blockResources = blockResourcesEl.checked;
             log(pid, `Image Blocking: ${blockResources ? 'ENABLED (Fast Mode)' : 'DISABLED (Normal Mode)'}`, blockResources ? 'success' : 'info');
         } else {
             log(pid, `[Warning] Image Blocking setting not found, defaulting to OFF`, 'warning');

@@ -412,8 +412,8 @@ class QuestBot {
           }
           resolve({ type: "network" });
         };
-        // Safety cleanup for timeout path
-        const timeout = setTimeout(() => {
+        // Safety cleanup for timeout path (fire-and-forget; not cleared)
+        setTimeout(() => {
           if (this.controller.network) {
             this.controller.network.off("raid:supporter_screen", onSupporter);
           }
