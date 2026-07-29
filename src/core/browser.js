@@ -188,7 +188,11 @@ class BrowserManager {
 
         if (this.config.disable_sandbox) {
             launchArgs.push('--no-sandbox');
-            launchArgs.push('--disable-setuid-sandbox');
+            // setuid sandbox is Linux-only; on Windows/macOS this flag is
+            // unsupported and triggers Chrome's "unsupported command-line flag" banner.
+            if (process.platform === 'linux') {
+                launchArgs.push('--disable-setuid-sandbox');
+            }
         }
 
         const launchOptions = {
