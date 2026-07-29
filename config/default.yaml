@@ -4,6 +4,7 @@ bot:
   max_quests: 0           # 0 = unlimited
   max_raids: 0            # 0 = unlimited (for raid mode)
   quest_url: ""
+  cache_clear_interval: 30  # Clear browser cache every N completed runs (0 = never)
 
 browser:
   browser_type: 'chromium' # chromium or edge

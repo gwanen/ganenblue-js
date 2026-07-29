@@ -45,6 +45,8 @@ class RaidBot {
         this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
         this.battleTimes = [];
         this.battleTurns = [];
+        this.totalTurns = 0;
+        this.battleCount = 0;
         this.lastEndHonor = 0;
         this.totalHonor = 0;
         this.redChests = 0;
@@ -227,7 +229,8 @@ class RaidBot {
           if (success) {
             this.raidsCompleted++;
 
-            if (this.raidsCompleted % 50 === 0) {
+            const cacheInterval = config.get("bot.cache_clear_interval", 30);
+            if (cacheInterval > 0 && this.raidsCompleted % cacheInterval === 0) {
               await this.controller.clearBrowserCache();
             }
           }

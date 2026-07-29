@@ -120,7 +120,8 @@ class QuestBot {
           this.questsCompleted++;
           this.consecutiveFailures = 0; // Reset counter on success
 
-          if (this.questsCompleted % 30 === 0) {
+          const cacheInterval = config.get("bot.cache_clear_interval", 30);
+          if (cacheInterval > 0 && this.questsCompleted % cacheInterval === 0) {
             await this.controller.clearBrowserCache();
           }
         } else if (this.isRunning) {
