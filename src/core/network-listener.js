@@ -118,11 +118,35 @@ class NetworkListener extends EventEmitter {
             // Accept only fetch, XHR, or script (used for end-state signals like empty.js).
             if (type !== 'fetch' && type !== 'xhr' && type !== 'script') return;
 
+            // --- Daily Quest Skip Detection ---
+
+            // Daily "skip" quests never enter battle: the OK button POSTs to questskip/skip.
+            // 200 + raid_id means a skip was consumed; 500 means the quest is exhausted.
+            if (url.includes('/quest/questskip/skip')) {
+                const status = response.status();
+
+                if (status !== 200) {
+                    this.logger.info(`[Status] Signal: Quest skip rejected (HTTP ${status})`);
+                    this.emit('quest:skip_result', { ok: false, status, raidId: null });
+                    return;
+                }
+
+                const json = await response.json().catch(() => null);
+                const raidId = json?.raid_id ?? null;
+                const ok = json?.result === 'ok' && raidId !== null;
+
+                this.logger.debug(`[Status] Signal: Quest skip ${ok ? `accepted (Raid ${raidId})` : 'returned no raid id'}`);
+                this.emit('quest:skip_result', { ok, status, raidId });
+                return;
+            }
+
             // --- Battle Result Detection ---
 
             const isDetailUrl = url.includes('/resultmulti/content/detail/') || url.includes('/result/content/detail/');
             const isEmptyUrl = url.includes('/resultmulti/content/empty/') || url.includes('/result/content/empty/');
-            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js') || isEmptyUrl || isDetailUrl;
+            // Daily skip rewards are served from /result/content/skip_raid/<raid_id>
+            const isSkipRaidUrl = url.includes('/result/content/skip_raid/');
+            const isResultPattern = url.includes('/result.json') || url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/') || url.includes('js/view/result/empty.js') || isEmptyUrl || isDetailUrl || isSkipRaidUrl;
 
             if (isResultPattern && !url.includes('.css')) {
                 // Ensure JSON integrity for specific result endpoints
@@ -135,8 +159,8 @@ class NetworkListener extends EventEmitter {
                 const isIndexUrl = url.includes('/resultmulti/content/index/') || url.includes('/result/content/index/');
                 let rewards = null;
 
-                if (isDetailUrl || isIndexUrl || url.includes('.json')) {
-                    const endpointLabel = isDetailUrl ? 'Result detail' : isIndexUrl ? 'Result index' : 'result.json';
+                if (isDetailUrl || isIndexUrl || isSkipRaidUrl || url.includes('.json')) {
+                    const endpointLabel = isDetailUrl ? 'Result detail' : isIndexUrl ? 'Result index' : isSkipRaidUrl ? 'Skip raid result' : 'result.json';
                     this.logger.debug(`[Loot] ${endpointLabel} endpoint detected — attempting to parse rewards`);
 
                     const json = await response.json().catch((e) => {
@@ -152,7 +176,8 @@ class NetworkListener extends EventEmitter {
                     }
                 }
 
-                this.emit('battle:result', { url, time: Date.now(), rewards });
+                const skipRaidId = isSkipRaidUrl ? (url.match(/skip_raid\/(\d+)/)?.[1] ?? null) : null;
+                this.emit('battle:result', { url, time: Date.now(), rewards, skipRaidId });
                 return;
             }
 

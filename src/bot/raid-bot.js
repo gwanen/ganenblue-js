@@ -5,7 +5,7 @@ import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
 import { isResultUrl, isRaidUrl } from "../utils/game-url.js";
-import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha } from "./bot-common.js";
+import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha, parseRewardChests } from "./bot-common.js";
 
 /**
  * Orchestrates raid-specific bot logic, including list scanning, supporter selection,
@@ -68,42 +68,7 @@ class RaidBot {
     }
 
   _onBattleResult({ rewards }) {
-    if (!rewards?.reward_list) {
-      if (rewards) this.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
-      return;
-    }
-
-    // Dedup: Prevent double-counting when both session listener and direct call process same rewards
-    const rl = rewards.reward_list;
-    const rewardsHash = `${Object.keys(rl).sort().join(',')}|${JSON.stringify(rl).length}`;
-    if (rewardsHash === this._lastProcessedRewardsHash) {
-      this.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
-      return;
-    }
-
-    if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
-      const count = Object.keys(rl["4"]).length;
-      this.redChests += count;
-      if (count > 0) this.logger.info(`[Loot] Red Chests: +${count} (Total: ${this.redChests})`);
-    }
-    if (rl["11"] && !Array.isArray(rl["11"]) && typeof rl["11"] === "object") {
-      const count = Object.keys(rl["11"]).length;
-      this.blueChests += count;
-      if (count > 0) this.logger.info(`[Loot] Blue Chests: +${count} (Total: ${this.blueChests})`);
-    }
-    for (const bucket of Object.values(rl)) {
-      if (bucket && !Array.isArray(bucket) && typeof bucket === "object") {
-        for (const item of Object.values(bucket)) {
-          if (item?.name === "Gold Brick") {
-            const qty = parseInt(item.count) || 1;
-            this.goldBricks += qty;
-            this.logger.info(`[Loot] Gold Brick: +${qty} (Total: ${this.goldBricks})`);
-          }
-        }
-      }
-    }
-
-    this._lastProcessedRewardsHash = rewardsHash;
+    parseRewardChests(this, rewards);
   }
 
   _onSupporterScreen() {

@@ -4,6 +4,7 @@ import {
     averageBattleTime,
     applyPerformanceOptions,
     checkBattleCaptcha,
+    parseRewardChests,
 } from '../src/bot/bot-common.js';
 
 describe('computeRate', () => {
@@ -60,6 +61,49 @@ describe('applyPerformanceOptions', () => {
         applyPerformanceOptions({ controller, logger, options: { blockResources: false, turboMode: false } });
         expect(controller.enableResourceBlocking).not.toHaveBeenCalled();
         expect(controller.enableTurboCSS).not.toHaveBeenCalled();
+    });
+});
+
+describe('parseRewardChests', () => {
+    function makeBot() {
+        return {
+            redChests: 0,
+            blueChests: 0,
+            goldBricks: 0,
+            _lastProcessedRewardsHash: null,
+            logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn() },
+        };
+    }
+
+    const rewards = {
+        reward_list: {
+            4: { 0: { name: 'Fire Orb' }, 1: { name: 'Water Orb' } },
+            11: { 0: { name: 'Gold Brick', count: '1' } },
+        },
+    };
+
+    test('counts red chests, blue chests and gold bricks', () => {
+        const bot = makeBot();
+        const added = parseRewardChests(bot, rewards);
+        expect(added).toEqual({ red: 2, blue: 1, bricks: 1 });
+        expect(bot.redChests).toBe(2);
+        expect(bot.blueChests).toBe(1);
+        expect(bot.goldBricks).toBe(1);
+    });
+
+    test('ignores a duplicate payload', () => {
+        const bot = makeBot();
+        parseRewardChests(bot, rewards);
+        expect(parseRewardChests(bot, rewards)).toBeNull();
+        expect(bot.redChests).toBe(2);
+        expect(bot.goldBricks).toBe(1);
+    });
+
+    test('returns null when rewards or reward_list are missing', () => {
+        const bot = makeBot();
+        expect(parseRewardChests(bot, null)).toBeNull();
+        expect(parseRewardChests(bot, {})).toBeNull();
+        expect(bot.logger.warn).toHaveBeenCalledTimes(1); // only the {} case warns
     });
 });
 

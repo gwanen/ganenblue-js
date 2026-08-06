@@ -1,10 +1,65 @@
 bot:
   battle_mode: full_auto  # full_auto | semi_auto
-  bot_mode: quest         # quest | raid | replicard
+  bot_mode: quest         # quest | raid | replicard | daily
   max_quests: 0           # 0 = unlimited
   max_raids: 0            # 0 = unlimited (for raid mode)
   quest_url: ""
   cache_clear_interval: 30  # Clear browser cache every N completed runs (0 = never)
+
+daily:
+  # Daily "quest skip" targets. Each entry opens its supporter screen and clicks
+  # the OK (se-quest-start) button, which fires /rest/quest/questskip/skip.
+  # HTTP 200 + raid_id = one skip consumed; HTTP 500 = quest exhausted for today.
+  repeat_until_fail: true      # keep skipping the same quest until it fails, then move on
+  max_attempts_per_quest: 20   # safety cap when repeat_until_fail is enabled
+  loop_list: false             # re-run the whole list after finishing one pass
+  skip_timeout: 10000          # ms to wait for the questskip response after clicking OK
+  reward_timeout: 5000         # ms to wait for the skip_raid result rewards
+  quests:
+    - id: hard
+      name: Hard
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305261/28'
+      enabled: true
+    - id: omega_pro
+      name: Omega Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305441/28/0/18'
+      enabled: true
+    - id: primal_legends
+      name: Primal Legends
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305471/28/0/47'
+      enabled: true
+    - id: primarch_test_pro
+      name: Primarch Test Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305651/28/0/5311'
+      enabled: true
+    - id: omega_impossible_pro
+      name: Omega Impossible Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305461/28/0/32'
+      enabled: true
+    - id: six_dragon_advent_pro
+      name: Six Dragon Advent Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/104111/28'
+      enabled: true
+    - id: showdown_pro
+      name: Showdown Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/103951/28'
+      enabled: true
+    - id: clash_pro
+      name: Clash Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/103991/28'
+      enabled: true
+    - id: angel_halo_pro
+      name: Angel Halo Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/305301/28'
+      enabled: true
+    - id: primal_trial_pro
+      name: Primal Trial Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/104081/28'
+      enabled: true
+    - id: eternal_trial_pro
+      name: Eternal Trial Pro
+      url: 'https://game.granbluefantasy.jp/#quest/supporter/104191/28'
+      enabled: true
 
 browser:
   browser_type: 'chromium' # chromium or edge

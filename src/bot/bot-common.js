@@ -76,6 +76,63 @@ export function averageBattleTime(battleTimes = []) {
 }
 
 /**
+ * Counts red/blue chests and Gold Bricks from a `battle:result` rewards payload
+ * and accumulates them onto the bot instance. Shared by RaidBot and DailyBot —
+ * both read the same `option.result_data.rewards` shape (multi-raid results and
+ * daily skip_raid results alike).
+ *
+ * Duplicate payloads are ignored: the same rewards object can reach the bot both
+ * from the session listener and from a direct call, which would double-count.
+ *
+ * @param {object} bot - Bot instance carrying `redChests`, `blueChests`,
+ *   `goldBricks`, `_lastProcessedRewardsHash` and `logger`.
+ * @param {object} rewards - The `rewards` object from the result endpoint.
+ * @returns {{red: number, blue: number, bricks: number}|null} Counts added, or
+ *   null when nothing was processed (missing or duplicate payload).
+ */
+export function parseRewardChests(bot, rewards) {
+  if (!rewards?.reward_list) {
+    if (rewards) bot.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
+    return null;
+  }
+
+  const rl = rewards.reward_list;
+  const rewardsHash = `${Object.keys(rl).sort().join(",")}|${JSON.stringify(rl).length}`;
+  if (rewardsHash === bot._lastProcessedRewardsHash) {
+    bot.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
+    return null;
+  }
+
+  const added = { red: 0, blue: 0, bricks: 0 };
+
+  if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
+    added.red = Object.keys(rl["4"]).length;
+    bot.redChests += added.red;
+    if (added.red > 0) bot.logger.info(`[Loot] Red Chests: +${added.red} (Total: ${bot.redChests})`);
+  }
+  if (rl["11"] && !Array.isArray(rl["11"]) && typeof rl["11"] === "object") {
+    added.blue = Object.keys(rl["11"]).length;
+    bot.blueChests += added.blue;
+    if (added.blue > 0) bot.logger.info(`[Loot] Blue Chests: +${added.blue} (Total: ${bot.blueChests})`);
+  }
+  for (const bucket of Object.values(rl)) {
+    if (bucket && !Array.isArray(bucket) && typeof bucket === "object") {
+      for (const item of Object.values(bucket)) {
+        if (item?.name === "Gold Brick") {
+          const qty = parseInt(item.count) || 1;
+          added.bricks += qty;
+          bot.goldBricks += qty;
+          bot.logger.info(`[Loot] Gold Brick: +${qty} (Total: ${bot.goldBricks})`);
+        }
+      }
+    }
+  }
+
+  bot._lastProcessedRewardsHash = rewardsHash;
+  return added;
+}
+
+/**
  * Checks for the battle "Access Verification" CAPTCHA popup. On detection it
  * notifies and pauses the bot. Identical logic previously lived in both
  * QuestBot and RaidBot.

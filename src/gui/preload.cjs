@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restartApp: () => ipcRenderer.invoke('app:restart'),
     saveCredentials: (profileId, credentials) => ipcRenderer.invoke('credentials:save', profileId, credentials),
     loadCredentials: (profileId) => ipcRenderer.invoke('credentials:load', profileId),
+    getDailyQuests: () => ipcRenderer.invoke('daily:list'),
     onLogUpdate: (callback) => ipcRenderer.on('log:update', (_event, value) => callback(value)),
 
     onStatusUpdate: (callback) => ipcRenderer.on('bot:status', (_event, value) => callback(value)),
