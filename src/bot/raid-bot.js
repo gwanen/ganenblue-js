@@ -1,9 +1,11 @@
 import PageController from "../core/page-controller.js";
 import BattleHandler from "./battle-handler.js";
-import { sleep, randomDelay } from "../utils/random.js";
-import logger, { createScopedLogger } from "../utils/logger.js";
+import { sleep } from "../utils/random.js";
+import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
+import { isResultUrl, isRaidUrl } from "../utils/game-url.js";
+import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha, parseRewardChests } from "./bot-common.js";
 
 /**
  * Orchestrates raid-specific bot logic, including list scanning, supporter selection,
@@ -40,8 +42,11 @@ class RaidBot {
         this.raidsCompleted = 0;
         this.isRunning = false;
         this.isPaused = false;
+        this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
         this.battleTimes = [];
         this.battleTurns = [];
+        this.totalTurns = 0;
+        this.battleCount = 0;
         this.lastEndHonor = 0;
         this.totalHonor = 0;
         this.redChests = 0;
@@ -50,26 +55,7 @@ class RaidBot {
         this._lastProcessedRewardsHash = null;
 
         // --- Performance Optimizations ---
-        const blockResources = options.blockResources !== undefined
-            ? options.blockResources
-            : config.get('stealth.block_resources', false);
-
-        if (blockResources) {
-            this.logger.info("[System] Image blocking enabled");
-            this.controller.enableResourceBlocking().catch((e) =>
-                this.logger.warn("[System] Failed to enable image blocking", e)
-            );
-        }
-
-        const turboMode = options.turboMode !== undefined
-            ? options.turboMode
-            : config.get('stealth.turbo_css', true);
-
-        if (turboMode) {
-            this.controller.enableTurboCSS().catch((e) =>
-                this.logger.warn("[System] Failed to enable turbo CSS", e)
-            );
-        }
+        applyPerformanceOptions({ controller: this.controller, logger: this.logger, options });
 
         // --- Network Event Binding ---
         this.raidErrorType = null;
@@ -82,42 +68,7 @@ class RaidBot {
     }
 
   _onBattleResult({ rewards }) {
-    if (!rewards?.reward_list) {
-      if (rewards) this.logger.warn("[Loot] Rewards present but reward_list missing — no chests counted");
-      return;
-    }
-
-    // Dedup: Prevent double-counting when both session listener and direct call process same rewards
-    const rl = rewards.reward_list;
-    const rewardsHash = `${Object.keys(rl).sort().join(',')}|${JSON.stringify(rl).length}`;
-    if (rewardsHash === this._lastProcessedRewardsHash) {
-      this.logger.debug("[Loot] Rewards already processed (skipping duplicate)");
-      return;
-    }
-
-    if (rl["4"] && !Array.isArray(rl["4"]) && typeof rl["4"] === "object") {
-      const count = Object.keys(rl["4"]).length;
-      this.redChests += count;
-      if (count > 0) this.logger.info(`[Loot] Red Chests: +${count} (Total: ${this.redChests})`);
-    }
-    if (rl["11"] && !Array.isArray(rl["11"]) && typeof rl["11"] === "object") {
-      const count = Object.keys(rl["11"]).length;
-      this.blueChests += count;
-      if (count > 0) this.logger.info(`[Loot] Blue Chests: +${count} (Total: ${this.blueChests})`);
-    }
-    for (const bucket of Object.values(rl)) {
-      if (bucket && !Array.isArray(bucket) && typeof bucket === "object") {
-        for (const item of Object.values(bucket)) {
-          if (item?.name === "Gold Brick") {
-            const qty = parseInt(item.count) || 1;
-            this.goldBricks += qty;
-            this.logger.info(`[Loot] Gold Brick: +${qty} (Total: ${this.goldBricks})`);
-          }
-        }
-      }
-    }
-
-    this._lastProcessedRewardsHash = rewardsHash;
+    parseRewardChests(this, rewards);
   }
 
   _onSupporterScreen() {
@@ -243,7 +194,8 @@ class RaidBot {
           if (success) {
             this.raidsCompleted++;
 
-            if (this.raidsCompleted % 50 === 0) {
+            const cacheInterval = config.get("bot.cache_clear_interval", 30);
+            if (cacheInterval > 0 && this.raidsCompleted % cacheInterval === 0) {
               await this.controller.clearBrowserCache();
             }
           }
@@ -290,11 +242,7 @@ class RaidBot {
 
     // Select summon
     const currentUrl = this.controller.page.url();
-    const isResult =
-      currentUrl.includes("#result") ||
-      currentUrl.includes("/result/content/index/");
-
-    if (isResult) {
+    if (isResultUrl(currentUrl)) {
       this.logger.info(
         "[Raid] Result page detected. Navigating to backup...",
       );
@@ -348,7 +296,7 @@ class RaidBot {
       this.logger.debug(
         "[System] Operation cancelled before combat initiation",
       );
-      return;
+      return false;
     }
 
     // Handle battle
@@ -401,11 +349,7 @@ class RaidBot {
 
     // Navigate back to assist page for next raid
     const raidCurrentUrl = this.controller.page.url();
-    if (
-      raidCurrentUrl.includes("#raid") ||
-      raidCurrentUrl.includes("_raid") ||
-      raidCurrentUrl.includes("#result")
-    ) {
+    if (isRaidUrl(raidCurrentUrl) || isResultUrl(raidCurrentUrl)) {
       await this.controller.gotoSPA(this.raidBackupUrl);
       // wait briefly to ensure SPA routing has time to trigger
       await sleep(300);
@@ -416,7 +360,7 @@ class RaidBot {
 
   async findAndJoinRaid() {
     const initialUrl = this.controller.page?.url() || '';
-    const isInBattleUrl = initialUrl.match(/#(?:raid|raid_multi)(?:\/|$)/);
+    const isInBattleUrl = isRaidUrl(initialUrl);
 
     if (isInBattleUrl || this.networkBattleStarted) {
       this.logger.info("[Raid] Already in battle mode. Skipping search.");
@@ -472,7 +416,7 @@ class RaidBot {
       }
 
       const currentUrl = this.controller.page.url();
-      if (currentUrl.includes("#result")) {
+      if (isResultUrl(currentUrl)) {
         // Result from previous battle - navigate to assist page
         await this.controller.gotoSPA(this.raidBackupUrl);
         await sleep(config.get("timeouts.raid.page_transition", 200));
@@ -737,8 +681,7 @@ class RaidBot {
 
             const urlNow = this.controller.page.url();
             if (
-              urlNow.includes("#raid") ||
-              urlNow.includes("_raid") ||
+              isRaidUrl(urlNow) ||
               (await this.controller.elementExists(".prt-supporter-list", 200))
             ) {
               this.logger.info("[Raid] Joined after popup confirmation");
@@ -746,7 +689,7 @@ class RaidBot {
             }
           } else {
             const urlNow = this.controller.page?.url() || '';
-            if (urlNow.includes("#raid") || urlNow.includes("_raid")) {
+            if (isRaidUrl(urlNow)) {
               this.logger.info("[Raid] Join successful (direct battle)");
               return true;
             }
@@ -769,7 +712,7 @@ class RaidBot {
 
         // If the game asynchronously redirected us to a pending result screen while we waited
         const currentUrl = this.controller.page?.url() || '';
-        if (currentUrl.includes("#result")) {
+        if (isResultUrl(currentUrl)) {
           continue;
         }
 
@@ -959,7 +902,7 @@ class RaidBot {
         });
       } catch (error) {
         const currentUrl = this.controller.page?.url() || '';
-        if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
+        if (isRaidUrl(currentUrl)) {
           this.logger.info(
             "[Raid] Transitioned to battle. Ignoring click error",
           );
@@ -976,7 +919,9 @@ class RaidBot {
           try {
             await this.controller.cachedClick(".btn-usual-ok", 15);
             clickSuccess = true;
-          } catch (e) {}
+          } catch (e) {
+            this.logger.debug(`[Summon] Start-confirm click attempt ${i + 1} failed: ${e.message}`);
+          }
 
           if (
             !(await this.controller.elementExists(".btn-usual-ok", 200, true))
@@ -1110,10 +1055,7 @@ class RaidBot {
           });
           await sleep(500);
         }
-      } else if (
-        currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) ||
-        currentUrl.includes("#result")
-      ) {
+      } else if (isRaidUrl(currentUrl) || isResultUrl(currentUrl)) {
         return "success";
       }
 
@@ -1134,10 +1076,7 @@ class RaidBot {
     }
 
     const finalUrl = this.controller.page?.url() || '';
-    if (
-      !finalUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) &&
-      !finalUrl.includes("#result")
-    ) {
+    if (!isRaidUrl(finalUrl) && !isResultUrl(finalUrl)) {
       this.logger.warn(
         "[Raid] URL did not transition to battle. Potential error",
       );
@@ -1148,25 +1087,7 @@ class RaidBot {
   }
 
   async checkCaptcha() {
-    const selectors = config.selectors.battle;
-    if (
-      await this.controller.elementExists(selectors.captchaPopup, 1000, true)
-    ) {
-      const headerText = await this.controller.getText(selectors.captchaHeader);
-      if (headerText.includes("Access Verification")) {
-        this.logger.error(
-          "[Safety] Captcha detected. Human intervention required",
-        );
-        notifier
-          .notifyCaptcha(this.profileId || "p1")
-          .catch((e) =>
-            this.logger.debug("[Notifier] Failed to notify captcha", e),
-          );
-        this.pause();
-        return true;
-      }
-    }
-    return false;
+    return checkBattleCaptcha(this);
   }
 
   pause() {
@@ -1241,9 +1162,7 @@ class RaidBot {
   }
 
   getAverageBattleTime() {
-    if (this.battleTimes.length === 0) return 0;
-    const sum = this.battleTimes.reduce((a, b) => a + b, 0);
-    return Math.round(sum / this.battleTimes.length);
+    return averageBattleTime(this.battleTimes);
   }
 
     /**
@@ -1255,12 +1174,7 @@ class RaidBot {
         if (this.battleCount > 0) {
             avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
         }
-        let rate = "0.0/h";
-        const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
-        if (uptimeHours > 0) {
-            const rph = this.raidsCompleted / uptimeHours;
-            rate = `${rph.toFixed(1)}/h`;
-        }
+        const rate = computeRate(this.startTime, this.raidsCompleted);
         return {
             completedQuests: this.raidsCompleted,
             raidsCompleted: this.raidsCompleted,

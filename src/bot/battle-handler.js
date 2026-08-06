@@ -1,7 +1,8 @@
 import PageController from "../core/page-controller.js";
-import { sleep, randomDelay } from "../utils/random.js";
-import logger from "../utils/logger.js";
+import { sleep } from "../utils/random.js";
 import config from "../utils/config.js";
+import logger from "../utils/logger.js";
+import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
 
 /**
  * Handles battle orchestration, including state monitoring, mode execution (Full/Semi Auto),
@@ -96,12 +97,7 @@ class BattleHandler {
 
     try {
       const currentUrl = this.controller.page.url();
-      // Check for result page (both hash-based and path-based URLs)
-      const isResultUrl =
-        currentUrl.includes("#result") ||
-        currentUrl.includes("/result/content/index/") ||
-        currentUrl.includes("/result_multi/content/index/");
-      if (isResultUrl) {
+      if (isResultUrl(currentUrl)) {
         return await this.waitForBattleEnd(mode);
       }
 
@@ -154,7 +150,7 @@ class BattleHandler {
           return earlyStateFallback;
         }
 
-        if (currentUrl.includes("#raid") || currentUrl.includes("_raid")) {
+        if (isRaidUrl(currentUrl)) {
           const dismissed = await this.dismissSalutePopup();
           if (dismissed) {
             if (this.options.skipOnSalute) {
@@ -186,7 +182,7 @@ class BattleHandler {
               );
             }
           }
-        } else if (!currentUrl.includes("#result")) {
+        } else if (!isResultUrl(currentUrl)) {
           // Safety: Check for a lagged confirmation button (OK) before throwing error
           const okBtn = ".btn-usual-ok";
           if (await this.controller.elementExists(okBtn, 2000, true)) {
@@ -373,12 +369,7 @@ class BattleHandler {
      */
     async handleFullAuto() {
     const url = this.controller.page.url();
-    // Check for result page (both hash-based and path-based URLs)
-    const isResultUrl =
-      url.includes("#result") ||
-      url.includes("/result/content/index/") ||
-      url.includes("/result_multi/content/index/");
-    if (isResultUrl || url.includes("#quest/index")) return;
+    if (isBattleEndUrl(url)) return;
 
     this.logger.info("[Battle] Mode: Full Auto activation initiated");
     this.faActive = false; // Reset — will be set true after successful click
@@ -393,10 +384,7 @@ class BattleHandler {
         // Quick pre-check: if page is already on result/login, skip 20s wait
         const preUrl = this.controller.page.url();
         if (
-          preUrl.includes("#result") ||
-          preUrl.includes("/result/content/index/") ||
-          preUrl.includes("/result_multi/content/index/") ||
-          preUrl.includes("#quest/index") ||
+          isBattleEndUrl(preUrl) ||
           preUrl.includes("#mypage") ||
           preUrl.includes("#top")
         ) {
@@ -517,41 +505,6 @@ class BattleHandler {
     await this.checkStateAndResume("full_auto");
   }
 
-  /**
-   * Verifies if FA is actually running.
-   * Since GBF doesn't change the DOM when FA is clicked (no class toggle),
-   * we track state internally via this.faActive flag set by handleFullAuto.
-   */
-  async verifyFullAutoState() {
-    // Internal state tracking: if handleFullAuto clicked the button without error,
-    // FA is running. GBF provides no reliable DOM signal for FA state.
-    if (this.faActive) return true;
-
-    // Frame validity guard: check frame is attached before evaluate
-    if (!(await this.controller.isFrameAttached())) {
-      this.logger.debug(
-        "[Full Auto] Frame detached during verify, assuming active",
-      );
-      return true;
-    }
-
-    return await this.controller.page
-      .evaluate((selectors) => {
-        // Safety: If the page is still in a loading/overlay state, assume FA is active/pending
-        const loading = document.querySelector(
-          ".prt-loading-container, .prt-popup-back.show, #loading-mask",
-        );
-        if (loading && loading.offsetHeight > 0) return true;
-
-        // Check for explicit FA-active signals (some GBF versions may add 'pushed')
-        const autoBtn = document.querySelector(selectors.fullAutoButton);
-        if (autoBtn && autoBtn.classList.contains("pushed")) return true;
-
-        return false;
-      }, this.selectors)
-      .catch(() => true); // If evaluate fails, assume active (don't reload on frame issues)
-  }
-
     /**
      * Executes a single combat turn in Semi Auto mode.
      * Performs a reactive attack and optional animation skip reload.
@@ -559,20 +512,15 @@ class BattleHandler {
      */
     async handleSemiAuto(skipReloadOnTimeout = false) {
     const activeSelector = ".btn-attack-start.display-on";
-    const startTime = Date.now();
 
-    // Step 1: Reactive Attack Activation (Ultra-fast polling)
-    // Replaces waitForSelector with sub-10ms resolution to fire the instant UI is ready.
+    // Step 1: Wait for the attack button to become visible.
+    // A single mutation-observer-backed visibility wait (one round-trip) bounded
+    // by the watchdog. The previous manual loop called elementExists with
+    // timeout:0 — which in Puppeteer disables the timeout (waits forever) — so
+    // the outer watchdog could never fire if the button never appeared.
     this.logger.debug("[Battle] Awaiting reactive attack activation...");
-    let attackReady = false;
     const attackWatchdog = config.get('timeouts.semi_auto_watchdog', 10000);
-    while (Date.now() - startTime < attackWatchdog) {
-      if (await this.controller.elementExists(activeSelector, 0, true)) {
-        attackReady = true;
-        break;
-      }
-      await sleep(Math.max(5, Math.floor(this.loopInterval / 2))); // Ultra-snappy cadence
-    }
+    const attackReady = await this.controller.elementExists(activeSelector, attackWatchdog, true);
 
     if (!attackReady) {
       this.logger.warn(`[Warn] Battle: Exception (Attack button timeout: ${Math.round(attackWatchdog / 1000)}s)`);
@@ -729,7 +677,7 @@ class BattleHandler {
     const hardReloadInterval = 30 * 60 * 1000; // 30 minutes in ms
 
     const currentUrl = this.controller.page.url();
-    const isRaid = currentUrl.includes("#raid") || currentUrl.includes("_raid");
+    const isRaid = isRaidUrl(currentUrl);
 
     // Initial turn/honor detection consolidated into a single fetch
     const isSemiAuto = mode === "semi_auto";
@@ -749,8 +697,6 @@ class BattleHandler {
       }
     }
 
-    let lastTurn = turnCount;
-    let lastTurnChangeTime = Date.now();
     let honorTargetReached = false; // Track when honor target is reached
 
     // Seed lastAttackedTurn only if the initial semi-auto attack actually landed.
@@ -810,7 +756,6 @@ class BattleHandler {
     };
     let lastActionTime = Date.now();
     let faInactivityThreshold = faTimers.initialLockout; // Initial: OUGI lockout after FA click
-    let lastHonorCheckTime = 0; // Throttle getHonors() DOM reads to every 3s
 
     // If turn changed during transition, log it now (full_auto only)
     if (!isSemiAuto && networkTurn > turnCount) {
@@ -876,7 +821,7 @@ class BattleHandler {
     if (this._preNetworkFinished && !this.isResultConfirmed) {
       onBattleResult();
     }
-    const onAttack = ({ honor } = {}) => {
+    const onAttack = () => {
       attackUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       // Do NOT touch faThresholdRef here — handleFullAuto sets it to 25s after every FA click,
@@ -889,7 +834,7 @@ class BattleHandler {
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.summon; // inactivity watchdog after summon
     };
-    const onAbilityUsed = ({ honor } = {}) => {
+    const onAbilityUsed = () => {
       abilityUsed = true;
       this.options.lastActionTimeRef.value = Date.now();
       this.options.faThresholdRef.value = faTimers.ability; // inactivity watchdog after ability
@@ -1261,7 +1206,7 @@ class BattleHandler {
           }
         }
 
-        if (!currentUrl.includes("#raid") && !currentUrl.includes("_raid")) {
+        if (!isRaidUrl(currentUrl)) {
           // Throttled menu checks (network-primary, DOM fallback for empty result)
           if (Date.now() - lastSkipCheckTime > 1000) {
             lastSkipCheckTime = Date.now();
@@ -1327,10 +1272,6 @@ class BattleHandler {
     }
   }
 
-  async handleResult() {
-    // Skips clicking OK as requested.
-  }
-
   /**
    * Standardized state detection after refresh.
    */
@@ -1348,14 +1289,7 @@ class BattleHandler {
   async _checkStateAndResume(mode) {
     const url = this.controller.page.url();
 
-    // Check both hash-based and path-based result/quest index URLs
-    const isResultUrl =
-      url.includes("#result") ||
-      url.includes("/result/content/index/") ||
-      url.includes("/result_multi/content/index/") ||
-      url.includes("#quest/index") ||
-      url.includes("/quest/index/content/index/");
-    if (isResultUrl) {
+    if (isBattleEndUrl(url)) {
       return true;
     }
 
@@ -1467,13 +1401,7 @@ class BattleHandler {
     }
 
     const finalUrl = this.controller.page.url();
-    // Check both hash-based and path-based result/quest index URLs
-    const isFinalResultUrl =
-      finalUrl.includes("#result") ||
-      finalUrl.includes("/result/content/index/") ||
-      finalUrl.includes("/result_multi/content/index/") ||
-      finalUrl.includes("#quest/index");
-    if (isFinalResultUrl) {
+    if (isBattleEndUrl(finalUrl)) {
       await sleep(50); // SPA navigation buffer
       return true;
     }

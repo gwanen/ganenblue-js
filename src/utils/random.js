@@ -53,21 +53,6 @@ export function generateBezierCurve(start, end, steps = 0) {
 }
 
 /**
- * Simulates human typing by adding random delays between keystrokes.
- * @param {import('puppeteer').Page} page - The Puppeteer page instance.
- * @param {string} selector - The input element selector.
- * @param {string} text - The text to type.
- * @returns {Promise<void>}
- */
-export async function typeHuman(page, selector, text) {
-    await page.focus(selector);
-    for (const char of text) {
-        await page.keyboard.type(char);
-        await sleep(randomDelay(50, 150));
-    }
-}
-
-/**
  * Generates a random float within a range.
  * @param {number} min - Lower bound.
  * @param {number} max - Upper bound.

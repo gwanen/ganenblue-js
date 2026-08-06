@@ -39,6 +39,12 @@ raid:
   maxRaidsPopup: '.common-pop-error'
   maxRaidsOkButton: '.common-pop-error .btn-usual-ok'
 
+auto_quest:
+  sceneSkip: '.btn-scene-skip'              # Story scene skip (rendered in front of skip)
+  skip: '.btn-skip[style*="opacity: 1"]'    # Skip button, active only when opacity is 1
+  questContinue: '.btn-quest-continue'      # "Play" — advance to next quest
+  questConfirmOk: '.pop-continue-quest-comfirm.pop-show .btn-usual-ok'  # "Continue story?" confirm OK
+
 replicard:
   nodeMap: '.prt-replicard-map'
   node: '.map-node'

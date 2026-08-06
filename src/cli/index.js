@@ -203,6 +203,101 @@ program.command('skip')
         }
     });
 
+program.command('daily')
+    .description('Run the daily quest-skip list (no battles — clicks OK and consumes each quest skip)')
+    .option('-o, --only <ids...>', 'Only run these quest ids (default: every enabled entry in daily.quests)')
+    .option('--no-repeat', 'Run each quest once instead of repeating until it fails')
+    .option('--loop', 'Re-run the whole list after finishing a pass')
+    .option('--headless', 'Run in headless mode')
+    .action(async (options) => {
+        try {
+            logger.info('[Cli] Starting daily bot...');
+
+            if (options.headless) config.set('browser.headless', true);
+
+            // Initialize Browser
+            const browserManager = new BrowserManager(config.get('browser'));
+            const page = await browserManager.launch();
+
+            // Import dynamically
+            const { default: DailyBot } = await import('../bot/daily-bot.js');
+
+            // Initialize Bot
+            const bot = new DailyBot(page, {
+                quests: options.only || null,
+                repeatUntilFail: options.repeat,
+                loopList: !!options.loop
+            });
+
+            // Handle graceful shutdown
+            process.on('SIGINT', async () => {
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
+            });
+
+            // Start Bot
+            await bot.start();
+
+            await browserManager.close();
+            logger.info('[Cli] Finished successfully.');
+
+        } catch (error) {
+            logger.error('[Error] [Cli] Fatal error:', error);
+            process.exit(1);
+        }
+    });
+
+program.command('auto-quest')
+    .description('Auto-advance story quests by clicking skip / scene-skip / continue (runs until Ctrl+C)')
+    .option('--headless', 'Run in headless mode')
+    .action(async (options) => {
+        try {
+            logger.info('[Cli] Starting auto quest bot...');
+
+            if (options.headless) config.set('browser.headless', true);
+
+            // Initialize Browser
+            const browserManager = new BrowserManager(config.get('browser'));
+            const page = await browserManager.launch();
+
+            // Import dynamically
+            const { default: AutoQuestBot } = await import('../bot/auto-quest-bot.js');
+
+            // Initialize Bot
+            const bot = new AutoQuestBot(page, {});
+
+            // Handle graceful shutdown
+            process.on('SIGINT', async () => {
+                try {
+                    logger.info('[Wait] Stopping bot...');
+                    bot.stop();
+                    await browserManager.close();
+                } catch (error) {
+                    logger.error('[Error] [Cli] Shutdown error:', error);
+                } finally {
+                    process.exit(0);
+                }
+            });
+
+            // Start Bot
+            await bot.start();
+
+            await browserManager.close();
+            logger.info('[Cli] Finished successfully.');
+
+        } catch (error) {
+            logger.error('[Error] [Cli] Fatal error:', error);
+            process.exit(1);
+        }
+    });
+
 program.command('config')
     .description('View current configuration')
     .action(() => {

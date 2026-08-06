@@ -1,9 +1,11 @@
 import PageController from "../core/page-controller.js";
 import BattleHandler from "./battle-handler.js";
 import { sleep, randomDelay } from "../utils/random.js";
-import logger, { createScopedLogger } from "../utils/logger.js";
+import { createScopedLogger } from "../utils/logger.js";
 import config from "../utils/config.js";
 import notifier from "../utils/notifier.js";
+import { isResultUrl, isRaidUrl, isBattleEndUrl } from "../utils/game-url.js";
+import { applyPerformanceOptions, computeRate, averageBattleTime, checkBattleCaptcha } from "./bot-common.js";
 
 /**
  * Orchestrates automated quest completion, including navigation, supporter selection,
@@ -43,28 +45,10 @@ class QuestBot {
         this.totalTurns = 0;
         this.battleCount = 0;
         this.consecutiveFailures = 0;
+        this.startTime = null; // set in start(); guarded in getStats() so a pre-start poll is safe
 
         // --- Performance Optimizations ---
-        const blockResources = options.blockResources !== undefined
-            ? options.blockResources
-            : config.get('stealth.block_resources', false);
-
-        if (blockResources) {
-            this.logger.info("[System] Image blocking enabled");
-            this.controller.enableResourceBlocking().catch((e) =>
-                this.logger.warn("[System] Failed to enable image blocking", e)
-            );
-        }
-
-        const turboMode = options.turboMode !== undefined
-            ? options.turboMode
-            : config.get('stealth.turbo_css', true);
-
-        if (turboMode) {
-            this.controller.enableTurboCSS().catch((e) =>
-                this.logger.warn("[System] Failed to enable turbo CSS", e)
-            );
-        }
+        applyPerformanceOptions({ controller: this.controller, logger: this.logger, options });
 
         // --- Network Event Binding ---
         this.raidErrorType = null;
@@ -136,11 +120,12 @@ class QuestBot {
           this.questsCompleted++;
           this.consecutiveFailures = 0; // Reset counter on success
 
-          if (this.questsCompleted % 30 === 0) {
+          const cacheInterval = config.get("bot.cache_clear_interval", 30);
+          if (cacheInterval > 0 && this.questsCompleted % cacheInterval === 0) {
             await this.controller.clearBrowserCache();
           }
-        } else {
-          this.consecutiveFailures++; // Increment counter on failure
+        } else if (this.isRunning) {
+          this.consecutiveFailures++; // Increment on real failure only (not a clean stop)
         }
 
         // Short delay between quests for browser stability
@@ -187,16 +172,12 @@ class QuestBot {
     let hasNavigated = false;
     // Pre-check: If already in battle, skip to battle execution
     const currentUrl = this.controller.page.url();
-    const isInBattleUrl =
-      currentUrl.match(/#(?:raid|raid_multi)(?:\/|$)/) !== null;
+    const isInBattleUrl = isRaidUrl(currentUrl);
 
     // Check if we're on result page (should navigate away, not fight)
-    const isResultUrl =
-      currentUrl.includes("#result") ||
-      currentUrl.includes("/result/content/index/") ||
-      currentUrl.includes("/result_multi/content/index/");
+    const onResultPage = isResultUrl(currentUrl);
 
-    if (isResultUrl) {
+    if (onResultPage) {
       this.logger.info(
         "[Quest] State: Result page detected (Navigating to quest target)",
       );
@@ -309,7 +290,7 @@ class QuestBot {
       this.logger.debug(
         "[System] Operation cancelled before combat initiation",
       );
-      return;
+      return false;
     }
 
     // Handle battle
@@ -431,8 +412,8 @@ class QuestBot {
           }
           resolve({ type: "network" });
         };
-        // Safety cleanup for timeout path
-        const timeout = setTimeout(() => {
+        // Safety cleanup for timeout path (fire-and-forget; not cleared)
+        setTimeout(() => {
           if (this.controller.network) {
             this.controller.network.off("raid:supporter_screen", onSupporter);
           }
@@ -514,7 +495,7 @@ class QuestBot {
         await this.controller.clickSafe(summonSelector, { timeout: 2000, maxRetries: 1 });
       } catch (error) {
         const url = this.controller.page?.url() || "";
-        if (url.match(/#(?:raid|raid_multi)(?:\/|$)/)) return "success";
+        if (isRaidUrl(url)) return "success";
         throw error;
       }
 
@@ -527,7 +508,9 @@ class QuestBot {
             this.controller.clearClickCache();
             await this.controller.cachedClick(".btn-usual-ok", 15);
             clickSuccess = true;
-          } catch (e) {}
+          } catch (e) {
+            this.logger.debug(`[Summon] Confirm click attempt ${i + 1} failed: ${e.message}`);
+          }
 
           if (!(await this.controller.elementExists(".btn-usual-ok", 200, true))) {
             clickSuccess = true;
@@ -717,11 +700,7 @@ class QuestBot {
 
     const finalUrl = this.controller.page.url();
     // Check for valid battle/quest URLs (including path-based result URLs)
-    const isValidUrl =
-      finalUrl.match(/#(?:raid|raid_multi|quest\/index)(?:\/|$)/) ||
-      finalUrl.includes("#result") ||
-      finalUrl.includes("/result/content/index/") ||
-      finalUrl.includes("/result_multi/content/index/");
+    const isValidUrl = isRaidUrl(finalUrl) || isBattleEndUrl(finalUrl);
     if (!isValidUrl) {
       this.logger.warn("[Quest] URL transition failed. Potential error state");
       return "ended";
@@ -839,26 +818,8 @@ class QuestBot {
     });
   }
 
-  async checkEarlyBattleEndPopup() {
-    return await this.battle.checkEarlyBattleEndPopup(true);
-  }
-
   async checkCaptcha() {
-    const selectors = config.selectors.battle;
-    if (
-      await this.controller.elementExists(selectors.captchaPopup, 1000, true)
-    ) {
-      const headerText = await this.controller.getText(selectors.captchaHeader);
-      if (headerText.includes("Access Verification")) {
-        this.logger.error(
-          "[Safety] CAPTCHA detected. Human intervention required",
-        );
-        notifier.notifyCaptcha(this.profileId || "p1").catch(() => { });
-        this.pause();
-        return true;
-      }
-    }
-    return false;
+    return checkBattleCaptcha(this);
   }
 
   pause() {
@@ -907,9 +868,7 @@ class QuestBot {
   }
 
   getAverageBattleTime() {
-    if (this.battleTimes.length === 0) return 0;
-    const sum = this.battleTimes.reduce((a, b) => a + b, 0);
-    return Math.round(sum / this.battleTimes.length);
+    return averageBattleTime(this.battleTimes);
   }
 
   getStats() {
@@ -918,13 +877,7 @@ class QuestBot {
       avgTurns = (this.totalTurns / this.battleCount).toFixed(1);
     }
 
-    let rate = "0.0/h";
-    const now = Date.now();
-    const uptimeHours = (now - this.startTime) / (1000 * 60 * 60);
-    if (uptimeHours > 0) {
-      const rph = this.questsCompleted / uptimeHours;
-      rate = `${rph.toFixed(1)}/h`;
-    }
+    const rate = computeRate(this.startTime, this.questsCompleted);
 
     return {
       completedQuests: this.questsCompleted,

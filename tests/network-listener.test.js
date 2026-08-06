@@ -5,7 +5,7 @@
  * Run: npm test -- --testPathPattern=network-listener
  */
 
-import { jest, describe, test, expect, beforeEach } from '@jest/globals';
+import { jest, describe, test, expect } from '@jest/globals';
 import NetworkListener from '../src/core/network-listener.js';
 
 // ---------------------------------------------------------------------------
@@ -14,7 +14,7 @@ import NetworkListener from '../src/core/network-listener.js';
 
 const noop = { info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
 
-function makeResponse({ url, type = 'fetch', json = null, headers = {}, jsonSpy = null }) {
+function makeResponse({ url, type = 'fetch', json = null, headers = {}, jsonSpy = null, status = 200 }) {
     const jsonFn = jsonSpy
         ? async () => { jsonSpy(); return json; }
         : async () => json;
@@ -23,6 +23,7 @@ function makeResponse({ url, type = 'fetch', json = null, headers = {}, jsonSpy 
         url: () => url,
         request: () => ({ resourceType: () => type }),
         json: jsonFn,
+        status: () => status,
         headers: () => ({ 'content-type': 'application/json', ...headers }),
     };
 }
@@ -201,6 +202,49 @@ describe('NetworkListener — battle result', () => {
         });
         await handle(nl, res);
         await expect(waiting).resolves.toBeDefined();
+    });
+});
+
+describe('NetworkListener — daily quest skip', () => {
+    const SKIP_URL = 'https://game.granbluefantasy.jp/rest/quest/questskip/skip?_=1785982987012&t=1785982987012&uid=21356262';
+
+    test('200 + raid_id → emits quest:skip_result ok', async () => {
+        const nl = makeListener();
+        const waiting = once(nl, 'quest:skip_result');
+        await handle(nl, makeResponse({ url: SKIP_URL, json: { result: 'ok', raid_id: 2050830222 } }));
+        const data = await waiting;
+        expect(data.ok).toBe(true);
+        expect(data.raidId).toBe(2050830222);
+    });
+
+    test('500 → emits quest:skip_result with ok=false and the status', async () => {
+        const nl = makeListener();
+        const waiting = once(nl, 'quest:skip_result');
+        await handle(nl, makeResponse({ url: SKIP_URL, status: 500, json: null }));
+        const data = await waiting;
+        expect(data.ok).toBe(false);
+        expect(data.status).toBe(500);
+        expect(data.raidId).toBeNull();
+    });
+
+    test('200 without raid_id → ok=false', async () => {
+        const nl = makeListener();
+        const waiting = once(nl, 'quest:skip_result');
+        await handle(nl, makeResponse({ url: SKIP_URL, json: { result: 'ok' } }));
+        const data = await waiting;
+        expect(data.ok).toBe(false);
+    });
+
+    test('skip_raid result page → emits battle:result with rewards and raid id', async () => {
+        const nl = makeListener();
+        const waiting = once(nl, 'battle:result');
+        await handle(nl, makeResponse({
+            url: 'https://game.granbluefantasy.jp/result/content/skip_raid/2050830222?_=1785981983775',
+            json: { option: { result_data: { rewards: { reward_list: { 4: { 0: { name: 'Fire Orb' } } } } } } },
+        }));
+        const data = await waiting;
+        expect(data.skipRaidId).toBe('2050830222');
+        expect(data.rewards.reward_list['4']).toBeDefined();
     });
 });
 

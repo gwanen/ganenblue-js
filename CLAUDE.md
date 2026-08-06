@@ -109,7 +109,8 @@ ganenblue-js/
 - Monitors network responses for game API calls
 - Emits events when specific responses arrive:
   - `battle:start` - Battle begins
-  - `battle:result` - Battle ends with loot/rewards
+  - `battle:result` - Battle ends with loot/rewards (also fired for daily `skip_raid` results)
+  - `quest:skip_result` - Daily quest skip accepted (`ok`, `raidId`) or rejected (HTTP status)
   - `raid:error` - Raid entry failed (soldier/time limit)
   - `supporter:screen` - Raid supporter selection screen
   - Event parameters contain raw API response data
@@ -150,6 +151,17 @@ ganenblue-js/
 **SkipBot (`skip-bot.js`)**
 - Automated skill/spell usage during battles
 - Predefined skill sequences per battle
+
+**DailyBot (`daily-bot.js`)**
+- Runs the daily "quest skip" targets (Omega Pro, Angel Halo Pro, Six Dragon Advent Pro, ...)
+- No battle: opens each quest's supporter screen and clicks `.btn-usual-ok.se-quest-start`,
+  which POSTs to `/rest/quest/questskip/skip`
+  - HTTP 200 + `raid_id` → one skip consumed; rewards arrive on `/result/content/skip_raid/<raid_id>`
+  - HTTP 500 → quest exhausted for the day; bot moves to the next entry
+- Quest list lives in `config/default.yaml` under `daily.quests` (id/name/url/enabled)
+- Repeats each quest until it fails (`daily.repeat_until_fail`), capped by `daily.max_attempts_per_quest`
+- Loot tracked via the shared `parseRewardChests()` helper (red/blue chests, gold bricks)
+- Logs a per-quest result table at the end of the session
 
 ### Configuration System (`src/utils/config.js`)
 
@@ -193,11 +205,16 @@ npm cli -- start --url "https://game.granbluefantasy.jp/#quest/..." -n 50 -m ful
 
 # Start raid backup farming
 npm cli -- raid -n 100 -m full_auto
+
+# Run the daily quest-skip list (all enabled entries, repeat until each fails)
+npm cli -- daily
+npm cli -- daily --only omega_pro angel_halo_pro --no-repeat
 ```
 
 **Available CLI Commands:**
 - `start` - Quest farming
 - `raid` - Raid backup farming
+- `daily` - Daily quest-skip list (`--only <ids...>`, `--no-repeat`, `--loop`)
 - `--headless` - Run in headless mode (no visible browser)
 - `-n, --max` - Max runs (0 = unlimited)
 - `-m, --mode` - Battle mode (full_auto or semi_auto)
@@ -247,6 +264,13 @@ raid:
   target_user: null
   auto_refresh: true
   refresh_interval: 30000
+
+daily:
+  repeat_until_fail: true
+  max_attempts_per_quest: 20
+  loop_list: false
+  quests:
+    - { id: omega_pro, name: Omega Pro, url: "https://...", enabled: true }
 ```
 
 ### `config/selectors.yaml`

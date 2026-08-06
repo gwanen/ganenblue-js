@@ -135,6 +135,10 @@ function getProfileElements(pid) {
         raidTargetGroup: document.getElementById(`raid-target-group-${pid}`),
         maxRuns: document.getElementById(`max-runs-${pid}`),
         maxRunsLabel: document.getElementById(`max-runs-label-${pid}`),
+        // Daily (Quest Skip)
+        dailyGroup: document.getElementById(`daily-group-${pid}`),
+        dailyList: document.getElementById(`daily-list-${pid}`),
+        dailyRepeat: document.getElementById(`daily-repeat-${pid}`),
         // Zone (Xeno)
         zone: document.getElementById(`zone-${pid}`),
         zoneGroup: document.getElementById(`zone-group-${pid}`),
@@ -171,6 +175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadGlobalSettings();
 
     for (const pid of profiles) {
+        await renderDailyQuests(pid);
         await loadProfileSettings(pid);
         await loadCredentials(pid);
         setupProfileListeners(pid);
@@ -202,6 +207,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }, 1000);
 });
+
+// === Daily Mode ===
+
+// Builds the daily quest checkbox list from config/default.yaml (via IPC).
+async function renderDailyQuests(pid) {
+    const els = dom[pid];
+    if (!els || !els.dailyList) return;
+
+    const res = await window.electronAPI.getDailyQuests().catch(() => null);
+    const quests = res && res.success ? res.quests : [];
+
+    els.dailyList.innerHTML = '';
+    for (const q of quests) {
+        const label = document.createElement('label');
+        label.className = 'checkbox-container mt-xs';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `daily-q-${pid}-${q.id}`;
+        input.dataset.questId = q.id;
+        input.checked = q.enabled;
+        const span = document.createElement('span');
+        span.textContent = q.name;
+        label.appendChild(input);
+        label.appendChild(span);
+        els.dailyList.appendChild(label);
+
+        input.addEventListener('change', () => debouncedSave(pid));
+    }
+}
+
+function getSelectedDailyQuests(pid) {
+    const els = dom[pid];
+    if (!els || !els.dailyList) return [];
+    return Array.from(els.dailyList.querySelectorAll('input[type="checkbox"]'))
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.dataset.questId);
+}
+
+function applyDailySelection(pid, selected) {
+    const els = dom[pid];
+    if (!els || !els.dailyList || !Array.isArray(selected)) return;
+    const wanted = new Set(selected);
+    els.dailyList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.checked = wanted.has(cb.dataset.questId);
+    });
+}
 
 // === Profile Logic ===
 
@@ -242,10 +293,8 @@ function setupProfileListeners(pid) {
     els.btnStart.addEventListener('click', async () => {
         // Get checkbox element dynamically to avoid null reference on init
         const blockResourcesEl = document.getElementById(`block-resources-${pid}`);
-        let blockResources = false;
-
         if (blockResourcesEl) {
-            blockResources = blockResourcesEl.checked;
+            const blockResources = blockResourcesEl.checked;
             log(pid, `Image Blocking: ${blockResources ? 'ENABLED (Fast Mode)' : 'DISABLED (Normal Mode)'}`, blockResources ? 'success' : 'info');
         } else {
             log(pid, `[Warning] Image Blocking setting not found, defaulting to OFF`, 'warning');
@@ -265,8 +314,15 @@ function setupProfileListeners(pid) {
             summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
             skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
             turboMode: els.turboMode ? els.turboMode.checked : false,
-            preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
+            preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false,
+            dailyQuests: getSelectedDailyQuests(pid),
+            dailyRepeat: els.dailyRepeat ? els.dailyRepeat.checked : true
         };
+
+        if (settings.botMode === 'daily' && settings.dailyQuests.length === 0) {
+            showToast('Select at least one daily quest', 'error');
+            return;
+        }
 
         if ((settings.botMode === 'quest' || settings.botMode === 'free_quest') && !settings.questUrl) {
             showToast('Quest URL required', 'error');
@@ -338,6 +394,7 @@ function setupProfileListeners(pid) {
         document.getElementById(`skill-refresh-${pid}`),
         document.getElementById(`turbo-mode-${pid}`),
         document.getElementById(`pre-battle-auto-${pid}`),
+        els.dailyRepeat,
         els.replicardUrl
     ];
     inputs.forEach(input => {
@@ -398,13 +455,21 @@ function updateFormVisibility(pid) {
     const isQuest = mode === 'quest' || mode === 'free_quest';
     const isReplicard = mode === 'replicard' || mode === 'xeno_replicard';
     const isSkip = mode === 'skip';
+    const isAutoQuest = mode === 'auto_quest';
+    const isDaily = mode === 'daily';
 
     els.questUrlGroup.style.display = isQuest ? 'block' : 'none';
     els.replicardUrlGroup.style.display = isReplicard ? 'block' : 'none';
     els.honorGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.raidTargetGroup.style.display = mode === 'raid' ? 'block' : 'none';
     els.zoneGroup.style.display = mode === 'xeno_replicard' ? 'block' : 'none';
-    els.battleMode.parentElement.style.display = isSkip ? 'none' : 'block';
+    if (els.dailyGroup) els.dailyGroup.style.display = isDaily ? 'block' : 'none';
+    // Auto Quest, Skip and Daily have no battle mode. Auto Quest and Daily run
+    // until stopped / until the list is exhausted, so no max-runs field either.
+    els.battleMode.parentElement.style.display = (isSkip || isAutoQuest || isDaily) ? 'none' : 'block';
+    if (els.maxRuns) {
+        els.maxRuns.parentElement.style.display = (isAutoQuest || isDaily) ? 'none' : 'block';
+    }
 
     const label = els.maxRunsLabel;
     if (label) {
@@ -748,6 +813,8 @@ async function loadProfileSettings(pid) {
             const pbaEl = document.getElementById(`pre-battle-auto-${pid}`);
             if (pbaEl) pbaEl.checked = s.preBattleAutoAttack;
         }
+        if (Array.isArray(s.dailyQuests)) applyDailySelection(pid, s.dailyQuests);
+        if (s.dailyRepeat !== undefined && els.dailyRepeat) els.dailyRepeat.checked = s.dailyRepeat;
     }
 }
 
@@ -773,7 +840,9 @@ function saveProfileSettings(pid) {
         summonRefresh: document.getElementById(`summon-refresh-${pid}`)?.checked ?? true,
         skillRefresh: document.getElementById(`skill-refresh-${pid}`)?.checked ?? false,
         turboMode: document.getElementById(`turbo-mode-${pid}`)?.checked || false,
-        preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false
+        preBattleAutoAttack: document.getElementById(`pre-battle-auto-${pid}`)?.checked || false,
+        dailyQuests: getSelectedDailyQuests(pid),
+        dailyRepeat: els.dailyRepeat ? els.dailyRepeat.checked : true
     };
     localStorage.setItem(`settings_${pid}`, JSON.stringify(s));
 }

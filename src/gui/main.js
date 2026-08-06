@@ -7,6 +7,8 @@ import BrowserManager from "../core/browser.js";
 import QuestBot from "../bot/quest-bot.js";
 import RaidBot from "../bot/raid-bot.js";
 import SkipBot from "../bot/skip-bot.js";
+import AutoQuestBot from "../bot/auto-quest-bot.js";
+import DailyBot from "../bot/daily-bot.js";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
 import memoryWatchdog from "../utils/memory-watchdog.js";
@@ -388,6 +390,22 @@ ipcMain.handle("bot:start", async (event, profileId, settings) => {
         turboMode: settings.turboMode,
         profileId: profileId,
       });
+    } else if (botMode === "auto_quest") {
+      instance.bot = new AutoQuestBot(instance.browser.page, {
+        onBattleEnd: createStatsCallback(profileId, instance),
+        blockResources: settings.blockResources,
+        turboMode: settings.turboMode,
+        profileId: profileId,
+      });
+    } else if (botMode === "daily") {
+      instance.bot = new DailyBot(instance.browser.page, {
+        quests: Array.isArray(settings.dailyQuests) ? settings.dailyQuests : null,
+        repeatUntilFail: settings.dailyRepeat,
+        onBattleEnd: createStatsCallback(profileId, instance),
+        blockResources: settings.blockResources,
+        turboMode: settings.turboMode,
+        profileId: profileId,
+      });
     } else if (botMode === "skip") {
       instance.bot = new SkipBot(instance.browser.page, {
         questUrl: settings.questUrl || config.get("bot.quest_url"),
@@ -508,6 +526,8 @@ ipcMain.handle("bot:reset-stats", (event, profileId) => {
     if (typeof instance.bot.redChests !== "undefined") instance.bot.redChests = 0;
     if (typeof instance.bot.blueChests !== "undefined") instance.bot.blueChests = 0;
     if (typeof instance.bot.goldBricks !== "undefined") instance.bot.goldBricks = 0;
+    if (typeof instance.bot.skipsCompleted !== "undefined")
+      instance.bot.skipsCompleted = 0; // Daily mode counter
     instance.stats.startTime = null; // Reset timer
     instance.stats.lastRate = "0.0/h"; // Reset rate
 
@@ -515,6 +535,16 @@ ipcMain.handle("bot:reset-stats", (event, profileId) => {
     return { success: true };
   }
   return { success: false, message: "No bot instance running" };
+});
+
+ipcMain.handle("daily:list", () => {
+  const quests = config.get("daily.quests", []) || [];
+  return {
+    success: true,
+    quests: quests
+      .filter((q) => q && q.id && q.url)
+      .map((q) => ({ id: q.id, name: q.name || q.id, enabled: q.enabled !== false })),
+  };
 });
 
 ipcMain.handle("app:resize-window", async (event, width, height) => {
